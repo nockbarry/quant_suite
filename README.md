@@ -105,6 +105,192 @@ quant_suite/
 | `validation/walk_forward.py` | Walk-forward validation |
 | `validation/pdt_framework.py` | PDT-aware holding period optimization |
 
+## Strategy & Model Testing Framework
+
+The evaluation system provides comprehensive testing capabilities across multiple categories:
+
+### Backtesting Engine (`src/evaluation/backtest/`)
+
+| Class/Function | Description |
+|----------------|-------------|
+| `VectorizedBacktest` | High-performance vectorized backtesting engine |
+| `BacktestConfig` | Configuration for backtest parameters |
+| `BacktestResult` | Comprehensive results with metrics |
+| `run_backtest()` | Convenience function for quick backtests |
+| `BudgetExecutionModel` | Simulates budget account constraints |
+| `ExecutionModel` | Realistic fill simulation |
+
+**Cost Models:**
+| Model | Description |
+|-------|-------------|
+| `PercentageCost` | Fixed percentage transaction costs |
+| `TieredCost` | Volume-based tiered costs |
+| `SpreadCost` | Bid-ask spread modeling |
+| `MarketImpactCost` | Price impact from order size |
+| `estimate_slippage()` | Slippage estimation utility |
+
+### Statistical Validation (`src/evaluation/validation/`)
+
+**MCPT (Monte Carlo Permutation Test):**
+| Class/Function | Description |
+|----------------|-------------|
+| `mcpt_test()` | Primary significance test for strategies |
+| `mcpt_walk_forward()` | Combined MCPT with walk-forward |
+| `MCPTAnalyzer` | Detailed permutation analysis |
+| `BarPermuter` | Bar-level return permutation |
+| `verify_permutation_properties()` | Validates permutation correctness |
+
+**Walk-Forward Validation:**
+| Class/Function | Description |
+|----------------|-------------|
+| `run_walk_forward()` | Out-of-sample walk-forward testing |
+| `WalkForwardOptimizer` | Parameter optimization with validation |
+| `ParameterOptimizer` | Grid/random search optimization |
+| `WalkForwardSplitter` | Time-series aware data splitting |
+| `walk_forward_summary()` | Summary statistics for WF results |
+
+**Hypothesis Testing:**
+| Class/Function | Description |
+|----------------|-------------|
+| `WhiteRealityCheck` | White's Reality Check for data snooping |
+| `HansenSPA` | Hansen's Superior Predictive Ability test |
+| `StepwiseSPA` | Stepwise model confidence set |
+| `BlockBootstrap` | Block bootstrap for time series |
+| `reality_check()` | Quick reality check function |
+| `spa_test()` | SPA test convenience function |
+| `stepwise_spa()` | Stepwise SPA convenience function |
+| `multiple_testing_summary()` | Summary of multiple testing corrections |
+
+**Cross-Validation:**
+| Class/Function | Description |
+|----------------|-------------|
+| `PurgedKFoldCV` | K-fold with purging for lookahead prevention |
+| `CombinatorialPurgedCV` | Combinatorial purged cross-validation |
+| `TimeSeriesCV` | Time-series specific CV |
+| `purged_cv()` | Purged CV convenience function |
+| `combinatorial_purged_cv()` | CPCV convenience function |
+
+**Regime Analysis:**
+| Class/Function | Description |
+|----------------|-------------|
+| `RuleBasedRegimeDetector` | VIX/trend-based regime detection |
+| `HMMRegimeDetector` | Hidden Markov Model regime detection |
+| `ConditionalEvaluator` | Evaluate strategies by regime |
+| `detect_regimes()` | Detect market regimes |
+| `evaluate_by_regime()` | Performance breakdown by regime |
+| `get_current_regime()` | Current market regime |
+
+**Multi-Level Holdout:**
+| Class/Function | Description |
+|----------------|-------------|
+| `MultiLevelHoldout` | Development/validation/test splits |
+| `DevelopmentSplitter` | Train/validation within development |
+| `create_holdout_structure()` | Create proper holdout splits |
+| `validate_holdout_usage()` | Ensure no data leakage |
+
+**PDT Framework:**
+| Class/Function | Description |
+|----------------|-------------|
+| `PDTAwareBacktest` | Backtest respecting PDT rules |
+| `HoldingPeriodOptimizer` | Optimize holding periods |
+| `PDTTracker` | Track day trade count |
+| `get_pdt_holding_recommendation()` | Recommended hold period |
+
+### Performance Metrics (`src/evaluation/metrics/`)
+
+**Return Metrics:**
+| Function | Description |
+|----------|-------------|
+| `total_return()` | Cumulative return |
+| `cagr()` | Compound Annual Growth Rate |
+| `sharpe_ratio()` | Risk-adjusted return |
+| `sortino_ratio()` | Downside risk-adjusted return |
+| `calmar_ratio()` | Return over max drawdown |
+| `information_ratio()` | Active return vs tracking error |
+| `max_drawdown()` | Maximum peak-to-trough decline |
+| `win_rate()` | Percentage of winning trades |
+| `profit_factor()` | Gross profits / gross losses |
+| `expectancy()` | Expected value per trade |
+| `rolling_sharpe()` | Rolling window Sharpe ratio |
+| `calculate_alpha()` | Jensen's alpha |
+| `calculate_beta()` | Market beta |
+
+**Risk Metrics:**
+| Function | Description |
+|----------|-------------|
+| `value_at_risk()` | VaR at specified confidence |
+| `conditional_var()` | Expected Shortfall (CVaR) |
+| `max_drawdown_duration()` | Longest drawdown period |
+| `downside_deviation()` | Below-target semi-deviation |
+| `ulcer_index()` | Ulcer Index (drawdown severity) |
+| `omega_ratio()` | Probability-weighted gains/losses |
+| `tail_ratio()` | Right tail / left tail ratio |
+| `skewness()` | Return distribution skewness |
+| `kurtosis()` | Return distribution kurtosis |
+| `stability_of_returns()` | R² of cumulative returns |
+
+**Statistical Testing:**
+| Class/Function | Description |
+|----------------|-------------|
+| `StatisticalTester` | Comprehensive statistical tests |
+| `test_strategy_significance()` | Full significance test suite |
+| `compare_two_strategies()` | Paired comparison of strategies |
+| `compute_bootstrap_ci()` | Bootstrap confidence intervals |
+| `BootstrapCI` | Bootstrap CI calculator |
+| `StrategySignificanceSuite` | Complete significance testing |
+
+### Performance Attribution (`src/evaluation/attribution/`)
+
+| Class | Description |
+|-------|-------------|
+| `FactorModel` | Multi-factor regression analysis |
+| `FactorExposure` | Factor loading analysis |
+| `BrinsonAttribution` | Brinson allocation/selection |
+| `RollingFactorAnalysis` | Time-varying factor exposures |
+| `AttributionResult` | Attribution analysis results |
+
+### Reporting (`src/evaluation/reporting.py`)
+
+| Class/Function | Description |
+|----------------|-------------|
+| `HTMLReportGenerator` | Interactive HTML reports |
+| `ChartGenerator` | Matplotlib/Plotly charts |
+| `generate_backtest_report()` | Full backtest report |
+| `generate_comparison_report()` | Multi-strategy comparison |
+| `generate_json_report()` | Machine-readable JSON output |
+
+### Usage Examples
+
+```python
+# Full validation pipeline
+from src.evaluation import (
+    VectorizedBacktest, mcpt_test, run_walk_forward,
+    sharpe_ratio, max_drawdown, StatisticalTester
+)
+
+# 1. Run backtest
+backtest = VectorizedBacktest(strategy, transaction_cost_bps=10)
+result = backtest.run(data)
+
+# 2. MCPT significance test
+mcpt = mcpt_test(result.returns, benchmark_returns, n_permutations=1000)
+print(f"p-value: {mcpt.p_value:.4f}")
+
+# 3. Walk-forward validation
+wf_result = run_walk_forward(strategy, data, n_splits=5)
+print(f"OOS Sharpe: {wf_result.oos_sharpe:.2f}")
+
+# 4. Statistical testing suite
+tester = StatisticalTester()
+sig_result = tester.test_sharpe_ratio(result.returns)
+print(f"Sharpe significant: {sig_result.significant}")
+
+# 5. Reality check for data snooping
+from src.evaluation import reality_check
+rc_result = reality_check(strategy_returns_list, benchmark_returns)
+print(f"Best strategy survives: {rc_result.best_survives}")
+```
+
 ### Execution Layer (`src/execution/`)
 
 | Module | Description |
