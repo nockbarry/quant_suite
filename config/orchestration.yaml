@@ -1,0 +1,180 @@
+# Orchestration Configuration
+# Controls multi-agent research cycles and parallel execution
+
+# General Settings
+version: "1.0"
+description: "Autonomous Quant Firm Orchestration Configuration"
+
+# Parallel Execution
+parallel:
+  max_agents_per_track: 3
+  max_total_agents: 6
+  agent_timeout_seconds: 300
+  retry_failed: true
+  max_retries: 2
+
+# Research Cycle Defaults
+research_cycle:
+  default_focus: "tech"
+  run_track1: true  # Novel pattern discovery
+  run_track2: true  # Traditional strategy testing
+  run_validation: true  # Critic validation
+
+  # Default sectors for each focus
+  focus_sectors:
+    semiconductors:
+      - semiconductors
+    tech:
+      - tech
+      - semiconductors
+    financials:
+      - financials
+    healthcare:
+      - healthcare
+    energy:
+      - energy
+    etfs:
+      - etfs
+    macro:
+      - tech
+      - financials
+      - etfs
+
+  # Default strategies to test
+  default_strategies:
+    - bollinger_reversal
+    - momentum
+    - mean_reversion
+    - rsi_reversal
+    - volatility_breakout
+
+# Symbol Universe by Sector
+universes:
+  tech:
+    - AAPL
+    - MSFT
+    - GOOGL
+    - META
+    - AMZN
+  semiconductors:
+    - NVDA
+    - AMD
+    - QCOM
+    - MU
+    - MRVL
+    - AVGO
+  financials:
+    - JPM
+    - GS
+    - V
+    - MA
+    - BAC
+    - C
+  etfs:
+    - SPY
+    - QQQ
+    - IWM
+    - DIA
+    - XLK
+    - XLF
+  healthcare:
+    - JNJ
+    - UNH
+    - PFE
+    - MRK
+    - ABBV
+  energy:
+    - XOM
+    - CVX
+    - COP
+    - SLB
+    - EOG
+
+# Track 1: Novel Pattern Discovery
+track1:
+  agents:
+    - macro-research-agent
+    - news-analyst-agent
+    - regime-detector-agent
+  data_sources:
+    - web_search
+    - rss_feeds
+    - sec_filings
+  output_dir: /home/nock/quant_results/agent_runs/track1_novel
+
+# Track 2: Strategy Testing
+track2:
+  agents:
+    - research-worker-agent
+  max_parallel_workers: 3
+  dedup_check: true
+  pdt_aware: true
+  output_dir: /home/nock/quant_results/agent_runs/track2_strategy
+
+# Validation Settings
+validation:
+  min_sharpe: 0.5
+  max_p_value: 0.05
+  min_trades: 30
+  transaction_cost_bps: 10
+  require_pdt_compliant: true
+  min_hold_days_budget: 2
+
+# Daily Review
+daily_review:
+  enabled: true
+  output_dir: /home/nock/quant_results/daily_reviews
+  promotion_requires_approval: true
+  auto_generate_leads: true
+
+# Regime Detection
+regime:
+  vix_thresholds:
+    low: 15
+    normal: 20
+    elevated: 25
+    high: 30
+  adx_thresholds:
+    weak: 20
+    strong: 25
+    very_strong: 40
+  correlation_thresholds:
+    low: 0.4
+    moderate: 0.6
+    high: 0.75
+
+# PDT Settings
+pdt:
+  budget_threshold: 25000
+  min_hold_days_budget: 2
+  max_day_trades_per_5_days: 3
+  warn_on_day_trade: true
+
+# Agent Paths
+agent_paths:
+  research-agent: .claude/agents/research-agent.md
+  critic-agent: .claude/agents/critic-agent.md
+  monitor-agent: .claude/agents/monitor-agent.md
+  brainstorm-agent: .claude/agents/brainstorm-agent.md
+  orchestrator-agent: .claude/agents/orchestrator-agent.md
+  research-worker-agent: .claude/agents/research-worker-agent.md
+  macro-research-agent: .claude/agents/macro-research-agent.md
+  news-analyst-agent: .claude/agents/news-analyst-agent.md
+  regime-detector-agent: .claude/agents/regime-detector-agent.md
+
+# Output Directories
+output:
+  base_dir: /home/nock/quant_results
+  agent_runs: /home/nock/quant_results/agent_runs
+  research_cycles: /home/nock/quant_results/research_cycles
+  consolidated_reports: /home/nock/quant_results/consolidated_reports
+  daily_reviews: /home/nock/quant_results/daily_reviews
+  critic_reports: /home/nock/quant_results/critic_reports
+  validation_reports: /home/nock/quant_results/validation_reports
+
+# Logging
+logging:
+  level: INFO
+  log_agent_outputs: true
+  log_to_file: true
+  log_dir: /home/nock/quant_results/logs

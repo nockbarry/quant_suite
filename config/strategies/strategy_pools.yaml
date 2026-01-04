@@ -1,0 +1,31 @@
+'# Last updated': '2026-01-04T00:28:34.614409'
+budget_pool:
+  description: Strategies for accounts <$25k with PDT restrictions
+  constraints:
+    min_hold_days: 2
+    max_day_trades_per_5_days: 3
+    max_position_pct: 0.2
+    max_single_stock_pct: 0.25
+    require_stop_loss: true
+    stop_loss_pct: 0.05
+  strategies:
+  - strategy_name: bollinger_reversal
+    symbol: QCOM
+    holding_days: 10
+    sharpe: 3.14
+    p_value: 0.007
+    validated_at: '2026-01-04T00:28:34.614400'
+    promoted_at: null
+    status: pending
+    params: {}
+    notes: Test strategy
+full_pool:
+  description: Strategies for accounts >=$25k without PDT restrictions
+  constraints:
+    min_hold_days: 0
+    max_day_trades_per_5_days: 999
+    max_position_pct: 0.25
+    max_single_stock_pct: 0.25
+    require_stop_loss: true
+    stop_loss_pct: 0.05
+  strategies: []
