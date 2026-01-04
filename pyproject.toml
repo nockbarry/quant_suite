@@ -1,0 +1,136 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quant_suite"
+version = "0.1.0"
+description = "Quantitative trading and experimentation suite comparing traditional and AI approaches"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Quant Suite Team" }
+]
+keywords = ["trading", "quantitative-finance", "machine-learning", "backtesting"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # Core
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "polars>=0.20.0",
+
+    # Data sources
+    "yfinance>=0.2.0",
+    "alpha-vantage>=2.3.0",
+    "ccxt>=4.0.0",
+
+    # Storage
+    "pyarrow>=14.0.0",
+    "chromadb>=0.4.0",
+
+    # ML - Classical
+    "scikit-learn>=1.3.0",
+    "xgboost>=2.0.0",
+    "lightgbm>=4.0.0",
+
+    # ML - Deep Learning
+    "torch>=2.0.0",
+    "pytorch-lightning>=2.0.0",
+
+    # ML - Reinforcement Learning
+    "gymnasium>=0.29.0",
+    "stable-baselines3>=2.0.0",
+
+    # NLP / Embeddings
+    "sentence-transformers>=2.2.0",
+    "anthropic>=0.18.0",
+
+    # Statistics
+    "statsmodels>=0.14.0",
+    "scipy>=1.11.0",
+    "arch>=6.0.0",
+
+    # Backtesting
+    "vectorbt>=0.26.0",
+
+    # Visualization
+    "plotly>=5.18.0",
+    "matplotlib>=3.8.0",
+
+    # Execution
+    "alpaca-trade-api>=3.0.0",
+
+    # Web scraping
+    "httpx>=0.26.0",
+    "beautifulsoup4>=4.12.0",
+    "newspaper3k>=0.2.8",
+
+    # Async
+    "aiohttp>=3.9.0",
+
+    # Utils
+    "pyyaml>=6.0.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+
+    # MCPT / Statistical Testing
+    "joblib>=1.3.0",
+
+    # Reddit / Social Media
+    "praw>=7.7.0",
+    "asyncpraw>=7.7.0",
+
+    # Renaissance-style strategies
+    "hmmlearn>=0.3.0",
+    "filterpy>=1.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "hypothesis>=6.92.0",
+    "mypy>=1.7.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.6.0",
+]
+notebook = [
+    "jupyter>=1.0.0",
+    "ipywidgets>=8.1.0",
+]
+
+[project.scripts]
+quant = "quant_suite.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --cov=src --cov-report=term-missing"

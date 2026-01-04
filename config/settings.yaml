@@ -1,0 +1,146 @@
+# Quantitative Trading Suite Configuration
+
+data:
+  sources:
+    yahoo:
+      enabled: true
+      rate_limit: 2000  # requests per hour
+
+    alpha_vantage:
+      enabled: false
+      api_key: ${ALPHA_VANTAGE_KEY}
+      rate_limit: 5  # requests per minute (free tier)
+
+    crypto:
+      enabled: true
+      exchanges:
+        - binance
+        - coinbase
+
+  storage:
+    type: parquet
+    path: ./data/processed
+    compression: snappy
+
+  cache:
+    enabled: true
+    ttl_hours: 24
+
+universe:
+  equities:
+    # Major ETFs
+    - SPY
+    - QQQ
+    - IWM
+    - DIA
+    # Tech
+    - AAPL
+    - MSFT
+    - GOOGL
+    - AMZN
+    - NVDA
+    - META
+    - TSLA
+    # Finance
+    - JPM
+    - BAC
+    - GS
+    # Healthcare
+    - JNJ
+    - UNH
+    - PFE
+    # Energy
+    - XOM
+    - CVX
+    # Consumer
+    - WMT
+    - PG
+    - KO
+
+  crypto:
+    - BTC/USDT
+    - ETH/USDT
+    - SOL/USDT
+
+  etfs:
+    - TLT   # Long-term treasuries
+    - GLD   # Gold
+    - USO   # Oil
+    - VXX   # Volatility
+
+backtest:
+  initial_capital: 100000
+  costs:
+    commission_pct: 0.001      # 0.1% per trade
+    slippage_pct: 0.0005       # 0.05% slippage
+    min_commission: 1.0        # $1 minimum
+  margin:
+    enabled: false
+    initial_margin: 0.5
+    maintenance_margin: 0.25
+
+evaluation:
+  walk_forward:
+    train_size: 252            # 1 year of daily data
+    test_size: 63              # 1 quarter
+    step_size: 21              # 1 month
+    min_train_samples: 100
+
+  cross_validation:
+    n_splits: 5
+    embargo_pct: 0.01          # 1% embargo for purged CV
+    purge_pct: 0.01            # 1% purge
+
+  metrics:
+    risk_free_rate: 0.05       # 5% annual
+    benchmark: SPY
+    target_volatility: 0.15    # 15% annual
+
+risk:
+  position_limits:
+    max_position_pct: 0.10     # 10% max single position
+    max_sector_pct: 0.30       # 30% max sector exposure
+    max_drawdown_pct: 0.20     # 20% max drawdown before halt
+
+  position_sizing:
+    method: volatility_target  # kelly, fixed_fractional, volatility_target
+    volatility_target: 0.15
+    lookback_days: 20
+
+execution:
+  broker: alpaca
+  mode: paper                  # paper or live
+  approval_required: true      # Human-in-loop
+
+  alpaca:
+    base_url: https://paper-api.alpaca.markets
+    api_key: ${ALPACA_API_KEY}
+    secret_key: ${ALPACA_SECRET_KEY}
+
+agents:
+  llm:
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    max_tokens: 4096
+    temperature: 0.3
+
+  data_scout:
+    curated_sources:
+      - name: fred
+        type: economic
+        url: https://fred.stlouisfed.org
+      - name: sec_edgar
+        type: filings
+        url: https://www.sec.gov/edgar
+      - name: noaa
+        type: weather
+        url: https://www.ncdc.noaa.gov
+
+  ensemble:
+    aggregation_method: weighted_mean
+    min_confidence: 0.6
+
+logging:
+  level: INFO
+  format: structured
+  file: ./logs/quant_suite.log

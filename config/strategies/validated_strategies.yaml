@@ -1,0 +1,211 @@
+# Validated Trading Strategies Configuration
+# These strategies have passed MCPT validation (p < 0.05)
+# Last updated: 2026-01-03
+
+# Global defaults
+defaults:
+  min_signal_strength: 0.3
+  min_signal_confidence: 0.5
+  max_position_pct: 0.25
+  min_trade_value: 20.0
+  lookback_days: 60
+
+# Schedule configuration (all times in ET)
+schedule:
+  timezone: "America/New_York"
+
+  # Pre-market signal generation
+  signal_generation:
+    enabled: true
+    time: "07:00"
+    days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+
+  # Market open execution (5 min after open)
+  execution:
+    enabled: true
+    time: "09:35"
+    days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+
+  # End of day snapshot
+  eod_snapshot:
+    enabled: true
+    time: "16:05"
+    days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+
+  # Weekly review (Sunday evening for Monday preparation)
+  weekly_review:
+    enabled: true
+    time: "18:00"
+    days: ["sunday"]
+
+# Strategy definitions
+strategies:
+  # -----------------------------------------------------
+  # INSIDER TECHNICAL CONFLUENCE
+  # Sharpe: 1.23 on QQQ (p=0.00)
+  # -----------------------------------------------------
+  insider_technical:
+    enabled: true
+    class: "InsiderTechnicalStrategy"
+    description: "Combines accumulation detection with RSI and Bollinger Band signals"
+
+    # Validation results
+    validation:
+      sharpe: 1.23
+      p_value: 0.00
+      validated_on: "QQQ"
+      validation_date: "2026-01-02"
+
+    # Universe of symbols to trade
+    universe:
+      - QQQ    # Primary - validated
+      - MSFT   # Sharpe 1.11, p=0.00
+      - AAPL
+      - GOOGL  # Sharpe 0.75, p=0.00
+      - XLK    # Sharpe 0.97, p<0.01
+      - AMAT
+      - SPY
+
+    # Required features for this strategy
+    features:
+      - rsi
+      - bollinger_bands
+      - volume_features
+      - returns
+      - volatility
+
+    # Strategy parameters
+    parameters:
+      rsi_oversold: 30.0
+      rsi_overbought: 70.0
+      bb_period: 20
+      bb_num_std: 2.0
+      volume_lookback: 60
+      min_accum_score: 0.1
+
+    # Risk parameters (override defaults)
+    risk:
+      max_position_pct: 0.20
+      stop_loss_pct: 0.05
+      take_profit_pct: 0.10
+      min_hold_days: 2
+      max_hold_days: 20
+
+    # Schedule (can override global schedule)
+    schedule:
+      signal_days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+      execute_days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+
+  # -----------------------------------------------------
+  # RSI REVERSAL
+  # Sharpe: 0.61 on IWM (p=0.04)
+  # -----------------------------------------------------
+  rsi_reversal:
+    enabled: true
+    class: "RSIReversalStrategy"
+    description: "Mean reversion strategy using RSI extremes with reversal confirmation"
+
+    validation:
+      sharpe: 0.61
+      p_value: 0.04
+      validated_on: "IWM"
+      validation_date: "2026-01-02"
+
+    universe:
+      - IWM    # Primary - validated
+      - SPY
+      - QQQ
+      - DIA
+
+    features:
+      - rsi
+      - returns
+      - mean_reversion
+
+    parameters:
+      rsi_period: 14
+      rsi_oversold: 25.0
+      rsi_overbought: 75.0
+      require_reversal: true
+
+    risk:
+      max_position_pct: 0.15
+      stop_loss_pct: 0.04
+      take_profit_pct: 0.08
+      min_hold_days: 2
+      max_hold_days: 10
+
+    schedule:
+      signal_days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+      execute_days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+
+  # -----------------------------------------------------
+  # VOLATILITY BREAKOUT
+  # Sharpe: 0.73 on AMD (p=0.02)
+  # -----------------------------------------------------
+  volatility_breakout:
+    enabled: true
+    class: "VolatilityBreakoutStrategy"
+    description: "Breakout strategy for high-volatility regime stocks"
+
+    validation:
+      sharpe: 0.73
+      p_value: 0.02
+      validated_on: "AMD"
+      validation_date: "2026-01-02"
+
+    universe:
+      - AMD    # Primary - validated
+      - NVDA
+      - MRVL
+      - MU
+      - AVGO
+
+    features:
+      - atr
+      - volatility
+      - returns
+      - volume_features
+
+    parameters:
+      atr_period: 14
+      breakout_mult: 1.5
+      vol_lookback: 20
+      vol_regime_lookback: 60
+      min_vol_ratio: 1.2
+
+    risk:
+      max_position_pct: 0.15
+      stop_loss_pct: 0.06
+      take_profit_pct: 0.12
+      min_hold_days: 1
+      max_hold_days: 5
+
+    schedule:
+      signal_days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+      execute_days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+
+# PDT (Pattern Day Trader) compliance
+pdt:
+  enabled: true
+  max_day_trades: 3
+  rolling_window_days: 5
+  min_hold_days: 2
+  account_threshold: 25000
+
+# Monitoring and alerts
+monitoring:
+  enabled: true
+
+  alerts:
+    # Risk threshold alerts
+    max_drawdown_warning: 0.10
+    max_drawdown_critical: 0.15
+    daily_loss_warning: 0.03
+    daily_loss_critical: 0.05
+
+    # Channel configuration
+    channels:
+      console: true
+      slack_webhook: ""  # Add webhook URL if using Slack
+      email: ""          # Add email if using email alerts
