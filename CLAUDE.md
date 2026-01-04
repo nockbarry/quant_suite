@@ -1,7 +1,7 @@
 # Quant Suite - Claude Code Reference
 
 **Purpose**: Budget-friendly quantitative trading system ($200-$2,000 accounts)
-**Last Updated**: 2026-01-03
+**Last Updated**: 2026-01-04
 
 ---
 
@@ -160,6 +160,252 @@ Skills are automatically triggered based on your request, or invoke directly:
 | `src/evaluation/validation/mcpt.py` | Monte Carlo Permutation Test |
 | `src/evaluation/validation/walk_forward.py` | Walk-forward validation |
 | `src/evaluation/backtest/engine.py` | Vectorized backtesting |
+
+---
+
+## Strategy & Model Testing Framework
+
+The evaluation system (`src/evaluation/`) provides comprehensive testing capabilities:
+
+### Backtesting Engine
+
+```python
+from src.evaluation import (
+    VectorizedBacktest, BacktestConfig, BacktestResult, run_backtest,
+    PercentageCost, TieredCost, SpreadCost, MarketImpactCost,
+    BudgetExecutionModel, ExecutionModel,
+)
+
+# Quick backtest
+backtest = VectorizedBacktest(strategy, transaction_cost_bps=10)
+result = backtest.run(data)
+
+# With cost model
+from src.evaluation.backtest import MarketImpactCost
+cost_model = MarketImpactCost(impact_coefficient=0.1)
+backtest = VectorizedBacktest(strategy, cost_model=cost_model)
+```
+
+### Statistical Validation Suite
+
+**MCPT (Monte Carlo Permutation Test):**
+```python
+from src.evaluation import mcpt_test, mcpt_walk_forward, MCPTAnalyzer
+
+# Basic significance test
+result = mcpt_test(strategy_returns, benchmark_returns, n_permutations=1000)
+print(f"p-value: {result.p_value:.4f}, Significant: {result.significant}")
+
+# Combined with walk-forward
+wf_mcpt = mcpt_walk_forward(strategy, data, n_splits=5, n_permutations=500)
+```
+
+**Walk-Forward Validation:**
+```python
+from src.evaluation import (
+    run_walk_forward, WalkForwardOptimizer, ParameterOptimizer,
+    WalkForwardSplitter, walk_forward_summary,
+)
+
+# Out-of-sample validation
+result = run_walk_forward(strategy, data, n_splits=5)
+print(walk_forward_summary(result))
+
+# Parameter optimization
+optimizer = WalkForwardOptimizer(strategy_class, param_grid)
+best_params = optimizer.optimize(data)
+```
+
+**Hypothesis Testing (Data Snooping Protection):**
+```python
+from src.evaluation import (
+    WhiteRealityCheck, HansenSPA, StepwiseSPA,
+    reality_check, spa_test, stepwise_spa,
+    BlockBootstrap, multiple_testing_summary,
+)
+
+# White's Reality Check - tests if best strategy beats benchmark after snooping
+rc_result = reality_check(strategy_returns_list, benchmark_returns)
+print(f"Best survives: {rc_result.best_survives}")
+
+# Hansen's SPA - more powerful test
+spa_result = spa_test(strategy_returns_list, benchmark_returns)
+
+# Stepwise SPA - identify all significant strategies
+stepwise = stepwise_spa(strategy_returns_list, benchmark_returns)
+print(f"Significant strategies: {stepwise.significant_indices}")
+```
+
+**Cross-Validation:**
+```python
+from src.evaluation import (
+    PurgedKFoldCV, CombinatorialPurgedCV, TimeSeriesCV,
+    purged_cv, combinatorial_purged_cv, cv_summary,
+)
+
+# Purged K-Fold (prevents lookahead)
+cv = PurgedKFoldCV(n_splits=5, embargo_pct=0.01)
+results = purged_cv(strategy, data, cv)
+print(cv_summary(results))
+
+# Combinatorial Purged CV (de Prado method)
+cpcv_results = combinatorial_purged_cv(strategy, data, n_splits=10, n_test_splits=2)
+```
+
+**Regime Analysis:**
+```python
+from src.evaluation import (
+    RuleBasedRegimeDetector, HMMRegimeDetector,
+    detect_regimes, evaluate_by_regime, get_current_regime,
+    ConditionalEvaluator, RegimeType,
+)
+
+# Detect market regimes
+regimes = detect_regimes(market_data, method='hmm')
+current = get_current_regime(market_data)
+print(f"Current regime: {current.regime_type}, Confidence: {current.confidence:.2f}")
+
+# Evaluate strategy by regime
+regime_perf = evaluate_by_regime(strategy_returns, regimes)
+for regime, metrics in regime_perf.items():
+    print(f"{regime}: Sharpe={metrics['sharpe']:.2f}")
+```
+
+**Multi-Level Holdout:**
+```python
+from src.evaluation import (
+    MultiLevelHoldout, DevelopmentSplitter,
+    create_holdout_structure, validate_holdout_usage,
+)
+
+# Proper dev/val/test splits
+holdout = create_holdout_structure(
+    data,
+    dev_pct=0.6,
+    val_pct=0.2,
+    test_pct=0.2,
+)
+
+# Validate no leakage
+issues = validate_holdout_usage(holdout)
+if issues:
+    print(f"Leakage detected: {issues}")
+```
+
+**PDT Framework:**
+```python
+from src.evaluation import (
+    PDTAwareBacktest, HoldingPeriodOptimizer, PDTTracker,
+    AccountType, get_pdt_holding_recommendation,
+)
+
+# PDT-compliant backtest
+backtest = PDTAwareBacktest(account_type=AccountType.BUDGET, initial_capital=10000)
+results = backtest.compare_holding_periods(signals, prices, [0, 2, 5, 10, 20])
+
+# Optimize holding period
+optimizer = HoldingPeriodOptimizer()
+optimizer.run_full_optimization(signals, prices)
+budget_rec = optimizer.get_best_for_budget_account()
+print(f"Recommended hold: {budget_rec.holding_period_days} days")
+```
+
+### Performance Metrics
+
+```python
+from src.evaluation import (
+    # Return metrics
+    total_return, cagr, sharpe_ratio, sortino_ratio, calmar_ratio,
+    information_ratio, max_drawdown, win_rate, profit_factor,
+    expectancy, rolling_sharpe, calculate_alpha, calculate_beta,
+    performance_summary,
+    # Risk metrics
+    value_at_risk, conditional_var, max_drawdown_duration,
+    downside_deviation, ulcer_index, omega_ratio, tail_ratio,
+    skewness, kurtosis, stability_of_returns, risk_summary,
+)
+
+# Quick performance summary
+perf = performance_summary(returns)
+print(f"Sharpe: {perf['sharpe']:.2f}, Max DD: {perf['max_drawdown']:.1%}")
+
+# Risk summary
+risk = risk_summary(returns)
+print(f"VaR 95%: {risk['var_95']:.1%}, CVaR: {risk['cvar_95']:.1%}")
+```
+
+### Statistical Testing
+
+```python
+from src.evaluation import (
+    StatisticalTester, test_strategy_significance,
+    compare_two_strategies, compute_bootstrap_ci,
+    BootstrapCI, StrategySignificanceSuite,
+)
+
+# Comprehensive significance testing
+tester = StatisticalTester()
+
+# Test if Sharpe is significantly > 0
+result = tester.test_sharpe_ratio(returns, null_sharpe=0)
+print(f"Sharpe significant: {result.significant}, p={result.p_value:.4f}")
+
+# Test alpha significance
+alpha_test = tester.test_alpha(strategy_returns, benchmark_returns)
+
+# Compare two strategies
+comparison = compare_two_strategies(strat1_returns, strat2_returns)
+print(f"Strategy 1 better: {comparison.first_better}, p={comparison.p_value:.4f}")
+
+# Bootstrap confidence interval
+ci = compute_bootstrap_ci(returns, statistic_func=sharpe_ratio)
+print(f"Sharpe 95% CI: [{ci.lower:.2f}, {ci.upper:.2f}]")
+```
+
+### Performance Attribution
+
+```python
+from src.evaluation import (
+    FactorModel, FactorExposure, AttributionResult,
+    BrinsonAttribution, RollingFactorAnalysis,
+)
+
+# Factor model analysis
+factor_model = FactorModel(factors=['MKT', 'SMB', 'HML', 'MOM'])
+exposures = factor_model.fit(strategy_returns, factor_returns)
+print(f"Alpha: {exposures.alpha:.4f}, R²: {exposures.r_squared:.2f}")
+
+# Brinson attribution
+brinson = BrinsonAttribution()
+attribution = brinson.compute(portfolio_returns, benchmark_returns, weights)
+print(f"Allocation: {attribution.allocation:.2%}, Selection: {attribution.selection:.2%}")
+
+# Rolling factor analysis
+rolling = RollingFactorAnalysis(window=252)
+time_varying = rolling.fit(strategy_returns, factor_returns)
+```
+
+### Reporting
+
+```python
+from src.evaluation import (
+    HTMLReportGenerator, ChartGenerator,
+    generate_backtest_report, generate_comparison_report,
+    generate_json_report, ReportConfig,
+)
+
+# Generate HTML report
+report = generate_backtest_report(backtest_result, output_path="report.html")
+
+# Compare multiple strategies
+comparison = generate_comparison_report(
+    results=[result1, result2, result3],
+    names=["Strategy A", "Strategy B", "Strategy C"],
+)
+
+# JSON for programmatic use
+json_report = generate_json_report(backtest_result)
+```
 
 ### Risk Management
 | File | Purpose |
@@ -621,6 +867,97 @@ portfolio = monitor.generate_stability_report(df, ['rsi_14', 'macd', 'momentum']
 
 ---
 
+## Text Research Framework (`src/text_research/`)
+
+Point-in-time safe text-based alpha research system:
+
+### Core Components
+
+| Module | Description |
+|--------|-------------|
+| `corpus.py` | `TextCorpus` - PIT-safe document storage |
+| `embedding_engine.py` | `EmbeddingEngine` - Multi-model embeddings |
+| `feature_extractor.py` | `TextFeatureExtractor` - 7 text features |
+| `signal_generator.py` | `TextSignalGenerator` - 6 signal strategies |
+| `backtest.py` | `TextBacktester` - Walk-forward with proper temporal alignment |
+| `ingestors/news.py` | `NewsIngestor` - RSS and API news |
+| `ingestors/sec.py` | `SECIngestor` - 10-K, 10-Q, 8-K filings |
+
+### Text Features
+
+| Feature | Description | Lookback |
+|---------|-------------|----------|
+| `text_sentiment_mean` | Average sentiment score | 7 days |
+| `text_sentiment_momentum` | Change in sentiment | 14 days |
+| `text_sentiment_volatility` | Sentiment std dev | 14 days |
+| `text_mention_velocity` | Document count change | 7 days |
+| `text_narrative_shift` | Centroid distance | 30 days |
+| `text_semantic_novelty` | Novelty score | 30 days |
+| `text_topic_concentration` | Embedding dispersion | 30 days |
+
+### Signal Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| `sentiment_mean` | Long positive, short negative sentiment |
+| `sentiment_momentum` | Long improving, short deteriorating |
+| `narrative_shift` | Trade on narrative changes |
+| `attention_velocity` | Trade on attention spikes |
+| `contrarian_sentiment` | Bet against extreme sentiment |
+| `combined` | Multi-factor weighted |
+
+### Usage
+
+```python
+from src.text_research import (
+    TextCorpus, EmbeddingEngine, TextFeatureExtractor,
+    TextSignalGenerator, TextBacktester
+)
+from src.text_research.ingestors import NewsIngestor, SECIngestor
+from datetime import date
+
+# Initialize components
+corpus = TextCorpus()
+embeddings = EmbeddingEngine()
+features = TextFeatureExtractor(corpus, embeddings)
+signals = TextSignalGenerator()
+backtester = TextBacktester(corpus, embeddings, features)
+
+# Ingest text data
+news_ingestor = NewsIngestor(corpus)
+news_ingestor.ingest_rss_feeds(symbols=["NVDA", "AMD", "QCOM"])
+
+sec_ingestor = SECIngestor(corpus)
+sec_ingestor.ingest_10k(symbols=["NVDA", "AMD"])
+
+# Run walk-forward backtest
+result = backtester.run_walk_forward(
+    signal_generator=signals.create_signal_generator_fn("combined"),
+    symbols=["NVDA", "AMD", "QCOM"],
+    start_date=date(2024, 1, 1),
+    end_date=date(2025, 12, 31),
+    train_window=252,
+    test_window=63
+)
+
+# Check for lookahead bias
+is_clean = backtester.validate_no_lookahead()
+print(f"Lookahead-free: {is_clean}")
+
+# Print results
+for fold in result:
+    print(f"Train Sharpe: {fold.train_sharpe:.2f}, Test Sharpe: {fold.test_sharpe:.2f}")
+```
+
+### Key Design Principles
+
+- **signal_delay=1**: Same-day text generates next-day signals (no lookahead)
+- **Point-in-time safe**: All queries respect document timestamps
+- **Walk-forward validation**: Proper temporal splits
+- **Online learning**: Daily embedding updates without full recompute
+
+---
+
 ## Latest Validated Strategies (2026-01-03)
 
 From comprehensive research cycle:
@@ -637,7 +974,71 @@ From comprehensive research cycle:
 
 ---
 
-## Remaining Integration Gaps
+## Workflow Integration Status
+
+The evaluation module functions are now integrated into the main workflows:
+
+### Completed Integrations ✓
+
+| Workflow | Functions Integrated | Status |
+|----------|---------------------|--------|
+| **ComprehensiveResearcher** | `BootstrapCI`, `reality_check`, `detect_regimes`, `evaluate_by_regime`, `get_current_regime`, all metrics | ✓ Complete |
+| **validate_strategy.py** | `BootstrapCI`, `detect_regimes`, `evaluate_by_regime`, `get_current_regime`, `sharpe_ratio`, `sortino_ratio`, `calmar_ratio`, `max_drawdown`, `win_rate` | ✓ Complete |
+| **research_cycle.py** | `reality_check`, `stepwise_spa`, `detect_regimes`, `get_current_regime` | ✓ Complete |
+
+### Usage Examples
+
+**ComprehensiveResearcher** (`workflows/research/comprehensive_researcher.py`):
+```python
+# Bootstrap CI using evaluation module
+from src.evaluation import BootstrapCI
+bootstrap_ci = BootstrapCI(n_bootstrap=1000, confidence_level=0.95)
+ci_result = bootstrap_ci.compute(returns.values, statistic_func=lambda x: sharpe_ratio(pd.Series(x)))
+
+# Reality check for data snooping protection (runs when 5+ significant strategies)
+from src.evaluation import reality_check
+strategy_dict = {f"{r.strategy_name}/{r.symbol}": r.returns for r in significant}
+rc_result = reality_check(strategy_dict, benchmark)
+
+# Regime detection
+from src.evaluation import detect_regimes, get_current_regime
+regimes = detect_regimes(price_data)
+current = get_current_regime(price_data)  # Returns {'success': True, 'data': {'regime': 'sideways', ...}}
+```
+
+**validate_strategy.py** (`scripts/validate_strategy.py`):
+```python
+# Additional metrics from evaluation module
+from src.evaluation import sortino_ratio, calmar_ratio, max_drawdown, win_rate
+metrics['sortino'] = sortino_ratio(strategy_returns)
+metrics['calmar'] = calmar_ratio(strategy_returns)
+metrics['max_drawdown'] = max_drawdown(strategy_returns)
+metrics['win_rate'] = win_rate(strategy_returns)
+
+# Regime analysis
+from src.evaluation import detect_regimes, evaluate_by_regime
+regimes = detect_regimes(data)
+regime_perf = evaluate_by_regime(strategy_returns, regimes)
+```
+
+**research_cycle.py** (`workflows/orchestration/research_cycle.py`):
+```python
+# Reality check method available on ResearchCycleManager
+manager.run_reality_check(strategy_returns_list, benchmark_returns)
+
+# Regime detection method
+manager.detect_current_regime(market_data)
+```
+
+### Remaining Integration Opportunities
+
+| Function | Module | Use Case | Priority |
+|----------|--------|----------|----------|
+| `combinatorial_purged_cv()` | purged_cv | More robust cross-validation | Medium |
+| `FactorModel` | attribution | Factor exposure analysis | Low |
+| `generate_backtest_report()` | reporting | Automated HTML reports | Low |
+
+### Other Planned Features
 
 1. **Features computed fresh each run**: No persistent feature cache (DuckDB planned)
 2. **Earnings calls NLP**: Transcript fetching and analysis (planned)
@@ -703,77 +1104,109 @@ Promote bollinger_reversal on QCOM to paper trading with 10-day hold period
 
 ---
 
-## Specialized Subagents
+## Claude Code Agents (10 Total)
 
-The quant suite uses specialized subagents for autonomous operation. Each agent has a specific role:
+The quant suite uses 10 specialized Claude Code agents for autonomous operation, organized into three tracks:
 
-### Agent Fleet
+### Track 1: Novel Pattern Discovery
 
-| Agent | Purpose | Key Files |
-|-------|---------|-----------|
-| **ResearchAgent** | Strategy discovery and testing | `agents/research.py` |
-| **CriticAgent** | Safety validation and bias detection | `agents/critic.py` |
-| **MonitorAgent** | Portfolio and trading oversight | `agents/monitor.py` |
-| **BrainstormAgent** | Feature and strategy ideation | `agents/brainstorm.py` |
-| **OrchestratorAgent** | Multi-agent workflow coordination | `agents/orchestrator.py` |
+| Agent | Purpose | Config |
+|-------|---------|--------|
+| **macro-research-agent** | Geopolitical & macro factor analysis | `.claude/agents/macro-research-agent.md` |
+| **news-analyst-agent** | Event-driven news analysis | `.claude/agents/news-analyst-agent.md` |
+| **regime-detector-agent** | Market regime classification | `.claude/agents/regime-detector-agent.md` |
 
-### Agent Configurations
+### Track 2: Strategy Testing
+
+| Agent | Purpose | Config |
+|-------|---------|--------|
+| **research-agent** | Comprehensive strategy research | `.claude/agents/research-agent.md` |
+| **research-worker-agent** | Parallelizable sector research | `.claude/agents/research-worker-agent.md` |
+
+### Track 3: Text-Based Alpha
+
+| Agent | Purpose | Config |
+|-------|---------|--------|
+| **text-research-agent** | Text-based alpha discovery | `.claude/agents/text-research-agent.md` |
+
+### Support Agents
+
+| Agent | Purpose | Config |
+|-------|---------|--------|
+| **critic-agent** | Safety validation and bias detection | `.claude/agents/critic-agent.md` |
+| **monitor-agent** | Portfolio and trading oversight | `.claude/agents/monitor-agent.md` |
+| **brainstorm-agent** | Feature and strategy ideation | `.claude/agents/brainstorm-agent.md` |
+| **orchestrator-agent** | Multi-agent workflow coordination | `.claude/agents/orchestrator-agent.md` |
+
+### Agent Python Templates
 
 Located in `/home/nock/projects/quant_suite/agents/`:
 
 ```python
-from agents import ResearchAgent, CriticAgent, MonitorAgent, BrainstormAgent
+from agents import ResearchAgent, CriticAgent, MonitorAgent, BrainstormAgent, OrchestratorAgent
 
-# Get agent prompts for spawning
+# Research agent
 prompt = ResearchAgent.get_quick_research_prompt(
     universes=["tech_mega", "semiconductors"],
     strategies=["bollinger_reversal", "momentum"]
 )
 
 # Critic validation
-prompt = CriticAgent.get_prompt(
-    strategy="bollinger_reversal",
-    symbol="QCOM"
-)
+prompt = CriticAgent.get_prompt(strategy="bollinger_reversal", symbol="QCOM")
 
 # Monitor check
 prompt = MonitorAgent.get_prompt(focus="health")
 
 # Brainstorm session
 prompt = BrainstormAgent.get_prompt(focus="alternative")
+
+# Orchestrator for multi-agent coordination
+prompt = OrchestratorAgent.get_dual_track_prompt(sector="semiconductors")
 ```
 
 ### Standard Workflows
 
-**Full Research Cycle**:
+**Full Triple-Track Research Cycle**:
 ```
-1. BrainstormAgent → Generate feature ideas
-2. ResearchAgent → Test strategies with MCPT validation
-3. CriticAgent → Validate promising strategies
-4. MonitorAgent → Update tracking with results
+1. [PARALLEL] Track 1: macro-research, news-analyst, regime-detector
+2. [PARALLEL] Track 2: research-workers (by sector)
+3. [PARALLEL] Track 3: text-research-agent
+4. [SEQUENTIAL] Aggregate results
+5. [SEQUENTIAL] critic-agent validates top strategies
+6. [SEQUENTIAL] Generate daily review
+```
+
+**Dual-Track Research** (simpler):
+```
+1. regime-detector-agent → Get regime and recommendations
+2. [PARALLEL] 2-3x research-worker-agents
+3. critic-agent → Validate significant findings
 ```
 
 **Daily Operations**:
 ```
-1. MonitorAgent → System health check
-2. MonitorAgent → Performance review
-3. (Weekly) BrainstormAgent → New ideas
-4. ResearchAgent → Follow up on leads
+1. monitor-agent → System health check
+2. monitor-agent → Performance review
+3. (Weekly) brainstorm-agent → New ideas
+4. research-agent → Follow up on leads
 ```
 
-### Spawning Agents
+### Spawning Agents via Task Tool
 
-Use the Task tool to spawn agents:
-
-```
+```python
+# Single agent
 Task(
     subagent_type="general-purpose",
-    prompt=ResearchAgent.get_prompt(),
-    description="Run research cycle"
+    prompt="Use research-agent to test bollinger_reversal on semiconductors",
+    description="Research cycle"
 )
-```
 
-For parallel execution, spawn multiple agents in a single message.
+# Parallel agents (all in one message)
+Task(prompt="Use macro-research-agent for semiconductors", description="Macro: semis")
+Task(prompt="Use news-analyst-agent for semiconductors", description="News: semis")
+Task(prompt="Use regime-detector-agent", description="Regime detection")
+Task(prompt="Use research-worker-agent for semiconductors", description="Research: semis")
+```
 
 ---
 

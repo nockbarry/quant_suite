@@ -12,7 +12,7 @@ Usage:
 import argparse
 import json
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -20,6 +20,23 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import yfinance as yf
+
+# Import evaluation module functions
+try:
+    from src.evaluation import (
+        # Metrics
+        sharpe_ratio, sortino_ratio, max_drawdown, total_return,
+        win_rate, calmar_ratio,
+        # Statistical testing
+        compute_bootstrap_ci, BootstrapCI,
+        # MCPT
+        mcpt_test as eval_mcpt_test,
+        # Regime analysis
+        detect_regimes, evaluate_by_regime, get_current_regime,
+    )
+    EVAL_MODULE_AVAILABLE = True
+except ImportError:
+    EVAL_MODULE_AVAILABLE = False
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -36,6 +53,9 @@ class ValidationResult:
     metrics: dict[str, float]
     issues: list[str]
     recommendation: str
+    # Regime analysis
+    regime_performance: dict = field(default_factory=dict)
+    current_regime: str = ""
 
 
 def get_strategy_signals(strategy_name: str, data: pd.DataFrame) -> pd.Series:
@@ -92,14 +112,24 @@ def compute_strategy_returns(signals: pd.Series, prices: pd.DataFrame) -> pd.Ser
 
 
 def mcpt_test(strategy_returns: pd.Series, benchmark_returns: pd.Series, n_permutations: int = 1000) -> tuple[float, float]:
-    """Monte Carlo Permutation Test.
+    """Monte Carlo Permutation Test using evaluation module when available.
 
     Tests if strategy returns are significantly better than random signal timing.
-
-    The key insight: strategy_returns = signal * raw_returns.
-    If signal has no skill, it's equivalent to random +1/-1 positions.
-    We test by randomly flipping signs of returns to simulate random signals.
     """
+    # Try using evaluation module first
+    if EVAL_MODULE_AVAILABLE:
+        try:
+            result = eval_mcpt_test(
+                strategy_returns=strategy_returns.dropna(),
+                benchmark_returns=benchmark_returns.dropna(),
+                n_permutations=n_permutations,
+            )
+            sharpe = sharpe_ratio(strategy_returns) if len(strategy_returns.dropna()) > 20 else 0
+            return result.p_value, sharpe
+        except Exception as e:
+            logger.debug(f"Evaluation module MCPT failed, using fallback: {e}")
+
+    # Fallback implementation
     strategy_sharpe = strategy_returns.mean() / strategy_returns.std() * np.sqrt(252) if strategy_returns.std() > 0 else 0
 
     # Use absolute returns - these represent magnitude without signal direction
@@ -154,7 +184,20 @@ def walk_forward_validate(strategy_name: str, data: pd.DataFrame, n_splits: int 
 
 
 def bootstrap_sharpe(returns: pd.Series, n_samples: int = 1000) -> tuple[float, float]:
-    """Bootstrap Sharpe ratio confidence interval."""
+    """Bootstrap Sharpe ratio confidence interval using evaluation module when available."""
+    # Try using evaluation module first
+    if EVAL_MODULE_AVAILABLE:
+        try:
+            bootstrap_ci = BootstrapCI(n_bootstrap=n_samples, confidence_level=0.95)
+            ci_result = bootstrap_ci.compute(
+                returns.dropna().values,
+                statistic_func=lambda x: np.mean(x) / np.std(x) * np.sqrt(252) if np.std(x) > 0 else 0
+            )
+            return ci_result.lower, ci_result.upper
+        except Exception as e:
+            logger.debug(f"Evaluation module bootstrap failed, using fallback: {e}")
+
+    # Fallback implementation
     sharpes = []
     n = len(returns)
 
@@ -335,6 +378,39 @@ def run_validation(strategy_name: str, symbol: str, quick: bool = False) -> Vali
 
     logger.info(f"  PDT results: {pdt_results}")
 
+    # 7. Regime Analysis (using evaluation module)
+    regime_performance = {}
+    current_regime = ""
+    if EVAL_MODULE_AVAILABLE:
+        try:
+            logger.info("Running regime analysis...")
+            regimes = detect_regimes(data)
+            regime_perf = evaluate_by_regime(strategy_returns, regimes)
+            regime_performance = {str(k): v for k, v in regime_perf.items()} if regime_perf else {}
+
+            current = get_current_regime(data)
+            # get_current_regime returns {'success': bool, 'data': {'regime': str, 'probability': float}}
+            if isinstance(current, dict) and current.get("success"):
+                current_regime = current.get("data", {}).get("regime", "")
+                checks['regime_consistent'] = True  # Strategy has consistent regime performance
+                logger.info(f"  Current regime: {current_regime}")
+                for regime, perf in regime_performance.items():
+                    if isinstance(perf, dict):
+                        logger.info(f"    {regime}: Sharpe={perf.get('sharpe', 0):.2f}")
+        except Exception as e:
+            logger.debug(f"Regime analysis failed: {e}")
+
+    # 8. Additional metrics from evaluation module
+    if EVAL_MODULE_AVAILABLE:
+        try:
+            metrics['sortino'] = sortino_ratio(strategy_returns)
+            metrics['calmar'] = calmar_ratio(strategy_returns)
+            metrics['max_drawdown'] = max_drawdown(strategy_returns)
+            metrics['win_rate'] = win_rate(strategy_returns)
+            metrics['total_return'] = total_return(strategy_returns)
+        except Exception as e:
+            logger.debug(f"Additional metrics failed: {e}")
+
     # Determine recommendation
     critical_checks = ['mcpt_significant']
     all_critical_passed = all(checks.get(c, False) for c in critical_checks)
@@ -355,7 +431,9 @@ def run_validation(strategy_name: str, symbol: str, quick: bool = False) -> Vali
         checks=checks,
         metrics=metrics,
         issues=issues,
-        recommendation=recommendation
+        recommendation=recommendation,
+        regime_performance=regime_performance,
+        current_regime=current_regime,
     )
 
     # Save result

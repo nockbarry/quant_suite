@@ -34,6 +34,25 @@ from .symbol_universe import (
 from .knowledge_base import KnowledgeBase
 from .data_hub import DataHub, DataBundle
 
+# Import evaluation module functions
+from src.evaluation import (
+    # Metrics
+    sharpe_ratio, sortino_ratio, max_drawdown, total_return,
+    win_rate, profit_factor, calmar_ratio,
+    performance_summary, risk_summary,
+    # Statistical testing
+    compute_bootstrap_ci, BootstrapCI,
+    StatisticalTester, test_strategy_significance,
+    # Hypothesis testing (data snooping protection)
+    reality_check, stepwise_spa,
+    # Regime analysis
+    detect_regimes, evaluate_by_regime, get_current_regime,
+    # MCPT
+    mcpt_test, MCPTConfig,
+    # Reporting
+    generate_json_report,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,6 +74,11 @@ class ValidationResult:
     max_drawdown: float = 0.0
     trade_count: int = 0
 
+    # Additional metrics from evaluation module
+    sortino: float = 0.0
+    calmar: float = 0.0
+    win_rate_pct: float = 0.0
+
     # MCPT results
     mcpt_p_value: float = 1.0
     mcpt_percentile: float = 0.0
@@ -68,14 +92,24 @@ class ValidationResult:
     sharpe_ci_lower: float = 0.0
     sharpe_ci_upper: float = 0.0
 
+    # Regime analysis
+    regime_performance: dict = field(default_factory=dict)
+    current_regime: str = ""
+
     # Leak check
     has_lookahead_bias: bool = False
     leak_details: list[str] = field(default_factory=list)
+
+    # Data snooping protection
+    survives_reality_check: bool = True
 
     # Status
     is_significant: bool = False
     passes_all_checks: bool = False
     failure_reasons: list[str] = field(default_factory=list)
+
+    # Store returns for later analysis
+    returns: pd.Series | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict:
         return {
@@ -84,10 +118,16 @@ class ValidationResult:
             "params": self.params,
             "train_sharpe": self.train_sharpe,
             "val_sharpe": self.val_sharpe,
+            "sortino": self.sortino,
+            "calmar": self.calmar,
+            "win_rate": self.win_rate_pct,
             "mcpt_p_value": self.mcpt_p_value,
             "walk_forward_oos_sharpe": self.walk_forward_oos_sharpe,
             "sharpe_ci": [self.sharpe_ci_lower, self.sharpe_ci_upper],
+            "regime_performance": self.regime_performance,
+            "current_regime": self.current_regime,
             "has_lookahead_bias": self.has_lookahead_bias,
+            "survives_reality_check": self.survives_reality_check,
             "is_significant": self.is_significant,
             "passes_all_checks": self.passes_all_checks,
             "failure_reasons": self.failure_reasons,
@@ -147,6 +187,14 @@ class ResearchCycleReport:
     coverage_by_sector: dict[str, int]
     strategies_tested: list[str]
 
+    # Data snooping protection results
+    reality_check_result: dict = field(default_factory=dict)
+    strategies_surviving_snooping: int = 0
+
+    # Current market regime
+    current_regime: str = ""
+    regime_confidence: float = 0.0
+
     def to_dict(self) -> dict:
         return {
             "cycle_id": self.cycle_id,
@@ -158,6 +206,10 @@ class ResearchCycleReport:
             "sector_performance": self.sector_performance,
             "experiment_leads": [l.to_dict() for l in self.experiment_leads],
             "coverage_by_sector": self.coverage_by_sector,
+            "reality_check": self.reality_check_result,
+            "strategies_surviving_snooping": self.strategies_surviving_snooping,
+            "current_regime": self.current_regime,
+            "regime_confidence": self.regime_confidence,
         }
 
 
@@ -417,11 +469,58 @@ class ComprehensiveResearcher:
         validated = [r for r in self.results if r.passes_all_checks]
         significant = [r for r in self.results if r.is_significant]
 
+        # Data snooping protection with Reality Check
+        reality_check_result = {}
+        strategies_surviving = 0
+        if len(significant) >= 5:
+            print("\n--- Running Reality Check (Data Snooping Protection) ---")
+            try:
+                # Collect returns from significant strategies as dict
+                strategy_returns_dict = {
+                    f"{r.strategy_name}/{r.symbol}": r.returns
+                    for r in significant
+                    if r.returns is not None and len(r.returns.dropna()) > 50
+                }
+                if len(strategy_returns_dict) >= 3:
+                    # Use first symbol's price returns as benchmark
+                    first_symbol = next(iter(data.keys()))
+                    benchmark = data[first_symbol]["close"].pct_change().dropna()
+
+                    rc_result = reality_check(strategy_returns_dict, benchmark)
+                    reality_check_result = {
+                        "p_value": rc_result.p_value,
+                        "is_significant": rc_result.is_significant,
+                        "best_strategy": rc_result.best_strategy,
+                        "best_performance": rc_result.best_performance,
+                    }
+                    strategies_surviving = 1 if rc_result.is_significant else 0
+                    print(f"  Reality Check p-value: {rc_result.p_value:.4f}")
+                    print(f"  Best strategy: {rc_result.best_strategy} (significant: {rc_result.is_significant})")
+                    print(f"  Strategies surviving snooping: {strategies_surviving}/{len(significant)}")
+            except Exception as e:
+                logger.warning(f"Reality check failed: {e}")
+                print(f"  Reality check failed: {e}")
+
         best_strategies = sorted(
             [r.to_dict() for r in significant],
             key=lambda x: x["val_sharpe"],
             reverse=True,
         )[:10]
+
+        # Detect current market regime using any available data
+        current_regime = ""
+        regime_confidence = 0.0
+        try:
+            if data:
+                first_symbol = next(iter(data.keys()))
+                regime_result = get_current_regime(data[first_symbol])
+                # get_current_regime returns {'success': bool, 'data': {'regime': str, 'probability': float}}
+                if isinstance(regime_result, dict) and regime_result.get("success"):
+                    current_regime = regime_result.get("data", {}).get("regime", "")
+                    regime_confidence = regime_result.get("data", {}).get("probability", 0.0)
+                    print(f"\n--- Current Market Regime: {current_regime} (confidence: {regime_confidence:.2f}) ---")
+        except Exception as e:
+            logger.debug(f"Regime detection failed: {e}")
 
         report = ResearchCycleReport(
             cycle_id=cycle_id,
@@ -436,6 +535,10 @@ class ComprehensiveResearcher:
             experiment_leads=self.leads,
             coverage_by_sector=coverage_by_sector,
             strategies_tested=strategies,
+            reality_check_result=reality_check_result,
+            strategies_surviving_snooping=strategies_surviving,
+            current_regime=current_regime,
+            regime_confidence=regime_confidence,
         )
 
         # Save report
@@ -488,8 +591,9 @@ class ComprehensiveResearcher:
         strategy_name: str,
         symbol: str,
         price_data: pd.DataFrame,
+        benchmark_returns: pd.Series | None = None,
     ) -> ValidationResult:
-        """Run a single experiment with full validation suite."""
+        """Run a single experiment with full validation suite using evaluation module."""
         result = ValidationResult(
             strategy_name=strategy_name,
             symbol=symbol,
@@ -521,18 +625,49 @@ class ComprehensiveResearcher:
             val_positions = executor(val_data, {})
             val_metrics = self._calculate_metrics(val_positions, val_data)
             result.val_sharpe = val_metrics["sharpe"]
+            result.sortino = val_metrics["sortino"]
+            result.calmar = val_metrics["calmar"]
+            result.win_rate_pct = val_metrics["win_rate"]
             result.total_return = val_metrics["total_return"]
             result.max_drawdown = val_metrics["max_drawdown"]
             result.trade_count = val_metrics["trades"]
+            result.returns = val_metrics["returns"]
 
-            # MCPT test
-            result.mcpt_p_value = self._run_mcpt(executor, val_data, val_metrics["sharpe"])
+            # MCPT test - use fallback since evaluation module mcpt_test expects Strategy objects
+            result.mcpt_p_value = self._run_mcpt_fallback(executor, val_data, val_metrics["sharpe"])
+
             result.is_significant = result.mcpt_p_value < self.max_p_value
 
-            # Bootstrap CI for Sharpe
-            result.sharpe_ci_lower, result.sharpe_ci_upper = self._bootstrap_sharpe_ci(
-                val_metrics["returns"]
-            )
+            # Bootstrap CI for Sharpe using evaluation module
+            try:
+                bootstrap_ci = BootstrapCI(n_bootstrap=1000, confidence_level=0.95)
+                ci_result = bootstrap_ci.compute(
+                    val_metrics["returns"].dropna().values,
+                    statistic_func=lambda x: np.mean(x) / np.std(x) * np.sqrt(252) if np.std(x) > 0 else 0
+                )
+                result.sharpe_ci_lower = ci_result.lower
+                result.sharpe_ci_upper = ci_result.upper
+            except Exception as e:
+                logger.warning(f"Bootstrap CI failed for {strategy_name}/{symbol}: {e}")
+                result.sharpe_ci_lower, result.sharpe_ci_upper = self._bootstrap_sharpe_ci_fallback(
+                    val_metrics["returns"]
+                )
+
+            # Regime analysis using evaluation module
+            try:
+                regimes = detect_regimes(val_data)
+                regime_perf = evaluate_by_regime(val_metrics["returns"], regimes)
+                result.regime_performance = {str(k): v for k, v in regime_perf.items()} if regime_perf else {}
+                current = get_current_regime(val_data)
+                # get_current_regime returns {'success': bool, 'data': {'regime': str, 'probability': float}}
+                if isinstance(current, dict) and current.get("success"):
+                    result.current_regime = current.get("data", {}).get("regime", "")
+                else:
+                    result.current_regime = ""
+            except Exception as e:
+                logger.debug(f"Regime analysis failed for {strategy_name}/{symbol}: {e}")
+                result.regime_performance = {}
+                result.current_regime = ""
 
             # Leak detection (simple check)
             result.has_lookahead_bias = self._check_lookahead(train_positions, train_data)
@@ -577,7 +712,7 @@ class ComprehensiveResearcher:
         price_data: pd.DataFrame,
         cost_bps: float = 10,
     ) -> dict:
-        """Calculate strategy metrics."""
+        """Calculate strategy metrics using evaluation module functions."""
         returns = price_data["close"].pct_change()
         strategy_returns = positions * returns
 
@@ -586,35 +721,46 @@ class ComprehensiveResearcher:
         strategy_returns = strategy_returns - costs
         strategy_returns = strategy_returns.replace([np.inf, -np.inf], 0).fillna(0)
 
-        # Metrics
-        total_return = (1 + strategy_returns).prod() - 1
-        sharpe = (
-            strategy_returns.mean() / strategy_returns.std() * np.sqrt(252)
-            if strategy_returns.std() > 0 else 0
-        )
-
-        cum_returns = (1 + strategy_returns).cumprod()
-        rolling_max = cum_returns.expanding().max()
-        drawdown = (cum_returns - rolling_max) / rolling_max
-        max_dd = drawdown.min()
+        # Use evaluation module functions for metrics
+        try:
+            sharpe = sharpe_ratio(strategy_returns)
+            sortino = sortino_ratio(strategy_returns)
+            max_dd = max_drawdown(strategy_returns)
+            tot_ret = total_return(strategy_returns)
+            calmar = calmar_ratio(strategy_returns)
+            wr = win_rate(strategy_returns)
+        except Exception:
+            # Fallback if evaluation module functions fail
+            sharpe = (
+                strategy_returns.mean() / strategy_returns.std() * np.sqrt(252)
+                if strategy_returns.std() > 0 else 0
+            )
+            sortino = 0.0
+            max_dd = 0.0
+            tot_ret = (1 + strategy_returns).prod() - 1
+            calmar = 0.0
+            wr = 0.0
 
         trades = (positions.diff().abs() > 0).sum()
 
         return {
             "returns": strategy_returns,
-            "total_return": float(total_return),
+            "total_return": float(tot_ret),
             "sharpe": float(sharpe),
+            "sortino": float(sortino),
             "max_drawdown": float(max_dd),
+            "calmar": float(calmar),
+            "win_rate": float(wr),
             "trades": int(trades),
         }
 
-    def _run_mcpt(
+    def _run_mcpt_fallback(
         self,
         executor,
         val_data: pd.DataFrame,
         original_sharpe: float,
     ) -> float:
-        """Run Monte Carlo Permutation Test."""
+        """Fallback Monte Carlo Permutation Test when evaluation module fails."""
         perm_sharpes = []
 
         for i in range(self.n_permutations):
@@ -670,13 +816,13 @@ class ComprehensiveResearcher:
 
         return permuted
 
-    def _bootstrap_sharpe_ci(
+    def _bootstrap_sharpe_ci_fallback(
         self,
         returns: pd.Series,
         n_bootstrap: int = 1000,
         ci: float = 0.95,
     ) -> tuple[float, float]:
-        """Calculate bootstrap confidence interval for Sharpe ratio."""
+        """Fallback bootstrap CI when evaluation module fails."""
         sharpes = []
         n = len(returns)
 

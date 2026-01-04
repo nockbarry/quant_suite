@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any
 import json
 import uuid
+import logging
+
+import pandas as pd
 
 from .parallel_executor import (
     AgentTask,
@@ -21,6 +24,18 @@ from .parallel_executor import (
     create_full_research_tasks,
 )
 from .result_aggregator import ConsolidatedReport, ResearchResultAggregator
+
+# Import evaluation module for reality check and regime detection
+try:
+    from src.evaluation import (
+        reality_check, stepwise_spa,
+        detect_regimes, get_current_regime,
+    )
+    EVAL_MODULE_AVAILABLE = True
+except ImportError:
+    EVAL_MODULE_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 
 class CycleStatus(Enum):
@@ -94,6 +109,12 @@ class CycleReport:
     consolidated: ConsolidatedReport | None
     human_decisions: dict | None
     error: str | None
+    # Data snooping protection results
+    reality_check_result: dict = field(default_factory=dict)
+    strategies_surviving_snooping: int = 0
+    # Current market regime
+    current_regime: str = ""
+    regime_confidence: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -106,6 +127,10 @@ class CycleReport:
             "consolidated": self.consolidated.to_dict() if self.consolidated else None,
             "human_decisions": self.human_decisions,
             "error": self.error,
+            "reality_check": self.reality_check_result,
+            "strategies_surviving_snooping": self.strategies_surviving_snooping,
+            "current_regime": self.current_regime,
+            "regime_confidence": self.regime_confidence,
         }
 
 
@@ -411,6 +436,108 @@ NEXT PRIORITIES:
         # The actual parallel execution is done via Task tool
         # This method returns the current state
         return self.current_cycle
+
+    def run_reality_check(
+        self,
+        strategy_returns_list: list[pd.Series],
+        benchmark_returns: pd.Series,
+    ) -> dict:
+        """
+        Run data snooping protection on strategy returns.
+
+        Args:
+            strategy_returns_list: List of strategy return series
+            benchmark_returns: Benchmark return series
+
+        Returns:
+            Dict with reality check results
+        """
+        if not EVAL_MODULE_AVAILABLE:
+            logger.warning("Evaluation module not available, skipping reality check")
+            return {"available": False, "reason": "Evaluation module not available"}
+
+        if not self.current_cycle:
+            return {"available": False, "reason": "No active cycle"}
+
+        if len(strategy_returns_list) < 3:
+            return {"available": False, "reason": "Need at least 3 strategies for reality check"}
+
+        try:
+            # Convert list to dict format for reality_check
+            strategy_dict = {
+                f"strategy_{i}": s for i, s in enumerate(strategy_returns_list)
+            }
+
+            # Run White's Reality Check
+            rc_result = reality_check(strategy_dict, benchmark_returns)
+            result = {
+                "available": True,
+                "p_value": rc_result.p_value,
+                "is_significant": rc_result.is_significant,
+                "best_strategy": rc_result.best_strategy,
+                "best_performance": float(rc_result.best_performance),
+            }
+
+            # Run Stepwise SPA to find all significant strategies
+            try:
+                spa_result = stepwise_spa(strategy_dict, benchmark_returns)
+                result["significant_strategies"] = spa_result.significant_strategies if hasattr(spa_result, 'significant_strategies') else []
+                result["strategies_surviving"] = len(result["significant_strategies"])
+            except Exception as e:
+                logger.debug(f"Stepwise SPA failed: {e}")
+                result["strategies_surviving"] = 1 if rc_result.is_significant else 0
+
+            # Update current cycle
+            self.current_cycle.reality_check_result = result
+            self.current_cycle.strategies_surviving_snooping = result.get("strategies_surviving", 0)
+            self._save_cycle(self.current_cycle)
+
+            return result
+
+        except Exception as e:
+            logger.warning(f"Reality check failed: {e}")
+            return {"available": False, "reason": str(e)}
+
+    def detect_current_regime(self, market_data: pd.DataFrame) -> dict:
+        """
+        Detect and record current market regime.
+
+        Args:
+            market_data: DataFrame with OHLCV data
+
+        Returns:
+            Dict with regime information
+        """
+        if not EVAL_MODULE_AVAILABLE:
+            logger.warning("Evaluation module not available, skipping regime detection")
+            return {"available": False, "reason": "Evaluation module not available"}
+
+        if not self.current_cycle:
+            return {"available": False, "reason": "No active cycle"}
+
+        try:
+            current = get_current_regime(market_data)
+            # get_current_regime returns {'success': bool, 'data': {'regime': str, 'probability': float}}
+            if isinstance(current, dict) and current.get("success"):
+                data = current.get("data", {})
+                result = {
+                    "available": True,
+                    "regime": data.get("regime", ""),
+                    "confidence": data.get("probability", 0.0),
+                }
+
+                # Update current cycle
+                self.current_cycle.current_regime = result["regime"]
+                self.current_cycle.regime_confidence = result["confidence"]
+                self._save_cycle(self.current_cycle)
+
+                return result
+
+            return {"available": False, "reason": "Could not determine regime"}
+
+        except Exception as e:
+            logger.warning(f"Regime detection failed: {e}")
+            return {"available": False, "reason": str(e)}
 
     def mark_awaiting_review(self, consolidated_report: ConsolidatedReport) -> None:
         """Mark cycle as awaiting human review."""

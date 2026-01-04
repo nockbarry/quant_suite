@@ -14,11 +14,13 @@ from .metrics import (
     conditional_var,
     max_drawdown,
     performance_summary,
+    profit_factor,
     risk_summary,
     sharpe_ratio,
     sortino_ratio,
     total_return,
     value_at_risk,
+    win_rate,
 )
 from .metrics.statistical import (
     BootstrapCI,
@@ -117,6 +119,8 @@ __all__ = [
     "max_drawdown",
     "value_at_risk",
     "conditional_var",
+    "win_rate",
+    "profit_factor",
     "performance_summary",
     "risk_summary",
     # Statistical testing
