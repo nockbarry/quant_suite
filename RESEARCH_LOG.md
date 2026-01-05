@@ -202,6 +202,30 @@ Before marking any result as "validated":
 
 ---
 
+## Workflow Integration Status
+
+The evaluation module functions are now integrated into the main workflows:
+
+### Completed Integrations
+
+| Workflow | Functions Integrated | Status |
+|----------|---------------------|--------|
+| **ComprehensiveResearcher** | `BootstrapCI`, `reality_check`, `detect_regimes`, `evaluate_by_regime`, `get_current_regime`, all metrics | Complete |
+| **validate_strategy.py** | `BootstrapCI`, `detect_regimes`, `evaluate_by_regime`, `get_current_regime`, `sharpe_ratio`, `sortino_ratio`, `calmar_ratio`, `max_drawdown`, `win_rate` | Complete |
+| **research_cycle.py** | `reality_check`, `stepwise_spa`, `detect_regimes`, `get_current_regime` | Complete |
+
+### Remaining Integration Opportunities
+
+| Function | Module | Use Case | Priority |
+|----------|--------|----------|----------|
+| `combinatorial_purged_cv()` | purged_cv | More robust cross-validation | Medium |
+| `FactorModel` | attribution | Factor exposure analysis | Low |
+| `generate_backtest_report()` | reporting | Automated HTML reports | Low |
+
+See `docs/EVALUATION_API.md` for detailed usage examples.
+
+---
+
 ## Appendix: Data Sources
 
 | Source | Type | Update Frequency | Quality |
