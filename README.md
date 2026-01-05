@@ -81,14 +81,18 @@ quant_suite/
 ├── scripts/                    # CLI scripts for daily operations
 ├── src/                        # Core source code
 │   ├── agents/                 # Runtime agent classes
+│   ├── alpha_discovery/        # Market scanner, inefficiency detection
 │   ├── core/                   # Core data types (Signal, Order, Position)
 │   ├── data/                   # Data sources and feature engineering
+│   │   ├── sources/universal/  # FRED, commodities, blog scrapers
+│   │   └── synthesis/          # LLM insight extraction
 │   ├── evaluation/             # Backtesting and validation
 │   ├── execution/              # Order execution and monitoring
 │   ├── risk/                   # Risk management
 │   ├── strategies/             # Trading strategies
 │   └── text_research/          # Text-based alpha framework
 ├── workflows/                  # High-level workflows
+│   ├── alpha_discovery/        # Idea-to-strategy automation
 │   ├── orchestration/          # Multi-agent coordination
 │   ├── research/               # Research automation
 │   ├── review/                 # Daily review dashboard
@@ -422,9 +426,53 @@ symbols = get_symbols_for_regime(regime)
 | `backtest.py` | Text-aware backtesting |
 | `ingestors/` | News and SEC filing ingestion |
 
+### Alpha Discovery System (`src/alpha_discovery/`, `src/data/sources/universal/`, `src/data/synthesis/`)
+
+A comprehensive system for discovering alpha from novel data sources:
+
+| Module | Description |
+|--------|-------------|
+| `src/data/sources/universal/free_api_hub.py` | FRED API + ETF proxies for commodities |
+| `src/data/sources/universal/commodity_scraper.py` | DRAM prices, semi equipment, specialty commodities |
+| `src/data/sources/universal/blog_scraper.py` | Semi Analysis, Stratechery, industry blog scraping |
+| `src/data/synthesis/llm_extractor.py` | Extract tradeable insights from text |
+| `src/alpha_discovery/market_scanner.py` | Scan for market inefficiencies |
+| `workflows/alpha_discovery/idea_to_strategy.py` | Full idea → validated strategy pipeline |
+
+**Key Capabilities**:
+- **Commodity Tracking**: Gold, silver, oil, DRAM, semi equipment via ETF proxies
+- **Blog Scraping**: RSS-based with point-in-time timestamps and symbol extraction
+- **Insight Extraction**: Rule-based + LLM extraction of bullish/bearish signals
+- **Market Scanning**: Momentum anomalies, mean reversion, volume divergence, sector rotation
+- **Causal Discovery**: Track cause→effect relationships (e.g., DRAM → semiconductor stocks)
+- **Automated Testing**: Hypothesis → features → strategy → MCPT validation
+
+**Quick Usage**:
+```python
+# Scan for market opportunities
+from src.alpha_discovery import MarketScanner, quick_scan
+import asyncio
+
+scanner = MarketScanner()
+result = asyncio.run(scanner.scan_all())
+print(scanner.get_research_priorities(5))
+
+# Extract insights from article
+from src.data.synthesis import extract_from_text
+insights = extract_from_text("NVDA expects 30% revenue growth...", source="article")
+
+# Test a hypothesis automatically
+from workflows.alpha_discovery import test_hypothesis
+result = asyncio.run(test_hypothesis(
+    "Momentum works on semiconductors",
+    ["NVDA", "AMD", "MU"]
+))
+print(f"Sharpe: {result.val_sharpe:.2f}, p-value: {result.mcpt_pvalue:.4f}")
+```
+
 ## Claude Code Agents
 
-The system includes 10 specialized agents in `.claude/agents/`:
+The system includes 13 specialized agents in `.claude/agents/`:
 
 ### Research Track (Track 1 & 2)
 
@@ -441,6 +489,14 @@ The system includes 10 specialized agents in `.claude/agents/`:
 | Agent | Purpose |
 |-------|---------|
 | `text-research-agent` | Text-based alpha discovery |
+
+### Alpha Discovery Track (Track 4)
+
+| Agent | Purpose |
+|-------|---------|
+| `alpha-discovery-agent` | Scans for market inefficiencies, ranks opportunities |
+| `data-acquisition-agent` | Acquires data from free sources, scrapes blogs |
+| `hypothesis-generator-agent` | Transforms insights into testable hypotheses |
 
 ### Support Agents
 

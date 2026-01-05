@@ -30,6 +30,11 @@ Coordinate specialized agents to run comprehensive dual-track quant workflows co
 │   TRACK 3: Text-Based Alpha Research                            │
 │   └── text-research-agent → Sentiment, embeddings, text signals │
 │                                                                  │
+│   TRACK 4: Alpha Discovery (novel data sources)                 │
+│   ├── alpha-discovery-agent → Scan for market inefficiencies    │
+│   ├── data-acquisition-agent → Scrape blogs, fetch commodities  │
+│   └── hypothesis-generator-agent → Turn insights into strategies│
+│                                                                  │
 │   AGGREGATION & VALIDATION                                       │
 │   ├── Result aggregation and deduplication                      │
 │   ├── critic-agent validation of top strategies                 │
@@ -57,6 +62,13 @@ Coordinate specialized agents to run comprehensive dual-track quant workflows co
 | Agent | Purpose | When to Use |
 |-------|---------|-------------|
 | text-research-agent | Text feature extraction and backtesting | Sentiment, embeddings, text signals |
+
+### Track 4: Alpha Discovery
+| Agent | Purpose | When to Use |
+|-------|---------|-------------|
+| alpha-discovery-agent | Scan for market inefficiencies | Finding new opportunities, momentum anomalies |
+| data-acquisition-agent | Acquire data from free sources | Scraping blogs, fetching commodities |
+| hypothesis-generator-agent | Turn insights into testable hypotheses | Converting data to strategies |
 
 ### Validation & Support
 | Agent | Purpose | When to Use |
@@ -102,6 +114,21 @@ Task(subagent_type="general-purpose",
      description="Text research")
 ```
 
+**Track 4 (Alpha Discovery)** - Spawn for novel data sources:
+```
+Task(subagent_type="general-purpose",
+     prompt="Use alpha-discovery-agent to scan for market inefficiencies",
+     description="Alpha scan")
+
+Task(subagent_type="general-purpose",
+     prompt="Use data-acquisition-agent to scrape industry blogs and fetch commodity data",
+     description="Data acquisition")
+
+Task(subagent_type="general-purpose",
+     prompt="Use hypothesis-generator-agent to create testable hypotheses from insights",
+     description="Hypothesis generation")
+```
+
 ### Phase 2: Aggregation
 After all agents complete:
 1. Collect findings from all agents
@@ -144,14 +171,15 @@ Compile findings for human review:
 
 ## Standard Workflows
 
-### 1. Full Triple-Track Research Cycle
+### 1. Full Quad-Track Research Cycle
 ```
 1. [PARALLEL] Track 1: macro-research, news-analyst, regime-detector
 2. [PARALLEL] Track 2: 2-3 research-workers for different sectors
 3. [PARALLEL] Track 3: text-research-agent for text-based signals
-4. [SEQUENTIAL] Aggregate results from all tracks after all complete
-5. [SEQUENTIAL] critic-agent validates top strategies
-6. [SEQUENTIAL] Generate daily review for human approval
+4. [PARALLEL] Track 4: alpha-discovery, data-acquisition, hypothesis-generator
+5. [SEQUENTIAL] Aggregate results from all tracks after all complete
+6. [SEQUENTIAL] critic-agent validates top strategies
+7. [SEQUENTIAL] Generate daily review for human approval
 ```
 
 ### 2. Focused Sector Research
@@ -175,7 +203,16 @@ Compile findings for human review:
 3. Output: APPROVE / REJECT with rationale
 ```
 
-### 5. Daily Operations
+### 5. Alpha Discovery Pipeline (Track 4)
+```
+1. alpha-discovery-agent → Scan for market inefficiencies
+2. data-acquisition-agent → Scrape blogs, fetch commodity data
+3. hypothesis-generator-agent → Create testable hypotheses
+4. research-agent → Test top hypotheses
+5. critic-agent → Validate significant findings
+```
+
+### 6. Daily Operations
 ```
 1. monitor-agent → System health check
 2. regime-detector-agent → Current regime assessment
@@ -185,16 +222,23 @@ Compile findings for human review:
 
 ## Parallel Execution Example
 
-To run 6 agents in parallel (3 Track 1 + 2 Track 2 + 1 Track 3), spawn ALL in a single message:
+To run 9 agents in parallel (3 Track 1 + 2 Track 2 + 1 Track 3 + 3 Track 4), spawn ALL in a single message:
 
 ```
-# Spawn all 6 agents at once - Claude Code will run them in parallel
+# Spawn all 9 agents at once - Claude Code will run them in parallel
+# Track 1: Novel Patterns
 Task(prompt="Use macro-research-agent for semiconductors", description="Macro: semis")
 Task(prompt="Use news-analyst-agent for semiconductors", description="News: semis")
 Task(prompt="Use regime-detector-agent", description="Regime detection")
+# Track 2: Strategy Testing
 Task(prompt="Use research-worker-agent for semiconductors", description="Research: semis")
 Task(prompt="Use research-worker-agent for tech", description="Research: tech")
+# Track 3: Text-Based Alpha
 Task(prompt="Use text-research-agent for semiconductors", description="Text: semis")
+# Track 4: Alpha Discovery
+Task(prompt="Use alpha-discovery-agent to scan markets", description="Alpha scan")
+Task(prompt="Use data-acquisition-agent to fetch commodity and blog data", description="Data acquisition")
+Task(prompt="Use hypothesis-generator-agent on findings", description="Hypothesis gen")
 ```
 
 ## PDT-Aware Testing
@@ -245,6 +289,21 @@ Text Research Findings:
 - Sentiment momentum IC: 0.045
 - Narrative shift detected: 2 symbols
 - Best text signal: combined (Sharpe 1.2)
+
+TRACK 4 - ALPHA DISCOVERY:
+┌──────────────────────────┬──────────┬──────────┐
+│ Agent                    │ Status   │ Findings │
+├──────────────────────────┼──────────┼──────────┤
+│ alpha-discovery          │ Complete │ 5 opps   │
+│ data-acquisition         │ Complete │ 15 items │
+│ hypothesis-generator     │ Complete │ 3 ideas  │
+└──────────────────────────┴──────────┴──────────┘
+
+Alpha Discovery Findings:
+- Market inefficiencies: 5 opportunities scanned
+- Blog articles scraped: 15 (Semi Analysis, Stratechery)
+- Commodity correlations: DRAM → MU (r=0.91, lag=-18d)
+- Hypotheses generated: 3 (2 tested, 1 significant)
 
 Strategy Results:
 | Strategy | Symbol | Sharpe | p-value | Hold | Status |

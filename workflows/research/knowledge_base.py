@@ -78,6 +78,83 @@ class Pattern:
         return cls(**d)
 
 
+@dataclass
+class DataSourceAlpha:
+    """Track which data sources provide edge."""
+    source: str  # e.g., 'semianalysis', 'fred_gold', 'dram_prices'
+    source_type: str  # 'blog', 'api', 'scrape', 'etf_proxy'
+    predictions_made: int = 0
+    predictions_correct: int = 0
+    cumulative_alpha: float = 0.0  # Total alpha generated
+    best_strategy: str = ""  # Strategy that worked best with this source
+    best_sharpe: float = 0.0
+    symbols_affected: list[str] = field(default_factory=list)
+    first_used: str = ""
+    last_used: str = ""
+    notes: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "DataSourceAlpha":
+        return cls(**d)
+
+    @property
+    def hit_rate(self) -> float:
+        """Prediction accuracy."""
+        if self.predictions_made == 0:
+            return 0.0
+        return self.predictions_correct / self.predictions_made
+
+    @property
+    def alpha_per_prediction(self) -> float:
+        """Average alpha per prediction."""
+        if self.predictions_made == 0:
+            return 0.0
+        return self.cumulative_alpha / self.predictions_made
+
+    @property
+    def is_valuable(self) -> bool:
+        """Source is considered valuable if hit rate > 55% and has 5+ predictions."""
+        return self.predictions_made >= 5 and self.hit_rate > 0.55
+
+
+@dataclass
+class CausalRelationship:
+    """Discovered cause → effect relationship."""
+    id: str
+    cause: str  # e.g., 'dram_prices', 'fed_rate', 'vix'
+    effect: str  # e.g., 'semiconductor_stocks', 'tech_sector', 'MU'
+    lag_days: int  # How many days before effect manifests
+    correlation: float  # Pearson correlation
+    p_value: float  # Statistical significance
+    mechanism: str  # Explanation of why this relationship exists
+    discovered_at: str
+    verified_count: int = 0  # Times this relationship was verified
+    last_verified: str = ""
+    confidence: float = 0.5  # 0-1, increases with verification
+    regime_dependent: bool = False  # True if only works in certain regimes
+    regime_notes: str = ""  # Which regimes it works in
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "CausalRelationship":
+        return cls(**d)
+
+    @property
+    def is_significant(self) -> bool:
+        """Relationship is statistically significant."""
+        return self.p_value < 0.05
+
+    @property
+    def is_strong(self) -> bool:
+        """Strong correlation with high confidence."""
+        return abs(self.correlation) > 0.3 and self.confidence > 0.7
+
+
 class KnowledgeBase:
     """
     Persistent storage for research insights and learnings.
@@ -96,6 +173,8 @@ class KnowledgeBase:
         self._patterns_file = self.path / "patterns.json"
         self._data_quality_file = self.path / "data_quality.json"
         self._tested_file = self.path / "tested_hypotheses.json"
+        self._data_sources_file = self.path / "data_sources.json"
+        self._causal_relationships_file = self.path / "causal_relationships.json"
 
         # In-memory storage
         self.insights: list[Insight] = []
@@ -104,6 +183,8 @@ class KnowledgeBase:
         self.patterns: list[Pattern] = []
         self.data_quality: dict[str, dict] = {}
         self.tested_hypotheses: set[str] = set()
+        self.data_sources: dict[str, DataSourceAlpha] = {}
+        self.causal_relationships: list[CausalRelationship] = []
 
         self._load()
 
@@ -138,6 +219,22 @@ class KnowledgeBase:
             data = json.loads(self._tested_file.read_text())
             self.tested_hypotheses = set(data.get("tested", []))
 
+        # Load data sources
+        if self._data_sources_file.exists():
+            data = json.loads(self._data_sources_file.read_text())
+            self.data_sources = {
+                k: DataSourceAlpha.from_dict(v)
+                for k, v in data.get("sources", {}).items()
+            }
+
+        # Load causal relationships
+        if self._causal_relationships_file.exists():
+            data = json.loads(self._causal_relationships_file.read_text())
+            self.causal_relationships = [
+                CausalRelationship.from_dict(d)
+                for d in data.get("relationships", [])
+            ]
+
     def _save(self) -> None:
         """Save all knowledge to disk."""
         # Save insights
@@ -170,6 +267,18 @@ class KnowledgeBase:
         # Save tested hypotheses
         self._tested_file.write_text(json.dumps({
             "tested": list(self.tested_hypotheses),
+            "updated_at": datetime.now().isoformat(),
+        }, indent=2))
+
+        # Save data sources
+        self._data_sources_file.write_text(json.dumps({
+            "sources": {k: v.to_dict() for k, v in self.data_sources.items()},
+            "updated_at": datetime.now().isoformat(),
+        }, indent=2))
+
+        # Save causal relationships
+        self._causal_relationships_file.write_text(json.dumps({
+            "relationships": [r.to_dict() for r in self.causal_relationships],
             "updated_at": datetime.now().isoformat(),
         }, indent=2))
 
@@ -390,6 +499,382 @@ class KnowledgeBase:
             if qualities and sum(qualities) / len(qualities) >= min_quality:
                 reliable.append(source)
         return reliable
+
+    # =========================================================================
+    # DATA SOURCE ALPHA TRACKING
+    # =========================================================================
+
+    def record_data_source_performance(
+        self,
+        source: str,
+        source_type: str,
+        prediction_correct: bool,
+        alpha_generated: float = 0.0,
+        strategy_name: str = "",
+        sharpe: float = 0.0,
+        symbols: list[str] | None = None,
+        notes: str = "",
+    ) -> DataSourceAlpha:
+        """
+        Record a prediction outcome for a data source.
+
+        This allows the system to learn which data sources provide real edge.
+
+        Args:
+            source: Data source identifier (e.g., 'semianalysis', 'fred_gold')
+            source_type: Type of source ('blog', 'api', 'scrape', 'etf_proxy')
+            prediction_correct: Whether the prediction was correct
+            alpha_generated: Alpha generated by this prediction (in decimal)
+            strategy_name: Strategy that used this source
+            sharpe: Sharpe ratio achieved
+            symbols: Symbols affected by this source
+            notes: Additional notes
+
+        Returns:
+            Updated DataSourceAlpha record
+        """
+        now = datetime.now().isoformat()
+
+        if source not in self.data_sources:
+            self.data_sources[source] = DataSourceAlpha(
+                source=source,
+                source_type=source_type,
+                predictions_made=0,
+                predictions_correct=0,
+                cumulative_alpha=0.0,
+                best_strategy="",
+                best_sharpe=0.0,
+                symbols_affected=[],
+                first_used=now,
+                last_used=now,
+                notes=notes,
+            )
+
+        ds = self.data_sources[source]
+        ds.predictions_made += 1
+        ds.last_used = now
+
+        if prediction_correct:
+            ds.predictions_correct += 1
+
+        ds.cumulative_alpha += alpha_generated
+
+        if sharpe > ds.best_sharpe:
+            ds.best_sharpe = sharpe
+            ds.best_strategy = strategy_name
+
+        if symbols:
+            for sym in symbols:
+                if sym not in ds.symbols_affected:
+                    ds.symbols_affected.append(sym)
+
+        if notes and notes not in ds.notes:
+            ds.notes = f"{ds.notes}; {notes}" if ds.notes else notes
+
+        self._save()
+        return ds
+
+    def get_best_data_sources(
+        self,
+        min_predictions: int = 3,
+        sort_by: str = "hit_rate",  # 'hit_rate', 'alpha', 'sharpe'
+    ) -> list[DataSourceAlpha]:
+        """
+        Get data sources ranked by their edge.
+
+        Args:
+            min_predictions: Minimum predictions to be included
+            sort_by: Sorting criterion
+
+        Returns:
+            List of DataSourceAlpha sorted by performance
+        """
+        sources = [
+            ds for ds in self.data_sources.values()
+            if ds.predictions_made >= min_predictions
+        ]
+
+        if sort_by == "hit_rate":
+            sources.sort(key=lambda x: x.hit_rate, reverse=True)
+        elif sort_by == "alpha":
+            sources.sort(key=lambda x: x.cumulative_alpha, reverse=True)
+        elif sort_by == "sharpe":
+            sources.sort(key=lambda x: x.best_sharpe, reverse=True)
+
+        return sources
+
+    def get_valuable_data_sources(self) -> list[DataSourceAlpha]:
+        """Get data sources that have proven valuable (>55% hit rate, 5+ predictions)."""
+        return [ds for ds in self.data_sources.values() if ds.is_valuable]
+
+    def get_data_source(self, source: str) -> DataSourceAlpha | None:
+        """Get a specific data source record."""
+        return self.data_sources.get(source)
+
+    def get_data_source_summary(self) -> dict:
+        """Get summary of all data source performance."""
+        if not self.data_sources:
+            return {
+                "total_sources": 0,
+                "valuable_sources": [],
+                "total_predictions": 0,
+                "overall_hit_rate": 0.0,
+            }
+
+        total_predictions = sum(ds.predictions_made for ds in self.data_sources.values())
+        total_correct = sum(ds.predictions_correct for ds in self.data_sources.values())
+
+        return {
+            "total_sources": len(self.data_sources),
+            "valuable_sources": [ds.source for ds in self.get_valuable_data_sources()],
+            "total_predictions": total_predictions,
+            "overall_hit_rate": total_correct / total_predictions if total_predictions > 0 else 0.0,
+            "top_by_hit_rate": [
+                {"source": ds.source, "hit_rate": ds.hit_rate}
+                for ds in self.get_best_data_sources(min_predictions=3, sort_by="hit_rate")[:5]
+            ],
+            "top_by_alpha": [
+                {"source": ds.source, "alpha": ds.cumulative_alpha}
+                for ds in self.get_best_data_sources(min_predictions=3, sort_by="alpha")[:5]
+            ],
+        }
+
+    # =========================================================================
+    # CAUSAL RELATIONSHIP TRACKING
+    # =========================================================================
+
+    def record_causal_relationship(
+        self,
+        cause: str,
+        effect: str,
+        lag_days: int,
+        correlation: float,
+        p_value: float,
+        mechanism: str = "",
+        regime_dependent: bool = False,
+        regime_notes: str = "",
+    ) -> CausalRelationship:
+        """
+        Record a discovered causal relationship.
+
+        Args:
+            cause: The leading indicator (e.g., 'dram_prices', 'fed_rate')
+            effect: What it affects (e.g., 'semiconductor_stocks', 'MU')
+            lag_days: How many days the effect lags the cause
+            correlation: Pearson correlation coefficient
+            p_value: Statistical significance
+            mechanism: Explanation of why this relationship exists
+            regime_dependent: Whether it only works in certain regimes
+            regime_notes: Details about which regimes
+
+        Returns:
+            The created or updated CausalRelationship
+        """
+        now = datetime.now().isoformat()
+
+        # Check if relationship already exists
+        existing = self._find_causal_relationship(cause, effect)
+
+        if existing:
+            # Update existing relationship
+            existing.correlation = correlation
+            existing.p_value = p_value
+            existing.lag_days = lag_days
+            existing.verified_count += 1
+            existing.last_verified = now
+            existing.confidence = min(0.95, existing.confidence + 0.1)
+            if mechanism and mechanism != existing.mechanism:
+                existing.mechanism = mechanism
+            if regime_dependent != existing.regime_dependent:
+                existing.regime_dependent = regime_dependent
+            if regime_notes:
+                existing.regime_notes = regime_notes
+            self._save()
+            return existing
+
+        # Create new relationship
+        relationship = CausalRelationship(
+            id=f"causal_{len(self.causal_relationships):04d}",
+            cause=cause,
+            effect=effect,
+            lag_days=lag_days,
+            correlation=correlation,
+            p_value=p_value,
+            mechanism=mechanism,
+            discovered_at=now,
+            verified_count=1,
+            last_verified=now,
+            confidence=0.5 if p_value >= 0.05 else 0.7,
+            regime_dependent=regime_dependent,
+            regime_notes=regime_notes,
+        )
+        self.causal_relationships.append(relationship)
+        self._save()
+        return relationship
+
+    def _find_causal_relationship(
+        self, cause: str, effect: str
+    ) -> CausalRelationship | None:
+        """Find an existing causal relationship."""
+        for rel in self.causal_relationships:
+            if rel.cause == cause and rel.effect == effect:
+                return rel
+        return None
+
+    def get_causal_chain(self, target: str) -> list[CausalRelationship]:
+        """
+        Get all causal relationships that affect a target.
+
+        Args:
+            target: The effect to search for (e.g., 'MU', 'semiconductor_stocks')
+
+        Returns:
+            List of relationships where target is the effect, sorted by correlation
+        """
+        relationships = [
+            rel for rel in self.causal_relationships
+            if rel.effect == target or target in rel.effect
+        ]
+        return sorted(relationships, key=lambda x: abs(x.correlation), reverse=True)
+
+    def get_leading_indicators(self, effect: str) -> list[dict]:
+        """
+        Get leading indicators for a given effect.
+
+        Returns list of dicts with cause, lag, correlation, and confidence.
+        """
+        chain = self.get_causal_chain(effect)
+        return [
+            {
+                "cause": rel.cause,
+                "lag_days": rel.lag_days,
+                "correlation": rel.correlation,
+                "p_value": rel.p_value,
+                "confidence": rel.confidence,
+                "mechanism": rel.mechanism,
+                "is_significant": rel.is_significant,
+            }
+            for rel in chain
+        ]
+
+    def get_effects_of(self, cause: str) -> list[CausalRelationship]:
+        """
+        Get all effects caused by a given indicator.
+
+        Args:
+            cause: The leading indicator to search for
+
+        Returns:
+            List of relationships where cause matches
+        """
+        return [
+            rel for rel in self.causal_relationships
+            if rel.cause == cause or cause in rel.cause
+        ]
+
+    def get_significant_relationships(
+        self,
+        min_confidence: float = 0.6,
+    ) -> list[CausalRelationship]:
+        """Get statistically significant relationships with high confidence."""
+        return [
+            rel for rel in self.causal_relationships
+            if rel.is_significant and rel.confidence >= min_confidence
+        ]
+
+    def get_strong_relationships(self) -> list[CausalRelationship]:
+        """Get relationships with strong correlation and high confidence."""
+        return [rel for rel in self.causal_relationships if rel.is_strong]
+
+    def get_causal_summary(self) -> dict:
+        """Get summary of all causal relationships."""
+        if not self.causal_relationships:
+            return {
+                "total_relationships": 0,
+                "significant_relationships": 0,
+                "strong_relationships": 0,
+                "unique_causes": [],
+                "unique_effects": [],
+            }
+
+        return {
+            "total_relationships": len(self.causal_relationships),
+            "significant_relationships": len(
+                [r for r in self.causal_relationships if r.is_significant]
+            ),
+            "strong_relationships": len(self.get_strong_relationships()),
+            "unique_causes": list(set(r.cause for r in self.causal_relationships)),
+            "unique_effects": list(set(r.effect for r in self.causal_relationships)),
+            "avg_lag_days": sum(r.lag_days for r in self.causal_relationships)
+            / len(self.causal_relationships),
+            "top_correlations": [
+                {
+                    "cause": r.cause,
+                    "effect": r.effect,
+                    "correlation": r.correlation,
+                    "lag_days": r.lag_days,
+                }
+                for r in sorted(
+                    self.causal_relationships,
+                    key=lambda x: abs(x.correlation),
+                    reverse=True,
+                )[:5]
+            ],
+        }
+
+    def suggest_research_from_relationships(self) -> list[dict]:
+        """
+        Suggest research based on discovered causal relationships.
+
+        Returns research ideas based on:
+        1. Verified relationships that could inform strategies
+        2. Relationships that need more verification
+        3. Potential transitive relationships (A→B, B→C implies A→C?)
+        """
+        suggestions = []
+
+        # Suggest strategies based on strong relationships
+        for rel in self.get_strong_relationships():
+            suggestions.append({
+                "type": "strategy_idea",
+                "priority": 0.9,
+                "idea": f"Build strategy using {rel.cause} to predict {rel.effect}",
+                "details": f"Lag: {rel.lag_days} days, Correlation: {rel.correlation:.2f}",
+                "relationship_id": rel.id,
+            })
+
+        # Suggest verification for promising but unverified relationships
+        for rel in self.causal_relationships:
+            if rel.is_significant and rel.verified_count < 3:
+                suggestions.append({
+                    "type": "verification",
+                    "priority": 0.7,
+                    "idea": f"Verify {rel.cause} → {rel.effect} relationship",
+                    "details": f"Only verified {rel.verified_count} time(s)",
+                    "relationship_id": rel.id,
+                })
+
+        # Look for transitive relationships
+        effects_dict = {}
+        for rel in self.causal_relationships:
+            if rel.effect not in effects_dict:
+                effects_dict[rel.effect] = []
+            effects_dict[rel.effect].append(rel)
+
+        for rel in self.causal_relationships:
+            # If A causes B, and B causes C, suggest testing A → C
+            if rel.effect in effects_dict:
+                for downstream in effects_dict.get(rel.cause, []):
+                    if not self._find_causal_relationship(rel.cause, downstream.effect):
+                        suggestions.append({
+                            "type": "transitive_test",
+                            "priority": 0.6,
+                            "idea": f"Test if {rel.cause} → {downstream.effect} (transitive)",
+                            "details": f"Via: {rel.cause} → {rel.effect} → {downstream.effect}",
+                            "combined_lag": rel.lag_days + downstream.lag_days,
+                        })
+
+        return sorted(suggestions, key=lambda x: x["priority"], reverse=True)
 
     # =========================================================================
     # HYPOTHESIS TRACKING
@@ -689,6 +1174,17 @@ class KnowledgeBase:
             "high_confidence_patterns": [
                 p.name for p in self.get_patterns(min_confidence=0.7)
             ],
+            # Data source alpha tracking
+            "total_data_sources": len(self.data_sources),
+            "valuable_data_sources": [ds.source for ds in self.get_valuable_data_sources()],
+            "data_source_hit_rate": (
+                sum(ds.predictions_correct for ds in self.data_sources.values())
+                / max(1, sum(ds.predictions_made for ds in self.data_sources.values()))
+            ),
+            # Causal relationship tracking
+            "total_causal_relationships": len(self.causal_relationships),
+            "significant_relationships": len(self.get_significant_relationships()),
+            "strong_relationships": len(self.get_strong_relationships()),
         }
 
     def get_recommendations(self) -> list[str]:
@@ -715,5 +1211,19 @@ class KnowledgeBase:
                 avg = sum(q["avg_quality"] for q in quality.values()) / len(quality)
                 if avg < 0.5:
                     recs.append(f"Warning: {source} has low data quality ({avg:.1%})")
+
+        # Recommend valuable data sources
+        for ds in self.get_valuable_data_sources()[:3]:
+            recs.append(
+                f"Use data source '{ds.source}' ({ds.hit_rate:.1%} hit rate, "
+                f"{ds.cumulative_alpha:.2%} cumulative alpha)"
+            )
+
+        # Recommend exploiting strong causal relationships
+        for rel in self.get_strong_relationships()[:3]:
+            recs.append(
+                f"Exploit relationship: {rel.cause} → {rel.effect} "
+                f"(lag={rel.lag_days}d, r={rel.correlation:.2f})"
+            )
 
         return recs

@@ -28,6 +28,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.data.sources.yahoo import YahooFinanceSource
 from src.core import Timeframe
 
+# Import universal data sources
+try:
+    from src.data.sources.universal import FreeAPIHub, CommoditySource
+    HAS_UNIVERSAL_SOURCES = True
+except ImportError:
+    HAS_UNIVERSAL_SOURCES = False
+
 
 @dataclass
 class InsiderTransaction:
@@ -700,6 +707,19 @@ class DataHub:
         self.sentiment_analyzer = FinBERTAnalyzer()
         self.news_source = RSSNewsSource()
 
+        # Universal data sources (FRED + commodities)
+        self._has_universal = HAS_UNIVERSAL_SOURCES
+        self.free_api_hub = None
+        self.commodity_source = None
+        if HAS_UNIVERSAL_SOURCES:
+            self.free_api_hub = FreeAPIHub(
+                fred_api_key=fred_api_key,
+                cache_dir=self.cache_dir / "universal"
+            )
+            self.commodity_source = CommoditySource(
+                cache_dir=Path.home() / "quant_results" / "scraped_data" / "commodities"
+            )
+
         # Rate limiting
         self._last_request_time: dict[str, float] = {}
 
@@ -849,4 +869,248 @@ class DataHub:
         else:
             sources.append("news_simulated")
 
+        # Universal sources
+        if self._has_universal:
+            sources.append("free_api_hub")
+            sources.append("commodity_source")
+
         return sources
+
+    # =========================================================================
+    # COMMODITY & MACRO DATA (via Universal Sources)
+    # =========================================================================
+
+    async def fetch_commodity(
+        self,
+        name: str,
+        days: int = 365,
+    ) -> pd.DataFrame | None:
+        """
+        Fetch commodity price data.
+
+        Uses ETF proxies when direct data unavailable.
+
+        Args:
+            name: Commodity name ('gold', 'silver', 'oil', 'copper', etc.)
+            days: Number of days of history
+
+        Returns:
+            DataFrame with OHLCV data or None if unavailable
+        """
+        if not self._has_universal or self.free_api_hub is None:
+            return None
+
+        await self._rate_limit("commodity", 0.5)
+        try:
+            return await self.free_api_hub.get_commodity(name, days=days)
+        except Exception as e:
+            print(f"Error fetching commodity {name}: {e}")
+            return None
+
+    async def fetch_fred_series(
+        self,
+        series_id: str,
+        days: int = 365,
+    ) -> pd.Series | None:
+        """
+        Fetch a FRED series with enhanced caching.
+
+        Args:
+            series_id: FRED series ID (e.g., 'GOLDAMGBD228NLBM', 'FEDFUNDS')
+            days: Number of days of history
+
+        Returns:
+            Series with the data or None if unavailable
+        """
+        if not self._has_universal or self.free_api_hub is None:
+            # Fall back to basic FRED source
+            return await self.fred_source.get_indicator(series_id, days)
+
+        await self._rate_limit("fred", 0.5)
+        try:
+            return await self.free_api_hub.get_fred_series(series_id, days=days)
+        except Exception as e:
+            print(f"Error fetching FRED series {series_id}: {e}")
+            return None
+
+    async def fetch_macro_indicators(self) -> dict[str, pd.Series]:
+        """
+        Fetch all macro indicators.
+
+        Returns dict with:
+        - fed_funds, treasury rates, VIX
+        - inflation, unemployment
+        - leading indicators
+
+        Returns:
+            Dictionary of series name -> pd.Series
+        """
+        if not self._has_universal or self.free_api_hub is None:
+            # Fall back to basic indicators
+            return await self.fred_source.get_regime_indicators()
+
+        await self._rate_limit("fred", 0.5)
+        try:
+            return await self.free_api_hub.get_macro_indicators()
+        except Exception as e:
+            print(f"Error fetching macro indicators: {e}")
+            return {}
+
+    async def fetch_yield_curve(self) -> dict[str, float] | None:
+        """
+        Fetch current yield curve data.
+
+        Returns:
+            Dictionary with tenor -> yield mappings
+        """
+        if not self._has_universal or self.free_api_hub is None:
+            return None
+
+        await self._rate_limit("fred", 0.5)
+        try:
+            return await self.free_api_hub.get_yield_curve()
+        except Exception as e:
+            print(f"Error fetching yield curve: {e}")
+            return None
+
+    async def fetch_dram_prices(
+        self,
+        days: int = 365,
+    ) -> pd.DataFrame | None:
+        """
+        Fetch DRAM pricing data.
+
+        Uses ETF proxy (MU) when direct data unavailable.
+
+        Returns:
+            DataFrame with DRAM price data
+        """
+        if not self._has_universal or self.commodity_source is None:
+            return None
+
+        await self._rate_limit("commodity", 1.0)
+        try:
+            return await self.commodity_source.get_dram_prices(days=days)
+        except Exception as e:
+            print(f"Error fetching DRAM prices: {e}")
+            return None
+
+    async def fetch_semi_equipment_billing(
+        self,
+        days: int = 365,
+    ) -> pd.DataFrame | None:
+        """
+        Fetch semiconductor equipment billing data.
+
+        Uses ETF proxies (AMAT, LRCX, KLAC, ASML) when direct data unavailable.
+
+        Returns:
+            DataFrame with semi equipment billing data
+        """
+        if not self._has_universal or self.commodity_source is None:
+            return None
+
+        await self._rate_limit("commodity", 1.0)
+        try:
+            return await self.commodity_source.get_semi_equipment_billing(days=days)
+        except Exception as e:
+            print(f"Error fetching semi equipment billing: {e}")
+            return None
+
+    async def fetch_commodity_stock_correlation(
+        self,
+        commodity: str,
+        stocks: str | list[str],
+        days: int = 365,
+    ) -> pd.DataFrame | None:
+        """
+        Analyze correlation between a commodity and stocks.
+
+        Args:
+            commodity: Commodity name ('dram', 'gold', 'silver', etc.)
+            stocks: Stock symbol(s) - single string or list
+            days: Number of days to analyze
+
+        Returns:
+            DataFrame with correlation analysis at different lags
+        """
+        if not self._has_universal or self.commodity_source is None:
+            return None
+
+        # Convert single stock to list
+        if isinstance(stocks, str):
+            stocks = [stocks]
+
+        await self._rate_limit("commodity", 0.5)
+        try:
+            return await self.commodity_source.analyze_commodity_stock_lag(
+                commodity, stocks, days=days
+            )
+        except Exception as e:
+            print(f"Error analyzing correlation: {e}")
+            return None
+
+    async def fetch_all_commodities(
+        self,
+        commodities: list[str] | None = None,
+        days: int = 365,
+    ) -> dict[str, pd.DataFrame]:
+        """
+        Fetch multiple commodities at once.
+
+        Args:
+            commodities: List of commodity names. If None, fetches all available.
+            days: Number of days of history
+
+        Returns:
+            Dictionary of commodity name -> DataFrame
+        """
+        if not self._has_universal or self.free_api_hub is None:
+            return {}
+
+        if commodities is None:
+            commodities = list(self.free_api_hub.ETF_PROXIES.keys())
+
+        results = {}
+        for commodity in commodities:
+            data = await self.fetch_commodity(commodity, days=days)
+            if data is not None:
+                results[commodity] = data
+
+        return results
+
+    async def get_commodity_overview(self) -> dict:
+        """
+        Get an overview of all available commodity data sources.
+
+        Returns:
+            Dictionary with available commodities, data quality info
+        """
+        overview = {
+            "available_commodities": [],
+            "available_fred_series": [],
+            "etf_proxies": {},
+            "data_quality": {},
+        }
+
+        if not self._has_universal:
+            overview["status"] = "universal_sources_unavailable"
+            return overview
+
+        if self.free_api_hub:
+            overview["available_commodities"] = list(self.free_api_hub.ETF_PROXIES.keys())
+            overview["etf_proxies"] = self.free_api_hub.ETF_PROXIES.copy()
+
+            # List FRED series
+            from src.data.sources.universal.free_api_hub import FREDClient
+            overview["available_fred_series"] = list(FREDClient.SERIES.keys())
+
+        if self.commodity_source:
+            overview["specialized_sources"] = [
+                "dram_prices",
+                "semi_equipment_billing",
+                "lithium_prices",
+            ]
+
+        overview["status"] = "available"
+        return overview
