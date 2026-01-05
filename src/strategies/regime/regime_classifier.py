@@ -321,6 +321,287 @@ class RegimeClassifier:
         }
 
 
+# ============================================================================
+# EMPIRICAL REGIME-STRATEGY FRAMEWORK
+# Based on analysis of 470+ strategy/symbol combinations on mid/small caps
+# ============================================================================
+
+class VolatilityTrendRegime(Enum):
+    """Simplified regime based on volatility + trend (from empirical analysis)."""
+    HIGH_VOL_UPTREND = "high_vol_uptrend"
+    HIGH_VOL_DOWNTREND = "high_vol_downtrend"
+    LOW_VOL_UPTREND = "low_vol_uptrend"
+    LOW_VOL_DOWNTREND = "low_vol_downtrend"
+
+
+@dataclass
+class EmpiricalRegimeState:
+    """Regime state based on our empirical analysis."""
+    volatility_high: bool
+    uptrend: bool
+    combined: VolatilityTrendRegime
+    vol_percentile: float
+    trend_strength: float
+    confidence: float
+
+    def __str__(self) -> str:
+        return (f"Regime: {self.combined.value} "
+                f"(Vol: {self.vol_percentile:.0f}%ile, "
+                f"Trend: {self.trend_strength:+.2f})")
+
+
+@dataclass
+class StrategyRecommendation:
+    """Strategy recommendation for current regime."""
+    strategy: str
+    expected_sharpe: float
+    confidence: str
+    position_size_multiplier: float
+    notes: str
+
+
+# Empirical performance from mid/small cap analysis
+EMPIRICAL_REGIME_PERFORMANCE = {
+    # (strategy, regime): (expected_sharpe, confidence)
+    # RSI strategies - best in high vol
+    ("rsi_14_30", VolatilityTrendRegime.HIGH_VOL_UPTREND): (1.54, "HIGH"),
+    ("rsi_14_30", VolatilityTrendRegime.HIGH_VOL_DOWNTREND): (0.70, "MEDIUM"),
+    ("rsi_14_30", VolatilityTrendRegime.LOW_VOL_UPTREND): (1.05, "MEDIUM"),
+    ("rsi_14_30", VolatilityTrendRegime.LOW_VOL_DOWNTREND): (-0.18, "LOW"),
+
+    ("rsi_14_25", VolatilityTrendRegime.HIGH_VOL_UPTREND): (1.37, "HIGH"),
+    ("rsi_14_25", VolatilityTrendRegime.HIGH_VOL_DOWNTREND): (0.90, "MEDIUM"),
+    ("rsi_14_25", VolatilityTrendRegime.LOW_VOL_UPTREND): (0.64, "MEDIUM"),
+    ("rsi_14_25", VolatilityTrendRegime.LOW_VOL_DOWNTREND): (0.13, "LOW"),
+
+    # Mean reversion - works across regimes
+    ("mean_rev_20_2.0", VolatilityTrendRegime.HIGH_VOL_UPTREND): (1.08, "HIGH"),
+    ("mean_rev_20_2.0", VolatilityTrendRegime.HIGH_VOL_DOWNTREND): (0.84, "MEDIUM"),
+    ("mean_rev_20_2.0", VolatilityTrendRegime.LOW_VOL_UPTREND): (0.38, "LOW"),
+    ("mean_rev_20_2.0", VolatilityTrendRegime.LOW_VOL_DOWNTREND): (0.62, "MEDIUM"),
+
+    # Momentum - best in uptrend, FAILS in downtrend
+    ("momentum_20", VolatilityTrendRegime.HIGH_VOL_UPTREND): (0.31, "LOW"),
+    ("momentum_20", VolatilityTrendRegime.HIGH_VOL_DOWNTREND): (-1.90, "AVOID"),
+    ("momentum_20", VolatilityTrendRegime.LOW_VOL_UPTREND): (2.48, "HIGH"),
+    ("momentum_20", VolatilityTrendRegime.LOW_VOL_DOWNTREND): (1.67, "MEDIUM"),
+
+    ("momentum_50", VolatilityTrendRegime.HIGH_VOL_UPTREND): (0.79, "MEDIUM"),
+    ("momentum_50", VolatilityTrendRegime.HIGH_VOL_DOWNTREND): (-2.41, "AVOID"),
+    ("momentum_50", VolatilityTrendRegime.LOW_VOL_UPTREND): (2.19, "HIGH"),
+    ("momentum_50", VolatilityTrendRegime.LOW_VOL_DOWNTREND): (0.32, "LOW"),
+
+    # Breakout - best in uptrend, risky in downtrend
+    ("breakout_10", VolatilityTrendRegime.HIGH_VOL_UPTREND): (1.79, "HIGH"),
+    ("breakout_10", VolatilityTrendRegime.HIGH_VOL_DOWNTREND): (-0.60, "AVOID"),
+    ("breakout_10", VolatilityTrendRegime.LOW_VOL_UPTREND): (0.88, "MEDIUM"),
+    ("breakout_10", VolatilityTrendRegime.LOW_VOL_DOWNTREND): (0.90, "MEDIUM"),
+
+    ("breakout_20", VolatilityTrendRegime.HIGH_VOL_UPTREND): (1.47, "HIGH"),
+    ("breakout_20", VolatilityTrendRegime.HIGH_VOL_DOWNTREND): (-1.03, "AVOID"),
+    ("breakout_20", VolatilityTrendRegime.LOW_VOL_UPTREND): (0.65, "MEDIUM"),
+    ("breakout_20", VolatilityTrendRegime.LOW_VOL_DOWNTREND): (0.73, "MEDIUM"),
+}
+
+
+# Mid/small cap universe with alpha potential (from analysis)
+MIDCAP_ALPHA_UNIVERSE = {
+    "cybersecurity": ["CRWD", "NET", "ZS"],
+    "cloud_data": ["DDOG", "SNOW", "PLTR"],
+    "fintech": ["HOOD", "SOFI", "UPST", "AFRM"],
+    "consumer_tech": ["DASH", "ABNB", "PINS", "SNAP"],
+    "biotech": ["MRNA", "BNTX", "EXAS"],
+    "solar_energy": ["ENPH", "SEDG", "RUN", "FSLR"],
+    "ev": ["RIVN", "LCID", "NIO"],
+    "meme_volatile": ["GME", "AMC", "NOK"],
+}
+
+
+class EmpiricalRegimeClassifier:
+    """
+    Regime classifier based on empirical analysis of mid/small cap strategies.
+
+    Key findings from 470+ strategy/symbol combinations:
+    - Mid/small caps: 70 strategies beat B&H (14.9% win rate)
+    - Large caps: Only 20 beat B&H (3.8% win rate)
+    - RSI/Mean-rev: Best in HIGH VOL (Sharpe 1.54)
+    - Momentum: Best in UPTREND (Sharpe 2.48), FAILS in downtrend (-1.90)
+    - Breakout: Best in UPTREND (Sharpe 1.79), FAILS in downtrend
+    """
+
+    def __init__(
+        self,
+        vol_window: int = 20,
+        vol_lookback: int = 252,
+        trend_window: int = 50,
+    ):
+        self.vol_window = vol_window
+        self.vol_lookback = vol_lookback
+        self.trend_window = trend_window
+
+    def detect_regime(
+        self,
+        prices: pd.Series,
+        returns: pd.Series | None = None,
+    ) -> EmpiricalRegimeState:
+        """
+        Detect current regime using volatility and trend.
+
+        Args:
+            prices: Price series (min 252 days recommended)
+            returns: Optional returns (computed if not provided)
+
+        Returns:
+            EmpiricalRegimeState with classification
+        """
+        if returns is None:
+            returns = prices.pct_change().dropna()
+
+        # Volatility regime
+        vol = returns.rolling(self.vol_window).std() * np.sqrt(252)
+        current_vol = vol.iloc[-1].item() if hasattr(vol.iloc[-1], 'item') else float(vol.iloc[-1])
+        vol_lookback_data = vol.iloc[-self.vol_lookback:]
+        vol_pct_raw = (vol_lookback_data < current_vol).mean() * 100
+        vol_percentile = vol_pct_raw.item() if hasattr(vol_pct_raw, 'item') else float(vol_pct_raw)
+        high_vol = vol_percentile >= 50
+
+        # Trend regime
+        sma = prices.rolling(self.trend_window).mean()
+        current_price = prices.iloc[-1].item() if hasattr(prices.iloc[-1], 'item') else float(prices.iloc[-1])
+        current_sma = sma.iloc[-1].item() if hasattr(sma.iloc[-1], 'item') else float(sma.iloc[-1])
+        trend_strength = (current_price - current_sma) / current_sma
+        trend_strength = float(np.clip(trend_strength, -1, 1))
+        uptrend = current_price > current_sma
+
+        # Combined regime
+        if high_vol and uptrend:
+            combined = VolatilityTrendRegime.HIGH_VOL_UPTREND
+        elif high_vol and not uptrend:
+            combined = VolatilityTrendRegime.HIGH_VOL_DOWNTREND
+        elif not high_vol and uptrend:
+            combined = VolatilityTrendRegime.LOW_VOL_UPTREND
+        else:
+            combined = VolatilityTrendRegime.LOW_VOL_DOWNTREND
+
+        # Confidence
+        vol_conf = abs(vol_percentile - 50) / 50
+        trend_conf = min(abs(trend_strength) * 5, 1)
+        confidence = (vol_conf + trend_conf) / 2
+
+        return EmpiricalRegimeState(
+            volatility_high=high_vol,
+            uptrend=uptrend,
+            combined=combined,
+            vol_percentile=vol_percentile,
+            trend_strength=trend_strength,
+            confidence=confidence,
+        )
+
+    def get_strategy_recommendations(
+        self,
+        regime: EmpiricalRegimeState,
+        strategies: list[str] | None = None,
+    ) -> list[StrategyRecommendation]:
+        """Get strategy recommendations sorted by expected Sharpe."""
+        if strategies is None:
+            strategies = list(set(s for s, _ in EMPIRICAL_REGIME_PERFORMANCE.keys()))
+
+        recommendations = []
+        for strategy in strategies:
+            key = (strategy, regime.combined)
+            if key not in EMPIRICAL_REGIME_PERFORMANCE:
+                continue
+
+            sharpe, conf = EMPIRICAL_REGIME_PERFORMANCE[key]
+            if conf == "AVOID":
+                continue
+
+            size_mult = self._get_position_size(regime, sharpe, conf)
+            notes = self._get_notes(strategy, regime)
+
+            recommendations.append(StrategyRecommendation(
+                strategy=strategy,
+                expected_sharpe=sharpe,
+                confidence=conf,
+                position_size_multiplier=size_mult,
+                notes=notes,
+            ))
+
+        recommendations.sort(key=lambda x: x.expected_sharpe, reverse=True)
+        return recommendations
+
+    def _get_position_size(self, regime: EmpiricalRegimeState, sharpe: float, conf: str) -> float:
+        """Calculate position size multiplier."""
+        base = 1.0
+        if regime.volatility_high:
+            base *= 0.8
+        if not regime.uptrend:
+            base *= 0.7
+        conf_mult = {"HIGH": 1.2, "MEDIUM": 1.0, "LOW": 0.7}
+        base *= conf_mult.get(conf, 1.0)
+        if sharpe > 1.5:
+            base *= 1.1
+        elif sharpe < 0.5:
+            base *= 0.8
+        return np.clip(base, 0.3, 1.5)
+
+    def _get_notes(self, strategy: str, regime: EmpiricalRegimeState) -> str:
+        """Generate regime-specific strategy notes."""
+        if "rsi" in strategy or "mean_rev" in strategy:
+            if regime.volatility_high:
+                return "High vol = bigger bounce opportunities"
+            return "Standard conditions"
+        elif "momentum" in strategy:
+            if regime.uptrend:
+                return "Riding existing momentum"
+            return "CAUTION: Momentum fails in downtrends"
+        elif "breakout" in strategy:
+            if regime.uptrend:
+                return "Breakouts have follow-through"
+            return "CAUTION: False breakouts common"
+        return "Standard conditions"
+
+    def get_avoid_strategies(self, regime: EmpiricalRegimeState) -> list[str]:
+        """Get strategies to avoid in current regime."""
+        avoid = []
+        for (strategy, r), (sharpe, conf) in EMPIRICAL_REGIME_PERFORMANCE.items():
+            if r == regime.combined and (conf == "AVOID" or sharpe < 0):
+                avoid.append(strategy)
+        return list(set(avoid))
+
+    def get_regime_strategy_map(self) -> dict[VolatilityTrendRegime, list[str]]:
+        """Get recommended strategies by regime."""
+        return {
+            VolatilityTrendRegime.HIGH_VOL_UPTREND: [
+                "rsi_14_30", "breakout_10", "mean_rev_20_2.0"
+            ],
+            VolatilityTrendRegime.HIGH_VOL_DOWNTREND: [
+                "rsi_14_30", "rsi_14_25", "mean_rev_20_2.0"
+            ],
+            VolatilityTrendRegime.LOW_VOL_UPTREND: [
+                "momentum_20", "momentum_50"
+            ],
+            VolatilityTrendRegime.LOW_VOL_DOWNTREND: [
+                "mean_rev_20_2.0"  # Minimal exposure
+            ],
+        }
+
+
+def get_symbols_for_regime(regime: EmpiricalRegimeState) -> list[str]:
+    """Get recommended symbols based on regime."""
+    symbols = []
+    if regime.volatility_high:
+        symbols.extend(MIDCAP_ALPHA_UNIVERSE["solar_energy"])
+        symbols.extend(MIDCAP_ALPHA_UNIVERSE["meme_volatile"])
+        symbols.extend(MIDCAP_ALPHA_UNIVERSE["fintech"])
+    else:
+        symbols.extend(MIDCAP_ALPHA_UNIVERSE["cloud_data"])
+        symbols.extend(MIDCAP_ALPHA_UNIVERSE["cybersecurity"])
+    if regime.uptrend:
+        symbols.extend(MIDCAP_ALPHA_UNIVERSE["consumer_tech"])
+    return list(set(symbols))
+
+
 def classify_from_market_data(
     spy_data: pd.DataFrame,
     vix_data: pd.DataFrame,

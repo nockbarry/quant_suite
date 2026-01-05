@@ -1,7 +1,20 @@
 # Quant Suite - Claude Code Reference
 
 **Purpose**: Budget-friendly quantitative trading system ($200-$2,000 accounts)
-**Last Updated**: 2026-01-04
+**Last Updated**: 2026-01-04 (Added logs and consolidated insights)
+
+---
+
+## Project Logs
+
+| Log | Purpose |
+|-----|---------|
+| **DEVLOG.md** | Development progress, decisions, technical debt |
+| **RESEARCH_LOG.md** | Validated results, flagged issues, research leads |
+
+**Flagged Issues** (see RESEARCH_LOG.md for details):
+- ML strategies (XGBoost, LightGBM) lack MCPT validation - use with caution
+- Mid/small cap feature leakage mentioned but not fully documented
 
 ---
 
@@ -26,10 +39,25 @@ PYTHONPATH=. python -m src.execution.monitoring.cli_dashboard  # Portfolio dashb
 PYTHONPATH=. python -m pytest tests/ -v                      # Run all tests
 PYTHONPATH=. python scripts/test_research_system.py          # Test research system
 
-# Validation & Reports
-PYTHONPATH=. python scripts/validate_strategy.py --strategy bollinger_reversal --symbol QCOM
+# Validation & Reports (with optional plot generation)
+PYTHONPATH=. python scripts/validate_strategy.py --strategy bollinger_reversal --symbol QCOM --plots
 PYTHONPATH=. python scripts/critic_validate.py --strategy bollinger_reversal --symbol QCOM
 PYTHONPATH=. python scripts/generate_report.py --type strategy --name bollinger_reversal --symbol QCOM
+
+# Research with plots
+PYTHONPATH=. python -m workflows.research.comprehensive_researcher --plots
+
+# Regime Detection (check current market regime)
+PYTHONPATH=. python -c "
+from src.strategies.regime import EmpiricalRegimeClassifier
+import yfinance as yf
+spy = yf.download('SPY', period='1y', progress=False)
+c = EmpiricalRegimeClassifier()
+r = c.detect_regime(spy['Close'])
+print(f'Regime: {r.combined.value}')
+for rec in c.get_strategy_recommendations(r)[:3]:
+    print(f'  {rec.strategy}: Sharpe={rec.expected_sharpe:.2f}')
+"
 ```
 
 ---
@@ -145,6 +173,7 @@ Skills are automatically triggered based on your request, or invoke directly:
 | `src/strategies/base.py` | BaseStrategy class |
 | `src/core/strategy_config.py` | Config loader with dataclasses |
 | `src/core/signal.py` | Signal object definition |
+| `src/strategies/regime/regime_classifier.py` | **Empirical regime classifier** (470+ strategy analysis) |
 
 ### Research System
 | File | Purpose |
@@ -160,6 +189,92 @@ Skills are automatically triggered based on your request, or invoke directly:
 | `src/evaluation/validation/mcpt.py` | Monte Carlo Permutation Test |
 | `src/evaluation/validation/walk_forward.py` | Walk-forward validation |
 | `src/evaluation/backtest/engine.py` | Vectorized backtesting |
+
+### Visualization
+| File | Purpose |
+|------|---------|
+| `workflows/visualizations/strategy_plots.py` | Strategy validation plots |
+
+---
+
+## Strategy Validation Plots
+
+The visualization system (`workflows/visualizations/strategy_plots.py`) generates comprehensive plots for strategy validation:
+
+### Available Plots
+
+| Plot Type | Description | Usage |
+|-----------|-------------|-------|
+| **Equity Curve** | Strategy vs Random Trading vs Buy-and-Hold | Shows if strategy beats random trading |
+| **PDT Comparison** | PDT-compliant vs non-PDT holding periods | Compares 0, 2, 5, 10 day holds |
+| **MCPT Distribution** | Permutation test histogram | Shows strategy significance |
+| **Bootstrap CI** | Sharpe ratio confidence interval | Visualizes estimation uncertainty |
+| **Validation Dashboard** | 2x2 comprehensive grid | All-in-one validation view |
+| **Multi-Strategy** | Compare multiple strategies | Side-by-side Sharpe comparison |
+
+### Quick Usage
+
+```python
+from workflows.visualizations.strategy_plots import (
+    StrategyPlotter, PlotConfig, plot_validation_dashboard
+)
+
+# Initialize plotter
+plotter = StrategyPlotter()
+
+# Strategy vs Random vs Buy-and-Hold
+plotter.plot_strategy_vs_random_vs_buyhold(
+    strategy_returns=returns,
+    price_data=ohlcv_df,
+    strategy_name="bollinger_reversal",
+    symbol="QCOM",
+    n_random=100,
+)
+
+# PDT holding period comparison
+plotter.plot_pdt_comparison(
+    returns_by_holding={0: returns_0d, 2: returns_2d, 5: returns_5d, 10: returns_10d},
+    strategy_name="bollinger_reversal",
+    symbol="QCOM",
+)
+
+# MCPT distribution
+plotter.plot_mcpt_distribution(
+    original_sharpe=1.5,
+    permuted_sharpes=list_of_permuted_sharpes,
+    p_value=0.02,
+    strategy_name="bollinger_reversal",
+    symbol="QCOM",
+)
+
+# Comprehensive 2x2 dashboard
+plotter.plot_comprehensive_validation(
+    strategy_returns=returns,
+    price_data=ohlcv_df,
+    returns_by_holding={0: r0, 2: r2, 5: r5, 10: r10},
+    mcpt_sharpes=permuted_sharpes,
+    mcpt_p_value=0.02,
+    bootstrap_sharpes=bootstrap_samples,
+    ci_lower=-0.1,
+    ci_upper=2.5,
+    strategy_name="bollinger_reversal",
+    symbol="QCOM",
+)
+```
+
+### CLI Integration
+
+```bash
+# Validation with plots
+PYTHONPATH=. python scripts/validate_strategy.py --strategy bollinger_reversal --symbol QCOM --plots
+
+# Research cycle with plots
+PYTHONPATH=. python -m workflows.research.comprehensive_researcher --plots
+```
+
+### Output Directory
+
+Plots are saved to: `/home/nock/quant_results/plots/`
 
 ---
 
@@ -270,6 +385,67 @@ regime_perf = evaluate_by_regime(strategy_returns, regimes)
 for regime, metrics in regime_perf.items():
     print(f"{regime}: Sharpe={metrics['sharpe']:.2f}")
 ```
+
+**Empirical Regime-Based Strategy Selection (NEW):**
+
+Based on analysis of 470+ strategy/symbol combinations across mid/small cap stocks:
+
+```python
+from src.strategies.regime import (
+    EmpiricalRegimeClassifier,
+    EmpiricalRegimeState,
+    VolatilityTrendRegime,
+    get_symbols_for_regime,
+    EMPIRICAL_REGIME_PERFORMANCE,
+    MIDCAP_ALPHA_UNIVERSE,
+)
+
+# Detect regime from price data
+classifier = EmpiricalRegimeClassifier()
+regime = classifier.detect_regime(prices)  # pd.Series of prices
+
+print(f"Regime: {regime.combined.value}")
+print(f"Volatility: {'HIGH' if regime.volatility_high else 'LOW'} ({regime.vol_percentile:.0f}%ile)")
+print(f"Trend: {'UP' if regime.uptrend else 'DOWN'} ({regime.trend_strength:+.2%})")
+
+# Get strategy recommendations (sorted by expected Sharpe)
+recommendations = classifier.get_strategy_recommendations(regime)
+for rec in recommendations:
+    print(f"{rec.strategy}: Sharpe={rec.expected_sharpe:.2f}, "
+          f"Confidence={rec.confidence}, Size={rec.position_size_multiplier:.2f}x")
+
+# Get strategies to avoid in current regime
+avoid = classifier.get_avoid_strategies(regime)
+print(f"Avoid: {avoid}")
+
+# Get symbol universe for regime
+symbols = get_symbols_for_regime(regime)
+```
+
+**Empirical Regime-Strategy Performance Matrix:**
+
+| Strategy | High Vol + Up | High Vol + Down | Low Vol + Up | Low Vol + Down |
+|----------|--------------|-----------------|--------------|----------------|
+| rsi_14_30 | **1.54** | 0.70 | 1.05 | -0.18 |
+| rsi_14_25 | **1.37** | 0.90 | 0.64 | 0.13 |
+| mean_rev_20_2.0 | **1.08** | 0.84 | 0.38 | 0.62 |
+| momentum_20 | 0.31 | AVOID (-1.90) | **2.48** | 1.67 |
+| momentum_50 | 0.79 | AVOID (-2.41) | **2.19** | 0.32 |
+| breakout_10 | **1.79** | AVOID (-0.60) | 0.88 | 0.90 |
+| breakout_20 | **1.47** | AVOID (-1.03) | 0.65 | 0.73 |
+
+**Key Findings:**
+- Mid/small caps: 70/470 strategies beat B&H (14.9% win rate)
+- Large caps: Only 20/520 beat B&H (3.8% win rate) - too efficient
+- RSI/Mean-Rev: Best in HIGH VOL (bigger bounce opportunities)
+- Momentum: Best in UPTREND (2.48 Sharpe), FAILS in downtrend (-1.90)
+- Breakout: Best in UPTREND, AVOID in downtrend (false breakouts)
+
+**Action by Regime:**
+- HIGH_VOL_UPTREND: RSI, Breakout, Mean-Rev (position size 0.8x)
+- HIGH_VOL_DOWNTREND: RSI, Mean-Rev ONLY; AVOID Momentum/Breakout (0.56x)
+- LOW_VOL_UPTREND: Momentum strategies (1.0x)
+- LOW_VOL_DOWNTREND: REDUCE EXPOSURE; Mean-Rev only (0.7x)
 
 **Multi-Level Holdout:**
 ```python
@@ -592,6 +768,7 @@ patterns = kb.get_detected_patterns()
 | `/home/nock/quant_results/daily_runs/` | Daily signal/execution JSON |
 | `/home/nock/quant_results/backtests/` | Backtest results |
 | `/home/nock/quant_results/experiments/` | Research experiments |
+| `/home/nock/quant_results/plots/` | Strategy validation plots |
 
 ---
 
@@ -1223,3 +1400,6 @@ Task(prompt="Use research-worker-agent for semiconductors", description="Researc
 | `/home/nock/quant_results/promotions/` | Promotion records |
 | `/home/nock/quant_results/research_tracker/` | Session tracker data |
 | `/home/nock/quant_results/agent_runs/` | Agent execution logs |
+| `/home/nock/quant_results/plots/` | Strategy validation plots (PNG) |
+| `/home/nock/quant_results/regime_strategy_framework.md` | **Regime-based strategy selection guide** |
+| `/home/nock/quant_results/validated_strategies_*.yaml` | Validated strategy configs by date |

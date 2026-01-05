@@ -34,6 +34,15 @@ from .symbol_universe import (
 from .knowledge_base import KnowledgeBase
 from .data_hub import DataHub, DataBundle
 
+# Import plotting module
+try:
+    from workflows.visualizations.strategy_plots import (
+        StrategyPlotter, PlotConfig, plot_validation_dashboard
+    )
+    PLOTS_AVAILABLE = True
+except ImportError:
+    PLOTS_AVAILABLE = False
+
 # Import evaluation module functions
 from src.evaluation import (
     # Metrics
@@ -372,6 +381,7 @@ class ComprehensiveResearcher:
         self,
         universes: list[str] | None = None,
         strategies: list[str] | None = None,
+        generate_plots: bool = False,
     ) -> ResearchCycleReport:
         """
         Run a full comprehensive research cycle.
@@ -379,6 +389,7 @@ class ComprehensiveResearcher:
         Args:
             universes: Universe names to test (default: all main universes)
             strategies: Strategy types to test (default: all)
+            generate_plots: Generate validation plots for significant strategies
 
         Returns:
             Complete research cycle report
@@ -543,6 +554,58 @@ class ComprehensiveResearcher:
 
         # Save report
         self._save_report(report)
+
+        # Generate plots for significant strategies
+        if generate_plots and PLOTS_AVAILABLE and significant:
+            print("\n--- Generating Validation Plots ---")
+            try:
+                plotter = StrategyPlotter()
+
+                # Generate individual plots for top significant strategies
+                for result in significant[:5]:  # Top 5 by significance
+                    if result.returns is not None and result.symbol in data:
+                        try:
+                            # Equity curve for each significant strategy
+                            plotter.plot_strategy_vs_random_vs_buyhold(
+                                strategy_returns=result.returns,
+                                price_data=data[result.symbol],
+                                strategy_name=result.strategy_name,
+                                symbol=result.symbol,
+                                n_random=50,
+                            )
+                            print(f"  Generated plot for {result.strategy_name}/{result.symbol}")
+                        except Exception as e:
+                            logger.warning(f"Plot generation failed for {result.strategy_name}/{result.symbol}: {e}")
+
+                # Generate multi-strategy comparison if we have multiple significant strategies
+                if len(significant) >= 2:
+                    try:
+                        strategy_returns_dict = {
+                            f"{r.strategy_name}/{r.symbol}": r.returns
+                            for r in significant[:5]
+                            if r.returns is not None
+                        }
+                        if strategy_returns_dict:
+                            # Use first available symbol's data for price reference
+                            first_symbol = next(
+                                (r.symbol for r in significant if r.symbol in data),
+                                None
+                            )
+                            if first_symbol:
+                                plotter.plot_multi_strategy_comparison(
+                                    strategies=strategy_returns_dict,
+                                    price_data=data[first_symbol],
+                                )
+                                print(f"  Generated multi-strategy comparison plot")
+                    except Exception as e:
+                        logger.warning(f"Multi-strategy comparison plot failed: {e}")
+
+                print(f"  Plots saved to: {plotter.output_dir}")
+
+            except Exception as e:
+                logger.error(f"Plot generation failed: {e}")
+        elif generate_plots and not PLOTS_AVAILABLE:
+            logger.warning("Plot generation requested but matplotlib not available")
 
         # Print summary
         print(f"\n{'='*60}")
@@ -1036,6 +1099,7 @@ async def main():
     parser.add_argument("--strategies", nargs="+", default=None)
     parser.add_argument("--permutations", type=int, default=500)
     parser.add_argument("--validation-days", type=int, default=90)
+    parser.add_argument("--plots", action="store_true", help="Generate validation plots for significant strategies")
 
     args = parser.parse_args()
 
@@ -1047,6 +1111,7 @@ async def main():
     report = await researcher.run_full_cycle(
         universes=args.universes,
         strategies=args.strategies,
+        generate_plots=args.plots,
     )
 
     print(f"\nResearch complete. See report at: {researcher.output_dir}")

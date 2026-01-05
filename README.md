@@ -43,6 +43,27 @@ PYTHONPATH=. python3 scripts/run_daily.py --mode paper
 
 # Monitor portfolio
 PYTHONPATH=. python3 -m src.execution.monitoring.cli_dashboard
+
+# Validate strategy with plots
+PYTHONPATH=. python3 scripts/validate_strategy.py --strategy bollinger_reversal --symbol QCOM --plots
+
+# Research cycle with plots
+PYTHONPATH=. python3 -m workflows.research.comprehensive_researcher --plots
+
+# Check current market regime and get strategy recommendations
+PYTHONPATH=. python3 -c "
+from src.strategies.regime import EmpiricalRegimeClassifier, get_symbols_for_regime
+import yfinance as yf
+spy = yf.download('SPY', period='1y', progress=False)
+c = EmpiricalRegimeClassifier()
+r = c.detect_regime(spy['Close'])
+print(f'Regime: {r.combined.value}')
+print(f'Vol: {r.vol_percentile:.0f}%ile, Trend: {r.trend_strength:+.1%}')
+print('Top strategies:')
+for rec in c.get_strategy_recommendations(r)[:3]:
+    print(f'  {rec.strategy}: Sharpe={rec.expected_sharpe:.2f}')
+print(f'Symbols: {get_symbols_for_regime(r)[:5]}')
+"
 ```
 
 ## Project Structure
@@ -259,6 +280,48 @@ The evaluation system provides comprehensive testing capabilities across multipl
 | `generate_comparison_report()` | Multi-strategy comparison |
 | `generate_json_report()` | Machine-readable JSON output |
 
+### Strategy Visualization (`workflows/visualizations/strategy_plots.py`)
+
+Comprehensive plots for strategy validation:
+
+| Plot Type | Description |
+|-----------|-------------|
+| `plot_strategy_vs_random_vs_buyhold()` | Equity curves: strategy vs random trading vs buy-and-hold |
+| `plot_pdt_comparison()` | PDT-compliant vs non-PDT holding period comparison |
+| `plot_mcpt_distribution()` | MCPT permutation test histogram with significance |
+| `plot_bootstrap_ci()` | Bootstrap Sharpe ratio confidence interval |
+| `plot_comprehensive_validation()` | 2x2 dashboard with all validation views |
+| `plot_multi_strategy_comparison()` | Compare multiple strategies side-by-side |
+
+```python
+from workflows.visualizations.strategy_plots import StrategyPlotter
+
+plotter = StrategyPlotter()
+
+# Strategy vs Random vs Buy-and-Hold
+plotter.plot_strategy_vs_random_vs_buyhold(
+    strategy_returns=returns,
+    price_data=ohlcv_df,
+    strategy_name="bollinger_reversal",
+    symbol="QCOM",
+    n_random=100,
+)
+
+# Full validation dashboard
+plotter.plot_comprehensive_validation(
+    strategy_returns=returns,
+    price_data=ohlcv_df,
+    returns_by_holding={0: r0, 2: r2, 5: r5, 10: r10},
+    mcpt_sharpes=permuted_sharpes,
+    mcpt_p_value=0.02,
+    bootstrap_sharpes=bootstrap_samples,
+    ci_lower=-0.1,
+    ci_upper=2.5,
+    strategy_name="bollinger_reversal",
+    symbol="QCOM",
+)
+```
+
 ### Usage Examples
 
 ```python
@@ -290,6 +353,55 @@ from src.evaluation import reality_check
 rc_result = reality_check(strategy_returns_list, benchmark_returns)
 print(f"Best strategy survives: {rc_result.best_survives}")
 ```
+
+### Regime-Based Strategy Selection (`src/strategies/regime/`)
+
+The regime classifier uses empirical analysis of 470+ strategy/symbol combinations to recommend optimal strategies based on market conditions.
+
+**Key Findings**:
+- Mid/small caps: 70 strategies beat buy-and-hold (14.9% win rate)
+- Large caps: Only 20 beat buy-and-hold (3.8% win rate) - too efficient
+- Strategy performance varies dramatically by regime
+
+**Regime-Strategy Performance Matrix** (Sharpe ratios):
+
+| Strategy | High Vol + Up | High Vol + Down | Low Vol + Up | Low Vol + Down |
+|----------|--------------|-----------------|--------------|----------------|
+| RSI (30) | **1.54** | 0.70 | 1.05 | -0.18 |
+| Mean-Rev | **1.08** | 0.84 | 0.38 | 0.62 |
+| Momentum-20 | 0.31 | AVOID (-1.90) | **2.48** | 1.67 |
+| Breakout-10 | **1.79** | AVOID (-0.60) | 0.88 | 0.90 |
+
+**Critical Insight**: Momentum and Breakout FAIL in downtrends. Must switch off when trend reverses.
+
+```python
+from src.strategies.regime import (
+    EmpiricalRegimeClassifier,
+    get_symbols_for_regime,
+)
+
+# Detect current regime
+classifier = EmpiricalRegimeClassifier()
+regime = classifier.detect_regime(prices)
+print(f"Current: {regime.combined.value}")
+
+# Get strategy recommendations
+recommendations = classifier.get_strategy_recommendations(regime)
+for rec in recommendations:
+    print(f"{rec.strategy}: Sharpe={rec.expected_sharpe:.2f}")
+
+# Get symbols for regime
+symbols = get_symbols_for_regime(regime)
+```
+
+**Regime Detection**:
+- Volatility: 20-day rolling vol vs 252-day median
+- Trend: Price vs 50-day SMA
+
+**Symbol Universe by Regime**:
+- High Vol: Solar (ENPH, FSLR), Fintech (UPST, SOFI), Meme (GME, NOK)
+- Low Vol: Cloud (DDOG, SNOW), Cybersecurity (CRWD, NET, ZS)
+- Uptrend: Add consumer tech (DASH, ABNB, PINS, SNAP)
 
 ### Execution Layer (`src/execution/`)
 
@@ -467,9 +579,10 @@ PYTHONPATH=. python3 scripts/run_daily.py --mode live
 # Research
 PYTHONPATH=. python3 scripts/full_research_cycle.py
 PYTHONPATH=. python3 scripts/full_research_cycle.py --quick
+PYTHONPATH=. python3 -m workflows.research.comprehensive_researcher --plots
 
-# Validation
-PYTHONPATH=. python3 scripts/validate_strategy.py --strategy bollinger_reversal --symbol QCOM
+# Validation (with optional --plots for visualization)
+PYTHONPATH=. python3 scripts/validate_strategy.py --strategy bollinger_reversal --symbol QCOM --plots
 PYTHONPATH=. python3 scripts/critic_validate.py --strategy bollinger_reversal --symbol QCOM
 
 # Reports
@@ -507,6 +620,7 @@ Results are stored in `/home/nock/quant_results/`:
 | `validation_reports/` | Strategy validation JSON |
 | `text_corpus/` | Text research documents |
 | `embeddings_cache/` | Cached embeddings |
+| `plots/` | Strategy validation plots (PNG) |
 
 ## Development
 
@@ -552,10 +666,26 @@ PYTHONPATH=. python3 -m pytest tests/integration/ -v
 +-------------------------------------------------------------------------+
 ```
 
-## See Also
+## Documentation
 
-- **CLAUDE.md**: Detailed Claude Code reference for agents and skills
-- **docs/TRADING_GUIDE.md**: Trading operations guide
+| File | Description |
+|------|-------------|
+| **CLAUDE.md** | Claude Code reference for agents and skills |
+| **DEVLOG.md** | Development log - progress, decisions, issues |
+| **RESEARCH_LOG.md** | Research findings, validated results, flagged issues |
+| **docs/TRADING_GUIDE.md** | Trading operations guide |
+
+## Latest Validated Results (2026-01-04)
+
+| Strategy | Symbol | Sharpe | p-value | Status |
+|----------|--------|--------|---------|--------|
+| bollinger_reversal | QCOM | 3.14 | 0.007 | Production Ready |
+| bollinger_reversal | MU | 2.93 | 0.007 | Production Ready |
+| bollinger_reversal | MRVL | 2.71 | 0.017 | Production Ready |
+| insider_technical | QQQ | 1.23 | 0.000 | Production Ready |
+| momentum | AMD | 2.11 | 0.047 | Production Ready |
+
+**Flagged for Review**: ML strategies (XGBoost, LightGBM) show high Sharpe but lack MCPT validation - see RESEARCH_LOG.md
 
 ## License
 

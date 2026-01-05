@@ -7,6 +7,7 @@ Runs the complete validation suite on a strategy before production.
 Usage:
     PYTHONPATH=. python scripts/validate_strategy.py --strategy bollinger_reversal --symbol QCOM
     PYTHONPATH=. python scripts/validate_strategy.py --strategy momentum --symbol AMD --quick
+    PYTHONPATH=. python scripts/validate_strategy.py --strategy rsi_reversal --symbol IWM --plots
 """
 
 import argparse
@@ -37,6 +38,15 @@ try:
     EVAL_MODULE_AVAILABLE = True
 except ImportError:
     EVAL_MODULE_AVAILABLE = False
+
+# Import plotting module
+try:
+    from workflows.visualizations.strategy_plots import (
+        StrategyPlotter, PlotConfig, plot_validation_dashboard
+    )
+    PLOTS_AVAILABLE = True
+except ImportError:
+    PLOTS_AVAILABLE = False
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -111,11 +121,16 @@ def compute_strategy_returns(signals: pd.Series, prices: pd.DataFrame) -> pd.Ser
     return strategy_returns.dropna()
 
 
-def mcpt_test(strategy_returns: pd.Series, benchmark_returns: pd.Series, n_permutations: int = 1000) -> tuple[float, float]:
+def mcpt_test(strategy_returns: pd.Series, benchmark_returns: pd.Series, n_permutations: int = 1000) -> tuple[float, float, list[float]]:
     """Monte Carlo Permutation Test using evaluation module when available.
 
     Tests if strategy returns are significantly better than random signal timing.
+
+    Returns:
+        tuple: (p_value, strategy_sharpe, list of permuted sharpes for plotting)
     """
+    permuted_sharpes = []
+
     # Try using evaluation module first
     if EVAL_MODULE_AVAILABLE:
         try:
@@ -125,7 +140,19 @@ def mcpt_test(strategy_returns: pd.Series, benchmark_returns: pd.Series, n_permu
                 n_permutations=n_permutations,
             )
             sharpe = sharpe_ratio(strategy_returns) if len(strategy_returns.dropna()) > 20 else 0
-            return result.p_value, sharpe
+            # Generate permuted sharpes for plotting if not in result
+            if hasattr(result, 'permuted_sharpes') and result.permuted_sharpes:
+                permuted_sharpes = list(result.permuted_sharpes)
+            else:
+                # Generate them for plotting
+                abs_returns = np.abs(strategy_returns.dropna().values)
+                n = len(abs_returns)
+                for _ in range(min(n_permutations, 500)):
+                    random_signs = np.random.choice([-1, 1], size=n)
+                    perm_returns = abs_returns * random_signs
+                    ps = np.mean(perm_returns) / np.std(perm_returns) * np.sqrt(252) if np.std(perm_returns) > 0 else 0
+                    permuted_sharpes.append(ps)
+            return result.p_value, sharpe, permuted_sharpes
         except Exception as e:
             logger.debug(f"Evaluation module MCPT failed, using fallback: {e}")
 
@@ -142,11 +169,12 @@ def mcpt_test(strategy_returns: pd.Series, benchmark_returns: pd.Series, n_permu
         random_signs = np.random.choice([-1, 1], size=n)
         perm_returns = abs_returns * random_signs
         perm_sharpe = np.mean(perm_returns) / np.std(perm_returns) * np.sqrt(252) if np.std(perm_returns) > 0 else 0
+        permuted_sharpes.append(perm_sharpe)
         if perm_sharpe >= strategy_sharpe:
             count_better += 1
 
     p_value = (count_better + 1) / (n_permutations + 1)
-    return p_value, strategy_sharpe
+    return p_value, strategy_sharpe, permuted_sharpes
 
 
 def walk_forward_validate(strategy_name: str, data: pd.DataFrame, n_splits: int = 5) -> dict:
@@ -183,8 +211,14 @@ def walk_forward_validate(strategy_name: str, data: pd.DataFrame, n_splits: int 
     }
 
 
-def bootstrap_sharpe(returns: pd.Series, n_samples: int = 1000) -> tuple[float, float]:
-    """Bootstrap Sharpe ratio confidence interval using evaluation module when available."""
+def bootstrap_sharpe(returns: pd.Series, n_samples: int = 1000) -> tuple[float, float, list[float]]:
+    """Bootstrap Sharpe ratio confidence interval using evaluation module when available.
+
+    Returns:
+        tuple: (ci_lower, ci_upper, list of bootstrapped sharpes for plotting)
+    """
+    sharpes = []
+
     # Try using evaluation module first
     if EVAL_MODULE_AVAILABLE:
         try:
@@ -193,12 +227,21 @@ def bootstrap_sharpe(returns: pd.Series, n_samples: int = 1000) -> tuple[float, 
                 returns.dropna().values,
                 statistic_func=lambda x: np.mean(x) / np.std(x) * np.sqrt(252) if np.std(x) > 0 else 0
             )
-            return ci_result.lower, ci_result.upper
+            # Generate bootstrap sharpes for plotting if not available in result
+            if hasattr(ci_result, 'bootstrap_samples') and ci_result.bootstrap_samples:
+                sharpes = list(ci_result.bootstrap_samples)
+            else:
+                # Generate them for plotting
+                n = len(returns)
+                for _ in range(min(n_samples, 500)):
+                    sample = np.random.choice(returns.dropna().values, size=n, replace=True)
+                    if np.std(sample) > 0:
+                        sharpes.append(np.mean(sample) / np.std(sample) * np.sqrt(252))
+            return ci_result.lower, ci_result.upper, sharpes
         except Exception as e:
             logger.debug(f"Evaluation module bootstrap failed, using fallback: {e}")
 
     # Fallback implementation
-    sharpes = []
     n = len(returns)
 
     for _ in range(n_samples):
@@ -209,7 +252,7 @@ def bootstrap_sharpe(returns: pd.Series, n_samples: int = 1000) -> tuple[float, 
 
     ci_lower = np.percentile(sharpes, 2.5)
     ci_upper = np.percentile(sharpes, 97.5)
-    return ci_lower, ci_upper
+    return ci_lower, ci_upper, sharpes
 
 
 def test_transaction_costs(strategy_name: str, data: pd.DataFrame, costs: list[int] = None) -> dict:
@@ -235,15 +278,21 @@ def test_transaction_costs(strategy_name: str, data: pd.DataFrame, costs: list[i
     return results
 
 
-def test_pdt_holding_periods(strategy_name: str, data: pd.DataFrame, periods: list[int] = None) -> dict:
-    """Test different holding periods for PDT compliance."""
+def test_pdt_holding_periods(strategy_name: str, data: pd.DataFrame, periods: list[int] = None) -> tuple[dict, dict]:
+    """Test different holding periods for PDT compliance.
+
+    Returns:
+        tuple: (sharpes_by_holding: dict, returns_by_holding: dict for plotting)
+    """
     if periods is None:
         periods = [0, 2, 5, 10]
 
     signals = get_strategy_signals(strategy_name, data)
     returns = data['Close'].pct_change()
 
-    results = {}
+    sharpes = {}
+    returns_by_holding = {}
+
     for hp in periods:
         if hp == 0:
             held_signals = signals
@@ -268,13 +317,24 @@ def test_pdt_holding_periods(strategy_name: str, data: pd.DataFrame, periods: li
 
         if len(valid_returns) > 20:
             sharpe = valid_returns.mean() / valid_returns.std() * np.sqrt(252) if valid_returns.std() > 0 else 0
-            results[hp] = sharpe
+            sharpes[hp] = sharpe
+            returns_by_holding[hp] = valid_returns
 
-    return results
+    return sharpes, returns_by_holding
 
 
-def run_validation(strategy_name: str, symbol: str, quick: bool = False) -> ValidationResult:
-    """Run full validation suite."""
+def run_validation(strategy_name: str, symbol: str, quick: bool = False, generate_plots: bool = False) -> ValidationResult:
+    """Run full validation suite.
+
+    Args:
+        strategy_name: Name of the strategy to validate
+        symbol: Symbol to test
+        quick: Run quick validation with fewer permutations
+        generate_plots: Generate comprehensive validation plots
+
+    Returns:
+        ValidationResult with all metrics and checks
+    """
     logger.info(f"Starting validation for {strategy_name} on {symbol}")
 
     checks = {}
@@ -306,7 +366,7 @@ def run_validation(strategy_name: str, symbol: str, quick: bool = False) -> Vali
     # 1. MCPT Test
     logger.info("Running MCPT test...")
     n_perms = 100 if quick else 500
-    p_value, sharpe = mcpt_test(strategy_returns, benchmark_returns, n_perms)
+    p_value, sharpe, mcpt_permuted_sharpes = mcpt_test(strategy_returns, benchmark_returns, n_perms)
 
     checks['mcpt_significant'] = p_value < 0.05
     metrics['mcpt_p_value'] = p_value
@@ -338,7 +398,7 @@ def run_validation(strategy_name: str, symbol: str, quick: bool = False) -> Vali
 
     # 4. Sharpe CI
     logger.info("Computing Sharpe confidence interval...")
-    ci_lower, ci_upper = bootstrap_sharpe(strategy_returns, n_samples=500 if quick else 1000)
+    ci_lower, ci_upper, bootstrap_sharpes = bootstrap_sharpe(strategy_returns, n_samples=500 if quick else 1000)
 
     checks['sharpe_ci_positive'] = ci_lower > 0
     metrics['sharpe_ci_lower'] = ci_lower
@@ -364,7 +424,7 @@ def run_validation(strategy_name: str, symbol: str, quick: bool = False) -> Vali
 
     # 6. PDT Compliance
     logger.info("Testing PDT holding periods...")
-    pdt_results = test_pdt_holding_periods(strategy_name, data)
+    pdt_results, pdt_returns_by_holding = test_pdt_holding_periods(strategy_name, data)
 
     compliant_results = {hp: s for hp, s in pdt_results.items() if hp >= 2}
     if compliant_results:
@@ -469,6 +529,76 @@ def run_validation(strategy_name: str, symbol: str, quick: bool = False) -> Vali
     print(f"  OOS Sharpe: {metrics.get('oos_sharpe', 0):.2f}")
     print(f"  PDT Hold: {metrics.get('pdt_best_holding', 'N/A')} days")
 
+    # Generate plots if requested
+    if generate_plots and PLOTS_AVAILABLE:
+        try:
+            logger.info("Generating validation plots...")
+            plotter = StrategyPlotter()
+
+            # 1. Comprehensive validation dashboard (2x2 grid)
+            logger.info("  Creating comprehensive validation dashboard...")
+            plotter.plot_comprehensive_validation(
+                strategy_returns=strategy_returns,
+                price_data=data,
+                returns_by_holding=pdt_returns_by_holding,
+                mcpt_sharpes=mcpt_permuted_sharpes,
+                mcpt_p_value=p_value,
+                bootstrap_sharpes=bootstrap_sharpes,
+                ci_lower=ci_lower,
+                ci_upper=ci_upper,
+                strategy_name=strategy_name,
+                symbol=symbol,
+            )
+
+            # 2. Strategy vs Random vs Buy-and-Hold equity curve
+            logger.info("  Creating equity curve plot...")
+            plotter.plot_strategy_vs_random_vs_buyhold(
+                strategy_returns=strategy_returns,
+                price_data=data,
+                strategy_name=strategy_name,
+                symbol=symbol,
+                n_random=100,
+            )
+
+            # 3. PDT holding period comparison
+            if pdt_returns_by_holding:
+                logger.info("  Creating PDT comparison plot...")
+                plotter.plot_pdt_comparison(
+                    returns_by_holding=pdt_returns_by_holding,
+                    strategy_name=strategy_name,
+                    symbol=symbol,
+                )
+
+            # 4. MCPT distribution
+            if mcpt_permuted_sharpes:
+                logger.info("  Creating MCPT distribution plot...")
+                plotter.plot_mcpt_distribution(
+                    original_sharpe=sharpe,
+                    permuted_sharpes=mcpt_permuted_sharpes,
+                    p_value=p_value,
+                    strategy_name=strategy_name,
+                    symbol=symbol,
+                )
+
+            # 5. Bootstrap CI
+            if bootstrap_sharpes:
+                logger.info("  Creating bootstrap CI plot...")
+                plotter.plot_bootstrap_ci(
+                    returns=strategy_returns,
+                    bootstrap_sharpes=bootstrap_sharpes,
+                    ci_lower=ci_lower,
+                    ci_upper=ci_upper,
+                    strategy_name=strategy_name,
+                    symbol=symbol,
+                )
+
+            print(f"\nPlots saved to: {plotter.output_dir}")
+
+        except Exception as e:
+            logger.error(f"Plot generation failed: {e}")
+    elif generate_plots and not PLOTS_AVAILABLE:
+        logger.warning("Plot generation requested but matplotlib not available. Install with: pip install matplotlib")
+
     return result
 
 
@@ -477,10 +607,11 @@ def main():
     parser.add_argument("--strategy", required=True, help="Strategy name")
     parser.add_argument("--symbol", required=True, help="Symbol to test")
     parser.add_argument("--quick", action="store_true", help="Quick validation (fewer permutations)")
+    parser.add_argument("--plots", action="store_true", help="Generate validation plots")
 
     args = parser.parse_args()
 
-    result = run_validation(args.strategy, args.symbol, args.quick)
+    result = run_validation(args.strategy, args.symbol, args.quick, args.plots)
 
     return 0 if result.passed else 1
 
