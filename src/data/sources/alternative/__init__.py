@@ -92,6 +92,44 @@ try:
 except ImportError:
     SHORT_INTEREST_AVAILABLE = False
 
+# Congressional Trades
+from .congressional_trades import (
+    Chamber,
+    TradeType,
+    AssetType as CongressAssetType,
+    CongressionalTrade,
+    CongressionalCluster,
+    CongressionalTradesSource,
+    NOTABLE_TRADERS,
+    fetch_congressional_trades,
+    find_congressional_clusters,
+)
+
+# Prediction Markets
+from .prediction_markets import (
+    MarketCategory,
+    MarketSource,
+    PredictionMarket,
+    MacroSignal,
+    PredictionMarketsSource,
+    fetch_prediction_markets,
+    get_macro_signals,
+)
+
+# Expert Sentiment (Inverse Cramer, etc.)
+from .expert_sentiment import (
+    SentimentType,
+    ExpertType,
+    SignalAction,
+    ExpertCall,
+    ExpertConsensus,
+    ExpertSentimentSource,
+    EXPERT_PROFILES,
+    fetch_expert_calls,
+    get_inverse_cramer,
+    get_expert_consensus,
+)
+
 __all__ = [
     # News
     "NewsArticle",
@@ -166,4 +204,33 @@ __all__ = [
     "ShortSqueezeSignal",
     "create_short_interest_source",
     "SHORT_INTEREST_AVAILABLE",
+    # Congressional Trades
+    "Chamber",
+    "TradeType",
+    "CongressAssetType",
+    "CongressionalTrade",
+    "CongressionalCluster",
+    "CongressionalTradesSource",
+    "NOTABLE_TRADERS",
+    "fetch_congressional_trades",
+    "find_congressional_clusters",
+    # Prediction Markets
+    "MarketCategory",
+    "MarketSource",
+    "PredictionMarket",
+    "MacroSignal",
+    "PredictionMarketsSource",
+    "fetch_prediction_markets",
+    "get_macro_signals",
+    # Expert Sentiment
+    "SentimentType",
+    "ExpertType",
+    "SignalAction",
+    "ExpertCall",
+    "ExpertConsensus",
+    "ExpertSentimentSource",
+    "EXPERT_PROFILES",
+    "fetch_expert_calls",
+    "get_inverse_cramer",
+    "get_expert_consensus",
 ]

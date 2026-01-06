@@ -1,0 +1,370 @@
+"""
+Decision Logger for tracking LLM trading decisions and outcomes.
+
+Provides:
+- Recording decisions with full context
+- Tracking outcomes (P&L, accuracy of reasoning)
+- Learning loop feedback for improvement
+"""
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+from enum import Enum
+import json
+import uuid
+
+
+class Action(str, Enum):
+    """Trading action types."""
+    BUY = "BUY"
+    SELL = "SELL"
+    HOLD = "HOLD"
+    CLOSE = "CLOSE"
+    ADD = "ADD"  # Add to position
+    TRIM = "TRIM"  # Reduce position
+
+
+class DecisionStatus(str, Enum):
+    """Decision lifecycle status."""
+    PENDING = "pending"  # Decision made, not yet executed
+    EXECUTED = "executed"  # Order submitted
+    FILLED = "filled"  # Order filled
+    REJECTED = "rejected"  # Order rejected
+    CANCELLED = "cancelled"  # Decision cancelled
+    CLOSED = "closed"  # Position closed, can evaluate outcome
+
+
+@dataclass
+class TradingDecision:
+    """A trading decision made by the LLM decision engine."""
+
+    # Core decision
+    id: str
+    timestamp: datetime
+    symbol: str
+    action: Action
+    confidence: float  # 0-1
+
+    # Position details
+    size_pct: float  # % of portfolio
+    limit_price: Optional[float]
+    stop_loss_pct: float
+    take_profit_pct: float
+    expected_hold_days: int
+
+    # Reasoning
+    reasoning: str
+    key_factors: list[str]
+    risks: list[str]
+
+    # Context at decision time
+    context: dict  # Snapshot of market state, briefing summary, etc.
+
+    # Tracking
+    status: DecisionStatus = DecisionStatus.PENDING
+    execution_price: Optional[float] = None
+    execution_time: Optional[datetime] = None
+
+    # Outcome (filled after position closes)
+    exit_price: Optional[float] = None
+    exit_time: Optional[datetime] = None
+    actual_hold_days: Optional[int] = None
+    realized_pnl: Optional[float] = None
+    realized_pnl_pct: Optional[float] = None
+    outcome_notes: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat(),
+            "symbol": self.symbol,
+            "action": self.action.value,
+            "confidence": self.confidence,
+            "size_pct": self.size_pct,
+            "limit_price": self.limit_price,
+            "stop_loss_pct": self.stop_loss_pct,
+            "take_profit_pct": self.take_profit_pct,
+            "expected_hold_days": self.expected_hold_days,
+            "reasoning": self.reasoning,
+            "key_factors": self.key_factors,
+            "risks": self.risks,
+            "context": self.context,
+            "status": self.status.value,
+            "execution_price": self.execution_price,
+            "execution_time": self.execution_time.isoformat() if self.execution_time else None,
+            "exit_price": self.exit_price,
+            "exit_time": self.exit_time.isoformat() if self.exit_time else None,
+            "actual_hold_days": self.actual_hold_days,
+            "realized_pnl": self.realized_pnl,
+            "realized_pnl_pct": self.realized_pnl_pct,
+            "outcome_notes": self.outcome_notes,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "TradingDecision":
+        """Create from dictionary."""
+        return cls(
+            id=data["id"],
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+            symbol=data["symbol"],
+            action=Action(data["action"]),
+            confidence=data["confidence"],
+            size_pct=data["size_pct"],
+            limit_price=data.get("limit_price"),
+            stop_loss_pct=data["stop_loss_pct"],
+            take_profit_pct=data["take_profit_pct"],
+            expected_hold_days=data["expected_hold_days"],
+            reasoning=data["reasoning"],
+            key_factors=data["key_factors"],
+            risks=data["risks"],
+            context=data["context"],
+            status=DecisionStatus(data.get("status", "pending")),
+            execution_price=data.get("execution_price"),
+            execution_time=datetime.fromisoformat(data["execution_time"]) if data.get("execution_time") else None,
+            exit_price=data.get("exit_price"),
+            exit_time=datetime.fromisoformat(data["exit_time"]) if data.get("exit_time") else None,
+            actual_hold_days=data.get("actual_hold_days"),
+            realized_pnl=data.get("realized_pnl"),
+            realized_pnl_pct=data.get("realized_pnl_pct"),
+            outcome_notes=data.get("outcome_notes"),
+        )
+
+
+class DecisionLogger:
+    """
+    Logs and tracks trading decisions for learning.
+
+    Maintains:
+    - Decision history with full context
+    - Outcome tracking for closed positions
+    - Performance analytics by reasoning pattern
+    """
+
+    def __init__(
+        self,
+        decisions_dir: str = "/home/nock/quant_results/decisions",
+    ):
+        self.decisions_dir = Path(decisions_dir)
+        self.decisions_dir.mkdir(parents=True, exist_ok=True)
+        self.daily_file: Optional[Path] = None
+        self._ensure_daily_file()
+
+    def _ensure_daily_file(self) -> Path:
+        """Ensure today's decision file exists."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        self.daily_file = self.decisions_dir / f"decisions_{today}.json"
+
+        if not self.daily_file.exists():
+            with open(self.daily_file, "w") as f:
+                json.dump({"date": today, "decisions": []}, f, indent=2)
+
+        return self.daily_file
+
+    def log_decision(self, decision: TradingDecision) -> str:
+        """Log a new trading decision."""
+        self._ensure_daily_file()
+
+        with open(self.daily_file, "r") as f:
+            data = json.load(f)
+
+        data["decisions"].append(decision.to_dict())
+
+        with open(self.daily_file, "w") as f:
+            json.dump(data, f, indent=2)
+
+        return decision.id
+
+    def update_decision(self, decision_id: str, updates: dict) -> bool:
+        """Update an existing decision (e.g., mark as executed, add outcome)."""
+        self._ensure_daily_file()
+
+        with open(self.daily_file, "r") as f:
+            data = json.load(f)
+
+        for decision in data["decisions"]:
+            if decision["id"] == decision_id:
+                decision.update(updates)
+                with open(self.daily_file, "w") as f:
+                    json.dump(data, f, indent=2)
+                return True
+
+        return False
+
+    def get_today_decisions(self) -> list[TradingDecision]:
+        """Get all decisions made today."""
+        self._ensure_daily_file()
+
+        with open(self.daily_file, "r") as f:
+            data = json.load(f)
+
+        return [TradingDecision.from_dict(d) for d in data["decisions"]]
+
+    def get_pending_decisions(self) -> list[TradingDecision]:
+        """Get decisions that haven't been executed yet."""
+        decisions = self.get_today_decisions()
+        return [d for d in decisions if d.status == DecisionStatus.PENDING]
+
+    def get_decision(self, decision_id: str) -> Optional[TradingDecision]:
+        """Get a specific decision by ID."""
+        decisions = self.get_today_decisions()
+        for d in decisions:
+            if d.id == decision_id:
+                return d
+        return None
+
+    def record_execution(
+        self,
+        decision_id: str,
+        execution_price: float,
+        execution_time: Optional[datetime] = None,
+    ) -> bool:
+        """Record that a decision was executed."""
+        return self.update_decision(decision_id, {
+            "status": DecisionStatus.EXECUTED.value,
+            "execution_price": execution_price,
+            "execution_time": (execution_time or datetime.now()).isoformat(),
+        })
+
+    def record_outcome(
+        self,
+        decision_id: str,
+        exit_price: float,
+        exit_time: Optional[datetime] = None,
+        notes: Optional[str] = None,
+    ) -> bool:
+        """Record the outcome of a closed position."""
+        decision = self.get_decision(decision_id)
+        if not decision or not decision.execution_price:
+            return False
+
+        entry = decision.execution_price
+        pnl = exit_price - entry
+        pnl_pct = (pnl / entry) * 100
+
+        exit_dt = exit_time or datetime.now()
+        hold_days = (exit_dt - decision.execution_time).days if decision.execution_time else 0
+
+        return self.update_decision(decision_id, {
+            "status": DecisionStatus.CLOSED.value,
+            "exit_price": exit_price,
+            "exit_time": exit_dt.isoformat(),
+            "actual_hold_days": hold_days,
+            "realized_pnl": pnl,
+            "realized_pnl_pct": pnl_pct,
+            "outcome_notes": notes,
+        })
+
+    def get_performance_summary(self, days: int = 30) -> dict:
+        """
+        Get performance summary across recent decisions.
+
+        Returns:
+            Summary with win rate, avg return, accuracy metrics
+        """
+        all_decisions = []
+
+        # Load decisions from recent days
+        for i in range(days):
+            date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            filepath = self.decisions_dir / f"decisions_{date}.json"
+
+            if filepath.exists():
+                with open(filepath, "r") as f:
+                    data = json.load(f)
+                    all_decisions.extend(data["decisions"])
+
+        # Filter to closed decisions
+        closed = [d for d in all_decisions if d.get("status") == "closed"]
+
+        if not closed:
+            return {
+                "total_decisions": len(all_decisions),
+                "closed_decisions": 0,
+                "win_rate": None,
+                "avg_return_pct": None,
+                "total_pnl": None,
+            }
+
+        # Calculate metrics
+        wins = [d for d in closed if d.get("realized_pnl_pct", 0) > 0]
+        returns = [d.get("realized_pnl_pct", 0) for d in closed]
+        total_pnl = sum(d.get("realized_pnl", 0) for d in closed)
+
+        # Accuracy of reasoning (was high confidence correct?)
+        high_conf = [d for d in closed if d.get("confidence", 0) >= 0.7]
+        high_conf_wins = [d for d in high_conf if d.get("realized_pnl_pct", 0) > 0]
+
+        return {
+            "total_decisions": len(all_decisions),
+            "closed_decisions": len(closed),
+            "win_rate": len(wins) / len(closed) if closed else None,
+            "avg_return_pct": sum(returns) / len(returns) if returns else None,
+            "total_pnl": total_pnl,
+            "high_confidence_accuracy": len(high_conf_wins) / len(high_conf) if high_conf else None,
+            "by_action": self._group_by_action(closed),
+        }
+
+    def _group_by_action(self, decisions: list[dict]) -> dict:
+        """Group performance by action type."""
+        by_action = {}
+        for d in decisions:
+            action = d.get("action", "UNKNOWN")
+            if action not in by_action:
+                by_action[action] = {"count": 0, "wins": 0, "total_pnl": 0}
+
+            by_action[action]["count"] += 1
+            if d.get("realized_pnl_pct", 0) > 0:
+                by_action[action]["wins"] += 1
+            by_action[action]["total_pnl"] += d.get("realized_pnl", 0)
+
+        return by_action
+
+
+def create_decision(
+    symbol: str,
+    action: Action,
+    confidence: float,
+    size_pct: float,
+    reasoning: str,
+    key_factors: list[str],
+    risks: list[str],
+    context: dict,
+    stop_loss_pct: float = 5.0,
+    take_profit_pct: float = 15.0,
+    expected_hold_days: int = 5,
+    limit_price: Optional[float] = None,
+) -> TradingDecision:
+    """
+    Factory function to create a new trading decision.
+
+    Example:
+        decision = create_decision(
+            symbol="SLB",
+            action=Action.BUY,
+            confidence=0.75,
+            size_pct=10.0,
+            reasoning="Venezuela reconstruction thesis confirmed...",
+            key_factors=["Contract announcements", "Pre-market strength"],
+            risks=["Geopolitical uncertainty", "Oil price volatility"],
+            context={"briefing_date": "2026-01-06", "market_sentiment": "bullish"},
+        )
+    """
+    return TradingDecision(
+        id=str(uuid.uuid4())[:8],
+        timestamp=datetime.now(),
+        symbol=symbol,
+        action=action,
+        confidence=confidence,
+        size_pct=size_pct,
+        limit_price=limit_price,
+        stop_loss_pct=stop_loss_pct,
+        take_profit_pct=take_profit_pct,
+        expected_hold_days=expected_hold_days,
+        reasoning=reasoning,
+        key_factors=key_factors,
+        risks=risks,
+        context=context,
+    )

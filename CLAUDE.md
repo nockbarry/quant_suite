@@ -1,27 +1,50 @@
-# Quant Suite - Claude Code Reference
+# Quant Suite - Hybrid Human-AI-Statistical Trading System
 
-**Purpose**: Budget-friendly quantitative trading system ($200-$2,000 accounts)
-
----
-
-## Project Logs & Documentation
-
-| Document | Purpose |
-|----------|---------|
-| **DEVLOG.md** | Development progress, decisions, technical debt |
-| **RESEARCH_LOG.md** | Validated results, flagged issues, research leads |
-| **docs/TRADING_GUIDE.md** | End-user trading guide |
-| **docs/EVALUATION_API.md** | Backtesting, validation, metrics API reference |
-| **docs/ALPHA_DISCOVERY.md** | Alpha discovery system, alternative data sources |
-| **docs/TEXT_RESEARCH.md** | Text research framework, feature engineering |
-
-**Flagged Issues** (see RESEARCH_LOG.md):
-- ML strategies (XGBoost, LightGBM) lack MCPT validation
-- Mid/small cap feature leakage mentioned but not fully documented
+A trading system that combines **statistical signal generation**, **LLM decision synthesis**, and **human oversight** for budget-friendly accounts.
 
 ---
 
-## Quick Start Commands
+## System Philosophy
+
+```
+                    INTELLIGENCE LAYERS
+┌──────────────────────────────────────────────────────┐
+│                                                      │
+│  STATISTICAL LAYER    →   LLM LAYER    →   HUMAN    │
+│  (Signal Generation)      (Decision)       (Review)  │
+│                                                      │
+│  • 50+ features           • Synthesizes          • EOD review    │
+│  • Technical signals        signals + research   • Approve trades│
+│  • Alternative data       • Applies latent       • Override      │
+│  • Pattern detection        market knowledge     • Set rules     │
+│                           • Documents reasoning                  │
+└──────────────────────────────────────────────────────┘
+```
+
+**Key Principle**: Each layer adds value. Statistics find patterns. Claude adds context and reasoning. Humans provide judgment and accountability.
+
+---
+
+## Daily Trading Workflow
+
+| Time (ET) | Skill | What Happens |
+|-----------|-------|--------------|
+| 6:30 AM | `/morning-briefing` | Gather news, portfolio state, alternative data |
+| 7:00 AM | `/trade-decision` | Claude synthesizes signals + research → decisions with reasoning |
+| 7:30 AM | `/execute-trades` | Execute approved decisions (human approval required) |
+| 4:30 PM | `/eod-review` | Analyze outcomes, update learnings, prepare tomorrow |
+
+```bash
+# Run the workflow
+claude /morning-briefing
+claude /trade-decision
+claude /execute-trades
+claude /eod-review
+```
+
+---
+
+## Quick Commands
 
 ```bash
 # Daily Trading
@@ -29,7 +52,7 @@ PYTHONPATH=. python scripts/run_daily.py --mode signals      # Generate signals
 PYTHONPATH=. python scripts/run_daily.py --mode paper        # Paper trading
 
 # Research
-PYTHONPATH=. python scripts/full_research_cycle.py           # Full cycle
+PYTHONPATH=. python scripts/full_research_cycle.py           # Full research
 PYTHONPATH=. python scripts/full_research_cycle.py --quick   # Quick test
 
 # Validation
@@ -38,61 +61,232 @@ PYTHONPATH=. python scripts/critic_validate.py --strategy bollinger_reversal --s
 
 # Monitoring
 PYTHONPATH=. python -m src.execution.monitoring.cli_dashboard
-
-# Testing
-PYTHONPATH=. python -m pytest tests/ -v
 ```
 
 ---
 
-## Claude Code Skills
+## Architecture Overview
 
+```
+PRE-MARKET (6:00-8:00 AM ET)
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
+│  │ Alternative  │  │ Statistical  │  │   Morning    │               │
+│  │    Data      │  │   Signals    │  │   Research   │               │
+│  │              │  │              │  │              │               │
+│  │ Congressional│  │ Swing (daily)│  │ Overnight    │               │
+│  │ Pred Markets │  │ Intraday (5m)│  │ news         │               │
+│  │ Expert Sent. │  │ Technical    │  │ Pre-market   │               │
+│  │ Insider      │  │ ML models    │  │ Portfolio    │               │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘               │
+│         │                 │                  │                      │
+│         └─────────────────┼──────────────────┘                      │
+│                           ▼                                         │
+│              ┌────────────────────────┐                             │
+│              │    MORNING BRIEFING    │                             │
+│              │   (Structured context) │                             │
+│              └───────────┬────────────┘                             │
+│                          ▼                                          │
+│              ┌────────────────────────┐                             │
+│              │  LLM DECISION ENGINE   │                             │
+│              │                        │                             │
+│              │  • Consume all signals │                             │
+│              │  • Apply latent knowledge                            │
+│              │  • BUY/SELL/HOLD + why │                             │
+│              └───────────┬────────────┘                             │
+│                          ▼                                          │
+│              ┌────────────────────────┐                             │
+│              │   EXECUTION (9:30)     │                             │
+│              │                        │                             │
+│              │  • Risk validation     │                             │
+│              │  • PDT compliance      │                             │
+│              │  • Human approval      │                             │
+│              │  • Alpaca orders       │                             │
+│              └───────────┬────────────┘                             │
+│                          ▼                                          │
+│              ┌────────────────────────┐                             │
+│              │   LEARNING LOOP (4PM)  │                             │
+│              │                        │                             │
+│              │  • Track outcomes      │                             │
+│              │  • Update knowledge    │                             │
+│              │  • What worked/failed  │                             │
+│              └────────────────────────┘                             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Data Sources
+
+### Statistical Signals
+- **Technical**: RSI, MACD, Bollinger Bands, momentum (50+ features)
+- **ML Models**: XGBoost, LightGBM (require MCPT validation)
+- **Regime**: Volatility regime, trend detection
+
+### Alternative Data
+| Source | File | Signal Type |
+|--------|------|-------------|
+| **Congressional Trades** | `congressional_trades.py` | Cluster buying, Pelosi trades |
+| **Prediction Markets** | `prediction_markets.py` | Fed policy, recession odds, macro |
+| **Expert Sentiment** | `expert_sentiment.py` | Inverse Cramer, follow/fade pundits |
+| **Insider Trading** | `insider.py` | SEC Form 4 cluster buying |
+| **Options Flow** | `options_flow.py` | Unusual activity, put/call ratio |
+| **News/Reddit** | `news.py`, `reddit.py` | Sentiment, trending tickers |
+
+### Alternative Data Usage
+```python
+# Congressional cluster buying (multiple members buying same stock)
+from src.data.sources.alternative import find_congressional_clusters
+clusters = await find_congressional_clusters(min_traders=2)
+
+# Inverse Cramer (signal auto-inverted)
+from src.data.sources.alternative import get_inverse_cramer
+cramer_calls = await get_inverse_cramer(days=7)
+
+# Prediction markets for macro
+from src.data.sources.alternative import get_macro_signals
+macro = await get_macro_signals()
+```
+
+---
+
+## LLM Decision Framework
+
+When making trading decisions, Claude explicitly considers:
+
+### 1. Statistical Signal Quality
+- Signal confidence and confirming indicators
+- Historical performance of signal type
+- Alignment with current market regime
+
+### 2. Latent Market Knowledge
+- **Company**: Business model, moat, earnings quality, management
+- **Sector**: Cycle position, catalysts, relative valuations
+- **Macro**: Fed policy, economic cycle, geopolitical risks
+- **Behavioral**: Sentiment extremes, crowded trades, positioning
+
+### 3. Portfolio Context
+- Current exposure to symbol/sector
+- Correlation with existing positions
+- PDT constraints (<$25k accounts)
+
+### 4. Risk Assessment
+- What could go wrong?
+- Max loss scenario
+- Exit liquidity
+
+---
+
+## Trading Rules
+
+### Position Sizing by Confidence
+| Confidence | Max Size |
+|------------|----------|
+| 90%+ | 20% |
+| 75-90% | 15% |
+| 60-75% | 10% |
+| <60% | 5% or HOLD |
+
+### Risk Limits
+| Limit | Value |
+|-------|-------|
+| Single position | 25% max |
+| Sector exposure | 40% max |
+| Daily loss | 5% max |
+| Stop loss | 5-15% based on conviction |
+| Take profit | 10-30% |
+
+### PDT Compliance (<$25k)
+- Max 3 day trades per 5 rolling days
+- 2-day minimum hold for swing trades
+- Use `PDTManager` to track capacity
+
+```python
+from src.execution.pdt_manager import create_pdt_manager
+pdt = create_pdt_manager(account_equity=10000)
+can_trade, reason = pdt.can_day_trade("AAPL")
+```
+
+---
+
+## Claude Code Skills (11)
+
+### Daily Trading
 | Skill | Purpose |
 |-------|---------|
-| `/research` | Run research cycles, test strategies |
-| `/critic` | Safety validation, detect artificial performance |
-| `/monitor` | Trading performance monitoring |
-| `/promote` | Move strategies to production |
-| `/brainstorm` | Feature and strategy ideation |
-| `/validate` | Full validation suite |
-| `/report` | Generate documentation |
+| `/morning-briefing` | Pre-market research aggregation |
+| `/trade-decision` | LLM decision engine |
+| `/execute-trades` | Execution with approval |
+| `/eod-review` | Daily analysis and learning |
 
-**Workflow**: `/brainstorm` -> `/research` -> `/validate` -> `/critic` -> `/promote` -> `/monitor` -> `/report`
+### Research & Validation
+| Skill | Purpose |
+|-------|---------|
+| `/research` | Run research cycles |
+| `/critic` | Safety validation |
+| `/validate` | Full validation suite |
+| `/brainstorm` | Feature and strategy ideation |
+| `/promote` | Move to production |
+| `/monitor` | Portfolio oversight |
+| `/report` | Generate documentation |
 
 ---
 
-## Architecture
+## Claude Code Agents (13)
 
-```
-[Data Layer]          [Feature Layer]        [Strategy Layer]       [Execution Layer]
-    |                      |                      |                      |
- yfinance  ---------> FeatureComputer -----> Strategy.generate() --> RiskLimits
- SEC filings           (50+ features)              |                      |
- News RSS                  |                       v                      v
-                           v                  Signal objects        OrderExecutor
-                    enriched DataFrame              |                      |
-                                                    +--------------------> Alpaca
-```
+### Research Track
+| Agent | Purpose |
+|-------|---------|
+| research-agent | Comprehensive strategy research |
+| research-worker-agent | Parallelizable sector research |
+| alpha-discovery-agent | Market inefficiency scanning |
+| hypothesis-generator-agent | Insight → strategy |
+| brainstorm-agent | Feature ideation |
 
-**Key Principles**:
-- Look-ahead bias prevention (features computed with proper date boundaries)
-- PDT compliance (min 2-day hold, 3 day-trades per 5 days)
-- 25% max position, 5% stop-loss, 10% take-profit
-- MCPT validation required (p < 0.05) before production
+### Market Intelligence
+| Agent | Purpose |
+|-------|---------|
+| macro-research-agent | Geopolitical & macro analysis |
+| news-analyst-agent | Event-driven analysis |
+| regime-detector-agent | Market regime classification |
+
+### Operations
+| Agent | Purpose |
+|-------|---------|
+| critic-agent | Safety validation, bias detection |
+| monitor-agent | Portfolio oversight |
+| data-acquisition-agent | Free data acquisition |
+| orchestrator-agent | Multi-agent coordination |
 
 ---
 
 ## Key File Locations
 
-| Category | Files |
-|----------|-------|
-| **Config** | `config/strategies/validated_strategies.yaml`, `config/credentials.yaml` |
-| **Pipeline** | `scripts/run_daily.py`, `src/execution/pipeline/daily_signals.py`, `src/execution/broker/alpaca.py` |
-| **Features** | `src/data/feature_engineering/feature_registry.py` (50+ features) |
-| **Strategies** | `src/strategies/base.py`, `src/strategies/regime/regime_classifier.py` |
-| **Research** | `workflows/research/knowledge_base.py`, `workflows/research/autonomous_loop.py` |
-| **Validation** | `src/evaluation/validation/mcpt.py`, `src/evaluation/validation/walk_forward.py` |
-| **Visualization** | `workflows/visualizations/strategy_plots.py` |
+| Category | Path |
+|----------|------|
+| **Skills** | `.claude/skills/*/SKILL.md` |
+| **Agents** | `.claude/agents/*.md` |
+| **Strategies** | `src/strategies/` |
+| **Alternative Data** | `src/data/sources/alternative/` |
+| **Decision Engine** | `src/decision/` |
+| **Intraday** | `src/strategies/intraday/`, `src/data/pipeline/intraday.py` |
+| **PDT Manager** | `src/execution/pdt_manager.py` |
+| **Validation** | `src/evaluation/validation/` |
+
+---
+
+## Output Directories
+
+| Path | Contents |
+|------|----------|
+| `/home/nock/quant_results/briefings/` | Morning briefings |
+| `/home/nock/quant_results/decisions/` | Trading decisions with reasoning |
+| `/home/nock/quant_results/eod_reviews/` | EOD analysis |
+| `/home/nock/quant_results/pdt/` | PDT state tracking |
+| `/home/nock/quant_results/trading_logs/` | Session logs |
+| `/home/nock/quant_results/comprehensive_research/` | Research results |
+| `/home/nock/quant_results/validation_reports/` | Strategy validation |
 
 ---
 
@@ -104,159 +298,28 @@ PYTHONPATH=. python -m pytest tests/ -v
 | bollinger_reversal | MU | 2.93 | 0.007 |
 | insider_technical | QQQ | 1.23 | 0.00 |
 
-**Criteria**: MCPT p < 0.05, out-of-sample Sharpe > 0.5
-
-See RESEARCH_LOG.md for full list and research leads.
-
----
-
-## Common Tasks
-
-### Add a New Strategy
-1. Create class inheriting `BaseStrategy`
-2. Implement `generate_signals(data) -> list[Signal]`
-3. Run backtest with `VectorizedBacktest`
-4. Validate with `mcpt_test()` (p < 0.05 required)
-5. Add to `config/strategies/validated_strategies.yaml`
-
-### Quick Backtest
-```python
-from src.evaluation.backtest.engine import VectorizedBacktest
-backtest = VectorizedBacktest(strategy, initial_capital=10000, transaction_cost_bps=10)
-results = backtest.run(data)
-```
-
-### MCPT Validation
-```python
-from src.evaluation.validation.mcpt import mcpt_test
-result = mcpt_test(strategy_returns, benchmark_returns, n_permutations=1000)
-print(f"p-value: {result.p_value:.4f}")
-```
-
-### Regime Detection
-```python
-from src.strategies.regime import EmpiricalRegimeClassifier
-classifier = EmpiricalRegimeClassifier()
-regime = classifier.detect_regime(prices)
-recommendations = classifier.get_strategy_recommendations(regime)
-```
-
-See `docs/EVALUATION_API.md` for comprehensive API reference.
-
----
-
-## Claude Code Agents (13 Total)
-
-### Track 1: Novel Pattern Discovery
-| Agent | Purpose |
-|-------|---------|
-| macro-research-agent | Geopolitical & macro analysis |
-| news-analyst-agent | Event-driven news analysis |
-| regime-detector-agent | Market regime classification |
-
-### Track 2: Strategy Testing
-| Agent | Purpose |
-|-------|---------|
-| research-agent | Comprehensive strategy research |
-| research-worker-agent | Parallelizable sector research |
-
-### Track 3: Text-Based Alpha
-| Agent | Purpose |
-|-------|---------|
-| text-research-agent | Text-based alpha discovery |
-
-### Track 4: Alpha Discovery
-| Agent | Purpose |
-|-------|---------|
-| alpha-discovery-agent | Market inefficiency scanning |
-| data-acquisition-agent | Free data source acquisition |
-| hypothesis-generator-agent | Insight to strategy conversion |
-
-### Support Agents
-| Agent | Purpose |
-|-------|---------|
-| critic-agent | Safety validation, bias detection |
-| monitor-agent | Portfolio and trading oversight |
-| brainstorm-agent | Feature and strategy ideation |
-| orchestrator-agent | Multi-agent workflow coordination |
-
-**Configs**: `.claude/agents/<agent-name>.md`
-
-### Standard Workflows
-
-**Dual-Track Research**:
-```
-1. regime-detector-agent -> Get regime recommendations
-2. [PARALLEL] 2-3x research-worker-agents
-3. critic-agent -> Validate findings
-```
-
-**Alpha Discovery Pipeline**:
-```
-1. alpha-discovery-agent -> Scan for inefficiencies
-2. data-acquisition-agent -> Scrape blogs, fetch data
-3. hypothesis-generator-agent -> Create hypotheses
-4. research-agent -> Test hypotheses
-5. critic-agent -> Validate findings
-```
-
-**Daily Operations**:
-```
-1. monitor-agent -> Health check
-2. monitor-agent -> Performance review
-3. research-agent -> Follow up leads
-```
-
----
-
-## Output Directories
-
-| Path | Contents |
-|------|----------|
-| `/home/nock/quant_results/` | All outputs |
-| `.../comprehensive_research/` | Research cycle results |
-| `.../validation_reports/` | Strategy validation JSON |
-| `.../critic_reports/` | Critic validation JSON |
-| `.../plots/` | Strategy validation plots |
-| `.../promotions/` | Promotion records |
-
----
-
-## Feature Registry Summary
-
-**50+ features** in categories: TECHNICAL (11), SENTIMENT (4), ALTERNATIVE (4), FLOW (5), RISK (4), REGIME (3), EMBEDDING (4)
-
-```python
-from src.data.feature_engineering.feature_registry import FeatureComputer
-computer = FeatureComputer()
-features = computer.compute_feature("rsi", df)
-```
-
----
-
-## Schedule (ET)
-
-| Event | Time | Days |
-|-------|------|------|
-| Signal Generation | 07:00 | Mon-Fri |
-| Execution | 09:35 | Mon-Fri |
-| EOD Snapshot | 16:05 | Mon-Fri |
+**Validation Criteria**: MCPT p < 0.05, out-of-sample Sharpe > 0.5
 
 ---
 
 ## Error Handling
 
-- **Empty signals**: Market closed or no signals meet thresholds
-- **Alpaca connection**: Verify `config/credentials.yaml`
-- **Feature computation**: Needs 60+ days lookback
-- **PDT violations**: System enforces 2-day min hold for <$25k accounts
+| Issue | Solution |
+|-------|----------|
+| Empty signals | Market closed or thresholds not met |
+| Alpaca connection | Check `config/credentials.yaml` |
+| Feature computation | Needs 60+ days lookback |
+| PDT violations | System enforces 2-day hold for <$25k |
 
 ---
 
 ## Detailed Documentation
 
-For comprehensive API documentation, see:
-- `docs/EVALUATION_API.md` - Backtesting, validation, metrics, regime analysis
-- `docs/ALPHA_DISCOVERY.md` - Alpha discovery, alternative data, market scanning
-- `docs/TEXT_RESEARCH.md` - Text research, feature engineering, session tracking
-- `docs/TRADING_GUIDE.md` - End-user trading guide
+| Document | Purpose |
+|----------|---------|
+| `docs/EVALUATION_API.md` | Backtesting, validation, metrics |
+| `docs/ALPHA_DISCOVERY.md` | Alternative data, market scanning |
+| `docs/TEXT_RESEARCH.md` | Text research, embeddings |
+| `docs/TRADING_GUIDE.md` | End-user trading guide |
+| `DEVLOG.md` | Development progress |
+| `RESEARCH_LOG.md` | Research findings |
