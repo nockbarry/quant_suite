@@ -1,6 +1,6 @@
-# Quant Suite - Hybrid Human-AI-Statistical Trading System
+# Project Athena - Claude Code Reference
 
-A trading system that combines **statistical signal generation**, **LLM decision synthesis**, and **human oversight** for budget-friendly accounts.
+A hybrid intelligence trading system that combines **statistical signal generation**, **LLM decision synthesis**, and **human oversight**.
 
 ---
 
@@ -278,15 +278,19 @@ can_trade, reason = pdt.can_day_trade("AAPL")
 
 ## Output Directories
 
-| Path | Contents |
-|------|----------|
-| `/home/nock/quant_results/briefings/` | Morning briefings |
-| `/home/nock/quant_results/decisions/` | Trading decisions with reasoning |
-| `/home/nock/quant_results/eod_reviews/` | EOD analysis |
-| `/home/nock/quant_results/pdt/` | PDT state tracking |
-| `/home/nock/quant_results/trading_logs/` | Session logs |
-| `/home/nock/quant_results/comprehensive_research/` | Research results |
-| `/home/nock/quant_results/validation_reports/` | Strategy validation |
+All outputs stored in configurable results directory (default: `~/quant_results`, override with `QUANT_RESULTS_DIR` env var).
+
+| Directory | Contents |
+|-----------|----------|
+| `briefings/` | Morning briefings |
+| `decisions/` | Trading decisions with reasoning |
+| `trades/` | Trade execution records |
+| `pdt/` | PDT state tracking |
+| `trading_logs/` | Session logs |
+| `comprehensive_research/` | Research results |
+| `validation_reports/` | Strategy validation |
+
+Use `from src.core.paths import paths` to access directories programmatically.
 
 ---
 

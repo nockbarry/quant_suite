@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from src.core.paths import paths
 from src.evaluation.backtest.options_pricer import (
     Greeks,
     IVModel,
@@ -36,7 +37,7 @@ from src.evaluation.backtest.options_pricer import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-OUTPUT_DIR = Path("/home/nock/quant_results/options_backtest")
+OUTPUT_DIR = paths.options_backtest
 
 
 class StrategyType(Enum):

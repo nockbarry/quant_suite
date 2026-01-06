@@ -15,6 +15,8 @@ from typing import Optional
 import json
 import yaml
 
+from src.core.paths import paths
+
 
 @dataclass
 class NewsItem:
@@ -110,9 +112,9 @@ class MorningBriefing:
             "risk_warnings": self.risk_warnings,
         }
 
-    def save(self, output_dir: str = "/home/nock/quant_results/briefings") -> Path:
+    def save(self, output_dir: str | Path | None = None) -> Path:
         """Save briefing to JSON file."""
-        output_path = Path(output_dir)
+        output_path = Path(output_dir) if output_dir else paths.briefings
         output_path.mkdir(parents=True, exist_ok=True)
 
         filename = f"briefing_{self.date}.json"
@@ -241,10 +243,10 @@ class MorningBriefingGenerator:
     def __init__(
         self,
         credentials_path: str = "/home/nock/projects/quant_suite/config/credentials.yaml",
-        output_dir: str = "/home/nock/quant_results/briefings",
+        output_dir: str | Path | None = None,
     ):
         self.credentials_path = Path(credentials_path)
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(output_dir) if output_dir else paths.briefings
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     async def get_portfolio_state(self) -> Optional[PortfolioExposure]:
@@ -347,18 +349,18 @@ class MorningBriefingGenerator:
         )
 
     @staticmethod
-    def load_briefing(date: str, briefings_dir: str = "/home/nock/quant_results/briefings") -> Optional[dict]:
+    def load_briefing(date: str, briefings_dir: str | Path | None = None) -> Optional[dict]:
         """Load a saved briefing by date."""
-        filepath = Path(briefings_dir) / f"briefing_{date}.json"
+        filepath = (Path(briefings_dir) if briefings_dir else paths.briefings) / f"briefing_{date}.json"
         if filepath.exists():
             with open(filepath) as f:
                 return json.load(f)
         return None
 
     @staticmethod
-    def get_latest_briefing(briefings_dir: str = "/home/nock/quant_results/briefings") -> Optional[dict]:
+    def get_latest_briefing(briefings_dir: str | Path | None = None) -> Optional[dict]:
         """Get the most recent briefing."""
-        briefings_path = Path(briefings_dir)
+        briefings_path = Path(briefings_dir) if briefings_dir else paths.briefings
         if not briefings_path.exists():
             return None
 

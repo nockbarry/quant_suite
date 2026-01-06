@@ -53,6 +53,7 @@ from src.data.pipeline import (
     IntradayDataConfig,
     is_market_open,
 )
+from src.core.paths import paths
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,10 +61,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Output directories
-RESULTS_DIR = Path("/home/nock/quant_results")
-PDT_STATE_FILE = RESULTS_DIR / "pdt" / "pdt_state.json"
-TRADES_DIR = RESULTS_DIR / "trades"
+# Output directories - using centralized PathConfig
+PDT_STATE_FILE = paths.pdt / "pdt_state.json"
+TRADES_DIR = paths.trades
 
 
 def load_credentials() -> dict:

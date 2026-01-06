@@ -29,6 +29,8 @@ from urllib.robotparser import RobotFileParser
 
 import pandas as pd
 
+from src.core.paths import paths
+
 try:
     import aiohttp
 except ImportError:
@@ -100,7 +102,7 @@ class RobotsChecker:
     """Check robots.txt compliance before scraping."""
 
     def __init__(self, cache_dir: Path | None = None):
-        self.cache_dir = cache_dir or Path("/home/nock/quant_results/scraped_data/metadata/robots_cache")
+        self.cache_dir = cache_dir or (paths.scraped_data / "metadata" / "robots_cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._parsers: dict[str, RobotFileParser] = {}
 
@@ -204,7 +206,7 @@ class CommoditySource:
         cache_dir: Path | None = None,
         policy: ScrapingPolicy | None = None,
     ):
-        self.cache_dir = cache_dir or Path("/home/nock/quant_results/scraped_data/commodities")
+        self.cache_dir = cache_dir or (paths.scraped_data / "commodities")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.policy = policy or ScrapingPolicy()

@@ -32,10 +32,12 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from src.core.paths import paths
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-OUTPUT_DIR = Path("/home/nock/quant_results/options_strategies")
+OUTPUT_DIR = paths.options_strategies
 
 
 class StrategyType(Enum):

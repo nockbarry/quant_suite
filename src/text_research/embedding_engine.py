@@ -23,6 +23,7 @@ from typing import Any, Callable
 
 import numpy as np
 
+from src.core.paths import paths
 from .corpus import TextCorpus, TextDocument
 
 logger = logging.getLogger(__name__)
@@ -96,10 +97,10 @@ class EmbeddingEngine:
         Args:
             models: List of model names to load. Defaults to sentence-transformers default.
             cache_path: Path for caching embeddings.
-                       Defaults to /home/nock/quant_results/embeddings_cache
+                       Defaults to paths.embeddings_cache
             default_model: Default model to use for embedding.
         """
-        self.cache_path = Path(cache_path or "/home/nock/quant_results/embeddings_cache")
+        self.cache_path = Path(cache_path) if cache_path else paths.embeddings_cache
         self.cache_path.mkdir(parents=True, exist_ok=True)
 
         # Load models

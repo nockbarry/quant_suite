@@ -22,6 +22,8 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from src.core.paths import paths
+
 # Import evaluation module functions
 try:
     from src.evaluation import (
@@ -497,7 +499,7 @@ def run_validation(strategy_name: str, symbol: str, quick: bool = False, generat
     )
 
     # Save result
-    output_dir = Path("/home/nock/quant_results/validation_reports")
+    output_dir = paths.validation_reports
     output_dir.mkdir(parents=True, exist_ok=True)
 
     filename = f"validation_{strategy_name}_{symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"

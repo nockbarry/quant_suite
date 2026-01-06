@@ -15,6 +15,8 @@ from enum import Enum
 import json
 import uuid
 
+from src.core.paths import paths
+
 
 class Action(str, Enum):
     """Trading action types."""
@@ -145,9 +147,9 @@ class DecisionLogger:
 
     def __init__(
         self,
-        decisions_dir: str = "/home/nock/quant_results/decisions",
+        decisions_dir: str | Path | None = None,
     ):
-        self.decisions_dir = Path(decisions_dir)
+        self.decisions_dir = Path(decisions_dir) if decisions_dir else paths.decisions
         self.decisions_dir.mkdir(parents=True, exist_ok=True)
         self.daily_file: Optional[Path] = None
         self._ensure_daily_file()

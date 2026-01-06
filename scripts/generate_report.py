@@ -20,6 +20,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.core.paths import paths
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,7 @@ def generate_strategy_report(strategy_name: str, symbol: str) -> str:
     """Generate comprehensive strategy report."""
 
     # Load validation results if available
-    validation_dir = Path("/home/nock/quant_results/validation_reports")
+    validation_dir = paths.validation_reports
     validation_files = sorted(validation_dir.glob(f"validation_{strategy_name}_{symbol}_*.json"))
 
     validation = {}
@@ -37,7 +39,7 @@ def generate_strategy_report(strategy_name: str, symbol: str) -> str:
             validation = json.load(f)
 
     # Load research results
-    research_dir = Path("/home/nock/quant_results/comprehensive_research")
+    research_dir = paths.comprehensive_research
     # Exclude _leads.json files which have different structure
     research_files = sorted([f for f in research_dir.glob("cycle_*.json") if "_leads" not in f.name])
 
@@ -113,7 +115,7 @@ def generate_strategy_report(strategy_name: str, symbol: str) -> str:
 ## Files
 
 - Validation: `{validation_files[-1] if validation_files else 'Not available'}`
-- Research: `/home/nock/quant_results/comprehensive_research/{research.get('cycle_id', '')}.json`
+- Research: `{paths.comprehensive_research}/{research.get('cycle_id', '')}.json`
 """
 
     return report
@@ -122,7 +124,7 @@ def generate_strategy_report(strategy_name: str, symbol: str) -> str:
 def generate_research_report(cycle_id: str) -> str:
     """Generate research cycle summary report."""
 
-    cycle_path = Path(f"/home/nock/quant_results/comprehensive_research/{cycle_id}.json")
+    cycle_path = paths.comprehensive_research / f"{cycle_id}.json"
 
     if not cycle_path.exists():
         return f"# Error\n\nCycle not found: {cycle_id}"
@@ -259,12 +261,12 @@ def save_report(content: str, report_type: str, name: str) -> Path:
     """Save report to file."""
 
     output_dirs = {
-        'strategy': '/home/nock/quant_results/strategy_reports',
-        'research': '/home/nock/quant_results/research_reports',
-        'performance': '/home/nock/quant_results/performance_reports',
+        'strategy': paths.strategy_reports,
+        'research': paths.research_reports,
+        'performance': paths.performance_reports,
     }
 
-    output_dir = Path(output_dirs.get(report_type, '/home/nock/quant_results/reports'))
+    output_dir = output_dirs.get(report_type, paths.base / "reports")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     filename = f"{report_type}_{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"

@@ -21,6 +21,8 @@ from typing import Any
 
 import pandas as pd
 
+from src.core.paths import paths
+
 try:
     import aiohttp
 except ImportError:
@@ -142,7 +144,7 @@ class FREDClient:
                 "https://fred.stlouisfed.org/docs/api/api_key.html"
             )
 
-        self.cache_dir = cache_dir or Path("/home/nock/quant_results/scraped_data/commodities")
+        self.cache_dir = cache_dir or (paths.scraped_data / "commodities")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.rate_limit = rate_limit_per_minute
@@ -320,7 +322,7 @@ class FreeAPIHub:
         cache_dir: Path | None = None,
     ):
         self.fred = FREDClient(api_key=fred_api_key, cache_dir=cache_dir)
-        self.cache_dir = cache_dir or Path("/home/nock/quant_results/scraped_data")
+        self.cache_dir = cache_dir or paths.scraped_data
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     async def get_commodity(

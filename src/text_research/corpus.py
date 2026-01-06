@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any
 import logging
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -126,9 +128,9 @@ class TextCorpus:
 
         Args:
             storage_path: Directory for storing documents.
-                         Defaults to /home/nock/quant_results/text_corpus
+                         Defaults to paths.text_corpus
         """
-        self.storage_path = Path(storage_path or "/home/nock/quant_results/text_corpus")
+        self.storage_path = Path(storage_path) if storage_path else paths.text_corpus
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
         # Subdirectories

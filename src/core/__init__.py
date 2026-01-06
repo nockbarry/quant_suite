@@ -1,6 +1,7 @@
 """Core types and abstractions for the quant suite."""
 
 from .asset import Asset, Universe, MAJOR_CRYPTO, MAJOR_ETFS, SP500_TOP_50
+from .paths import PathConfig, paths, RESULTS_BASE
 from .order import Fill, Order, TradeProposal, apply_fill
 from .position import Portfolio, Position
 from .signal import Signal, SignalBundle
@@ -32,6 +33,10 @@ from .types import (
 )
 
 __all__ = [
+    # Paths
+    "PathConfig",
+    "paths",
+    "RESULTS_BASE",
     # Asset
     "Asset",
     "Universe",
