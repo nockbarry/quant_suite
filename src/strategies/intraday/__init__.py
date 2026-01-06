@@ -11,6 +11,7 @@ from .base import (
     IntradayStrategyConfig,
     IntradaySignal,
     SessionPhase,
+    get_session_phase,
 )
 from .vwap import VWAPStrategy
 from .momentum import IntradayMomentumStrategy
@@ -20,6 +21,7 @@ __all__ = [
     "IntradayStrategyConfig",
     "IntradaySignal",
     "SessionPhase",
+    "get_session_phase",
     "VWAPStrategy",
     "IntradayMomentumStrategy",
 ]
