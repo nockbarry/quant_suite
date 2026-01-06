@@ -278,6 +278,43 @@ class PathConfig:
         """Archived historical data."""
         return self._ensure_dir(self.base / "archive")
 
+    # === Real-Time Data ===
+
+    @property
+    def realtime(self) -> Path:
+        """Real-time data base directory."""
+        return self._ensure_dir(self.base / "realtime")
+
+    @property
+    def realtime_news(self) -> Path:
+        """Live news updates."""
+        return self._ensure_dir(self.realtime / "news")
+
+    @property
+    def realtime_technicals(self) -> Path:
+        """Intraday technical snapshots."""
+        return self._ensure_dir(self.realtime / "technicals")
+
+    @property
+    def realtime_alerts(self) -> Path:
+        """Alert history and state."""
+        return self._ensure_dir(self.realtime / "alerts")
+
+    @property
+    def realtime_breadth(self) -> Path:
+        """Market breadth snapshots."""
+        return self._ensure_dir(self.realtime / "breadth")
+
+    @property
+    def realtime_sentiment(self) -> Path:
+        """Sentiment indicator snapshots."""
+        return self._ensure_dir(self.realtime / "sentiment")
+
+    @property
+    def realtime_open_assessments(self) -> Path:
+        """Morning open assessments."""
+        return self._ensure_dir(self.realtime / "open_assessments")
+
     # === Helpers ===
 
     def dated_file(self, directory: Path, prefix: str, ext: str = "json") -> Path:

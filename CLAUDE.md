@@ -117,6 +117,50 @@ PRE-MARKET (6:00-8:00 AM ET)
 
 ---
 
+## Real-Time Infrastructure
+
+Intraday monitoring runs continuously during market hours:
+
+| Component | Module | Update Interval |
+|-----------|--------|-----------------|
+| **News Daemon** | `src/data/sources/realtime/news_daemon.py` | 30 min |
+| **Intraday Technicals** | `src/data/pipeline/intraday_technicals.py` | On demand |
+| **Options Analytics** | `src/data/pipeline/options_analytics.py` | On demand |
+| **Market Breadth** | `src/data/pipeline/market_breadth.py` | 5 min |
+| **Sentiment** | `src/data/pipeline/sentiment.py` | 1 hour |
+| **Alert Manager** | `src/alerts/alert_manager.py` | 1 min |
+| **Morning Open** | `src/decision/morning_open.py` | 9:35 AM |
+| **Calendar** | `src/data/calendars/calendar_manager.py` | Daily |
+| **Position Risk** | `src/risk/position_monitor.py` | 15 min |
+
+### Usage
+
+```python
+# Real-time news monitoring
+from src.data.sources.realtime import NewsDaemon
+daemon = NewsDaemon(watchlist=['SLB', 'HAL'], output_dir=paths.realtime_news)
+await daemon.start(interval_minutes=30)
+
+# Options analysis
+from src.data.pipeline.options_analytics import OptionsAnalyzer
+analyzer = OptionsAnalyzer()
+analytics = analyzer.analyze_option("SLB250206C00044000")
+print(analytics.get_summary())
+
+# Market breadth
+from src.data.pipeline.market_breadth import MarketBreadthAnalyzer
+breadth = MarketBreadthAnalyzer()
+print(breadth.get_summary())
+
+# Alerts
+from src.alerts import AlertManager
+alerts = AlertManager(config_path="config/alerts.yaml")
+alerts.add_stop_alert("SLB", 42.50)
+await alerts.start_monitoring()
+```
+
+---
+
 ## Data Sources
 
 ### Statistical Signals
@@ -273,6 +317,10 @@ can_trade, reason = pdt.can_day_trade("AAPL")
 | **Intraday** | `src/strategies/intraday/`, `src/data/pipeline/intraday.py` |
 | **PDT Manager** | `src/execution/pdt_manager.py` |
 | **Validation** | `src/evaluation/validation/` |
+| **Real-Time** | `src/data/sources/realtime/`, `src/data/pipeline/` |
+| **Alerts** | `src/alerts/` |
+| **Calendars** | `src/data/calendars/` |
+| **Risk Monitor** | `src/risk/position_monitor.py` |
 
 ---
 
@@ -289,6 +337,12 @@ All outputs stored in configurable results directory (default: `~/quant_results`
 | `trading_logs/` | Session logs |
 | `comprehensive_research/` | Research results |
 | `validation_reports/` | Strategy validation |
+| `realtime/news/` | Intraday news snapshots |
+| `realtime/technicals/` | Technical analysis snapshots |
+| `realtime/alerts/` | Alert history |
+| `realtime/breadth/` | Market breadth data |
+| `realtime/sentiment/` | Sentiment indicators |
+| `realtime/open_assessments/` | Morning open protocol results |
 
 Use `from src.core.paths import paths` to access directories programmatically.
 

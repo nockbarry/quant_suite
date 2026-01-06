@@ -1,0 +1,58 @@
+# Alert System Configuration
+# Used by AlertManager for real-time monitoring
+
+alerts:
+  # Price alerts per symbol
+  # These are loaded at startup and can be modified at runtime
+  price_alerts:
+    # Example:
+    # SLB:
+    #   support: 43.35
+    #   resistance: 45.00
+    #   stop: 42.50
+    #   take_profit: 48.00
+    # HAL:
+    #   support: 30.00
+    #   stop: 29.00
+
+  # Volume anomaly thresholds
+  volume:
+    spike_threshold: 2.0        # Alert when volume > 2x average
+    dry_up_threshold: 0.3       # Alert when volume < 30% of average
+
+  # Options-specific alerts
+  options:
+    theta_warning_pct: 5        # Alert if losing >5% to theta today
+    expiry_warning_dte: 7       # Alert when <7 DTE
+    iv_change_threshold: 20     # Alert on 20%+ IV change
+
+  # Portfolio-level alerts
+  portfolio:
+    max_position_pct: 25        # Single position concentration
+    max_sector_pct: 50          # Sector concentration
+    max_daily_loss_pct: 5       # Daily loss limit
+    max_drawdown_pct: 10        # Max drawdown before halt
+    pdt_warning_threshold: 2    # Alert when X day trades remaining
+
+  # Technical alerts
+  technical:
+    rsi_oversold: 30            # RSI below this = oversold alert
+    rsi_overbought: 70          # RSI above this = overbought alert
+    volume_spike_threshold: 2.0 # Volume ratio for spike detection
+
+  # Delivery configuration
+  delivery:
+    file: true                  # Save alerts to JSON file
+    console: true               # Print to console
+    discord_webhook: null       # Optional Discord webhook URL
+    slack_webhook: null         # Optional Slack webhook URL
+    email: null                 # Optional email address
+
+  # Default cooldown (minutes between repeated alerts)
+  default_cooldown_minutes: 15
+
+  # Alert priorities
+  # critical: Immediate action required
+  # high: Action recommended soon
+  # medium: Monitor closely
+  # low: Informational
