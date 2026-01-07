@@ -1,27 +1,49 @@
 # Project Athena - Claude Code Reference
 
-A hybrid intelligence trading system that combines **statistical signal generation**, **LLM decision synthesis**, and **human oversight**.
+A hybrid intelligence trading system where Claude operates as a **persistent trader** with continuous state awareness, thesis tracking, and learning capability.
+
+---
+
+## The ONE File Rule
+
+**Start every session by reading the unified state:**
+
+```python
+from src.synthesis.state import UnifiedState
+from src.core.paths import paths
+
+state = UnifiedState.load(paths.live_state)
+print(state.get_summary())
+```
+
+This single file contains:
+- Market regime and sentiment
+- Portfolio positions and risk
+- Aggregated signals for watchlist
+- Active investment theses
+- Pending decisions
+- Recent learnings
 
 ---
 
 ## System Philosophy
 
 ```
-                    INTELLIGENCE LAYERS
-┌──────────────────────────────────────────────────────┐
-│                                                      │
-│  STATISTICAL LAYER    →   LLM LAYER    →   HUMAN    │
-│  (Signal Generation)      (Decision)       (Review)  │
-│                                                      │
-│  • 50+ features           • Synthesizes          • EOD review    │
-│  • Technical signals        signals + research   • Approve trades│
-│  • Alternative data       • Applies latent       • Override      │
-│  • Pattern detection        market knowledge     • Set rules     │
-│                           • Documents reasoning                  │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                       INTELLIGENCE LAYERS                         │
+│                                                                    │
+│  STATISTICAL      →    LLM (Claude)    →    HUMAN                 │
+│  Signal Generation     Decision Engine      Oversight              │
+│                                                                    │
+│  • 50+ features        • Reads state.json   • EOD review          │
+│  • Technical signals   • Applies theses     • Approve trades      │
+│  • Alternative data    • Adversarial check  • Override            │
+│  • Pattern detection   • Pre-mortem         • Set rules           │
+│                        • Documents reasoning                       │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Principle**: Each layer adds value. Statistics find patterns. Claude adds context and reasoning. Humans provide judgment and accountability.
+**Key Principle**: The infrastructure IS the memory. Theses persist. Learnings accumulate. No separate SESSION.md needed.
 
 ---
 
@@ -29,12 +51,16 @@ A hybrid intelligence trading system that combines **statistical signal generati
 
 | Time (ET) | Skill | What Happens |
 |-----------|-------|--------------|
-| 6:30 AM | `/morning-briefing` | Gather news, portfolio state, alternative data |
-| 7:00 AM | `/trade-decision` | Claude synthesizes signals + research → decisions with reasoning |
-| 7:30 AM | `/execute-trades` | Execute approved decisions (human approval required) |
-| 4:30 PM | `/eod-review` | Analyze outcomes, update learnings, prepare tomorrow |
+| 6:00 AM | `research_prep.py` | Pre-compute features, signals, screens |
+| 6:30 AM | `/morning-briefing` | Read unified state, web search, review theses |
+| 7:00 AM | `/trade-decision` | Synthesize + adversarial analysis + thesis linking |
+| 7:30 AM | `/execute-trades` | Execute with human approval |
+| 4:30 PM | `/eod-review` | Extract learnings, update thesis conviction |
 
 ```bash
+# Pre-market prep
+PYTHONPATH=. python scripts/research_prep.py
+
 # Run the workflow
 claude /morning-briefing
 claude /trade-decision
@@ -44,16 +70,85 @@ claude /eod-review
 
 ---
 
+## Core Architecture
+
+### Synthesis Layer (NEW)
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **UnifiedState** | `src/synthesis/state.py` | Everything in one dataclass |
+| **LiveDaemon** | `src/synthesis/daemon.py` | Writes state.json every 5 min |
+| **SignalAggregator** | `src/synthesis/signals.py` | Combines all signal sources |
+
+```python
+# Update unified state on-demand
+from src.synthesis.daemon import LiveDaemon
+
+daemon = LiveDaemon()
+state = await daemon.update_now()
+```
+
+### Knowledge Layer (NEW)
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **ThesisTracker** | `src/knowledge/thesis.py` | Investment theses with signposts |
+| **LearningLog** | `src/knowledge/learnings.py` | Extracted trade learnings |
+| **KnowledgeBase** | `src/knowledge/base.py` | Company/sector understanding |
+
+```python
+# Create a thesis
+from src.knowledge.thesis import ThesisTracker
+from src.core.paths import paths
+
+tracker = ThesisTracker(paths.theses)
+thesis = tracker.create_thesis(
+    name="Venezuela Energy Recovery",
+    summary="Sanctions relief drives oilfield services rally",
+    conviction=65,
+    signposts=[{"description": "Chevron license extended", ...}],
+    positions=["SLB", "HAL"],
+)
+```
+
+### Decision Layer (ENHANCED)
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **DecisionLogger** | `src/decision/decision_logger.py` | Full records with thesis linking |
+| **AdversarialAgent** | `src/decision/adversary.py` | Challenge every trade |
+| **MorningBriefing** | `src/decision/morning_briefing.py` | Pre-market context |
+
+```python
+# Run adversarial analysis
+from src.decision.adversary import AdversarialAgent
+
+adversary = AdversarialAgent()
+analysis = adversary.challenge(
+    symbol="SLB",
+    proposed_action="BUY",
+    reasoning="Venezuela thesis + pre-market strength",
+    confidence=0.75,
+    context={"sector_exposure": 0.45}
+)
+
+print(f"Concern Level: {analysis.overall_concern_level}")
+print(f"Proceed: {analysis.proceed_recommendation}")
+```
+
+---
+
 ## Quick Commands
 
 ```bash
 # Daily Trading
-PYTHONPATH=. python scripts/run_daily.py --mode signals      # Generate signals
-PYTHONPATH=. python scripts/run_daily.py --mode paper        # Paper trading
+PYTHONPATH=. python scripts/research_prep.py              # Pre-compute research
+PYTHONPATH=. python scripts/run_daily.py --mode signals   # Generate signals
+PYTHONPATH=. python scripts/run_daily.py --mode paper     # Paper trading
 
 # Research
-PYTHONPATH=. python scripts/full_research_cycle.py           # Full research
-PYTHONPATH=. python scripts/full_research_cycle.py --quick   # Quick test
+PYTHONPATH=. python scripts/full_research_cycle.py        # Full research
+PYTHONPATH=. python scripts/full_research_cycle.py --quick # Quick test
 
 # Validation
 PYTHONPATH=. python scripts/validate_strategy.py --strategy bollinger_reversal --symbol QCOM --plots
@@ -65,160 +160,70 @@ PYTHONPATH=. python -m src.execution.monitoring.cli_dashboard
 
 ---
 
-## Architecture Overview
+## Trade Decision Framework
 
-```
-PRE-MARKET (6:00-8:00 AM ET)
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
-│  │ Alternative  │  │ Statistical  │  │   Morning    │               │
-│  │    Data      │  │   Signals    │  │   Research   │               │
-│  │              │  │              │  │              │               │
-│  │ Congressional│  │ Swing (daily)│  │ Overnight    │               │
-│  │ Pred Markets │  │ Intraday (5m)│  │ news         │               │
-│  │ Expert Sent. │  │ Technical    │  │ Pre-market   │               │
-│  │ Insider      │  │ ML models    │  │ Portfolio    │               │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘               │
-│         │                 │                  │                      │
-│         └─────────────────┼──────────────────┘                      │
-│                           ▼                                         │
-│              ┌────────────────────────┐                             │
-│              │    MORNING BRIEFING    │                             │
-│              │   (Structured context) │                             │
-│              └───────────┬────────────┘                             │
-│                          ▼                                          │
-│              ┌────────────────────────┐                             │
-│              │  LLM DECISION ENGINE   │                             │
-│              │                        │                             │
-│              │  • Consume all signals │                             │
-│              │  • Apply latent knowledge                            │
-│              │  • BUY/SELL/HOLD + why │                             │
-│              └───────────┬────────────┘                             │
-│                          ▼                                          │
-│              ┌────────────────────────┐                             │
-│              │   EXECUTION (9:30)     │                             │
-│              │                        │                             │
-│              │  • Risk validation     │                             │
-│              │  • PDT compliance      │                             │
-│              │  • Human approval      │                             │
-│              │  • Alpaca orders       │                             │
-│              └───────────┬────────────┘                             │
-│                          ▼                                          │
-│              ┌────────────────────────┐                             │
-│              │   LEARNING LOOP (4PM)  │                             │
-│              │                        │                             │
-│              │  • Track outcomes      │                             │
-│              │  • Update knowledge    │                             │
-│              │  • What worked/failed  │                             │
-│              └────────────────────────┘                             │
-└─────────────────────────────────────────────────────────────────────┘
-```
+When making trading decisions, I should systematically consider:
 
----
-
-## Real-Time Infrastructure
-
-Intraday monitoring runs continuously during market hours:
-
-| Component | Module | Update Interval |
-|-----------|--------|-----------------|
-| **News Daemon** | `src/data/sources/realtime/news_daemon.py` | 30 min |
-| **Intraday Technicals** | `src/data/pipeline/intraday_technicals.py` | On demand |
-| **Options Analytics** | `src/data/pipeline/options_analytics.py` | On demand |
-| **Market Breadth** | `src/data/pipeline/market_breadth.py` | 5 min |
-| **Sentiment** | `src/data/pipeline/sentiment.py` | 1 hour |
-| **Alert Manager** | `src/alerts/alert_manager.py` | 1 min |
-| **Morning Open** | `src/decision/morning_open.py` | 9:35 AM |
-| **Calendar** | `src/data/calendars/calendar_manager.py` | Daily |
-| **Position Risk** | `src/risk/position_monitor.py` | 15 min |
-
-### Usage
+### 1. Thesis Alignment
 
 ```python
-# Real-time news monitoring
-from src.data.sources.realtime import NewsDaemon
-daemon = NewsDaemon(watchlist=['SLB', 'HAL'], output_dir=paths.realtime_news)
-await daemon.start(interval_minutes=30)
-
-# Options analysis
-from src.data.pipeline.options_analytics import OptionsAnalyzer
-analyzer = OptionsAnalyzer()
-analytics = analyzer.analyze_option("SLB250206C00044000")
-print(analytics.get_summary())
-
-# Market breadth
-from src.data.pipeline.market_breadth import MarketBreadthAnalyzer
-breadth = MarketBreadthAnalyzer()
-print(breadth.get_summary())
-
-# Alerts
-from src.alerts import AlertManager
-alerts = AlertManager(config_path="config/alerts.yaml")
-alerts.add_stop_alert("SLB", 42.50)
-await alerts.start_monitoring()
+from src.knowledge.thesis import ThesisTracker
+tracker = ThesisTracker(paths.theses)
+theses = tracker.get_theses_for_symbol("SLB")
 ```
 
----
+- Is this symbol linked to an active thesis?
+- What is the current conviction level?
+- Have any signposts triggered recently?
 
-## Data Sources
+### 2. Statistical Signal Quality
 
-### Statistical Signals
-- **Technical**: RSI, MACD, Bollinger Bands, momentum (50+ features)
-- **ML Models**: XGBoost, LightGBM (require MCPT validation)
-- **Regime**: Volatility regime, trend detection
-
-### Alternative Data
-| Source | File | Signal Type |
-|--------|------|-------------|
-| **Congressional Trades** | `congressional_trades.py` | Cluster buying, Pelosi trades |
-| **Prediction Markets** | `prediction_markets.py` | Fed policy, recession odds, macro |
-| **Expert Sentiment** | `expert_sentiment.py` | Inverse Cramer, follow/fade pundits |
-| **Insider Trading** | `insider.py` | SEC Form 4 cluster buying |
-| **Options Flow** | `options_flow.py` | Unusual activity, put/call ratio |
-| **News/Reddit** | `news.py`, `reddit.py` | Sentiment, trending tickers |
-
-### Alternative Data Usage
-```python
-# Congressional cluster buying (multiple members buying same stock)
-from src.data.sources.alternative import find_congressional_clusters
-clusters = await find_congressional_clusters(min_traders=2)
-
-# Inverse Cramer (signal auto-inverted)
-from src.data.sources.alternative import get_inverse_cramer
-cramer_calls = await get_inverse_cramer(days=7)
-
-# Prediction markets for macro
-from src.data.sources.alternative import get_macro_signals
-macro = await get_macro_signals()
-```
-
----
-
-## LLM Decision Framework
-
-When making trading decisions, Claude explicitly considers:
-
-### 1. Statistical Signal Quality
 - Signal confidence and confirming indicators
 - Historical performance of signal type
 - Alignment with current market regime
 
-### 2. Latent Market Knowledge
-- **Company**: Business model, moat, earnings quality, management
-- **Sector**: Cycle position, catalysts, relative valuations
-- **Macro**: Fed policy, economic cycle, geopolitical risks
-- **Behavioral**: Sentiment extremes, crowded trades, positioning
+### 3. Knowledge Base Context
 
-### 3. Portfolio Context
-- Current exposure to symbol/sector
-- Correlation with existing positions
-- PDT constraints (<$25k accounts)
+```python
+from src.knowledge.base import KnowledgeBase
+kb = KnowledgeBase(paths.knowledge)
+company = kb.get_company("SLB")
+sector = kb.get_sector("energy")
+```
 
-### 4. Risk Assessment
-- What could go wrong?
-- Max loss scenario
-- Exit liquidity
+### 4. Adversarial Challenge
+
+**CRITICAL: Every trade gets challenged.**
+
+```python
+from src.decision.adversary import AdversarialAgent
+adversary = AdversarialAgent()
+analysis = adversary.challenge(symbol, action, reasoning, confidence, context)
+```
+
+### 5. Pre-Mortem
+
+Before every BUY: "It's 30 days later and I lost money. What happened?"
+
+### 6. Decision Logging
+
+```python
+from src.decision.decision_logger import create_decision, Action
+
+decision = create_decision(
+    symbol="SLB",
+    action=Action.BUY,
+    confidence=0.70,
+    size_pct=10.0,
+    reasoning="...",
+    key_factors=["..."],
+    risks=["..."],
+    context={...},
+    thesis_id="venezuela123",  # Link to thesis
+    pre_mortem="Policy reversal forces exit",
+    adversarial_notes="Concern: sector concentration",
+)
+```
 
 ---
 
@@ -239,30 +244,23 @@ When making trading decisions, Claude explicitly considers:
 | Sector exposure | 40% max |
 | Daily loss | 5% max |
 | Stop loss | 5-15% based on conviction |
-| Take profit | 10-30% |
 
 ### PDT Compliance (<$25k)
 - Max 3 day trades per 5 rolling days
 - 2-day minimum hold for swing trades
-- Use `PDTManager` to track capacity
-
-```python
-from src.execution.pdt_manager import create_pdt_manager
-pdt = create_pdt_manager(account_equity=10000)
-can_trade, reason = pdt.can_day_trade("AAPL")
-```
 
 ---
 
-## Claude Code Skills (11)
+## Claude Code Skills (12)
 
 ### Daily Trading
 | Skill | Purpose |
 |-------|---------|
-| `/morning-briefing` | Pre-market research aggregation |
-| `/trade-decision` | LLM decision engine |
-| `/execute-trades` | Execution with approval |
-| `/eod-review` | Daily analysis and learning |
+| `/morning-briefing` | Read unified state, research overnight news |
+| `/trade-decision` | Synthesize + adversarial + thesis linking |
+| `/execute-trades` | Execute with human approval |
+| `/eod-review` | Extract learnings, update thesis |
+| `/thesis` | **NEW** - Create/review/update theses |
 
 ### Research & Validation
 | Skill | Purpose |
@@ -285,7 +283,7 @@ can_trade, reason = pdt.can_day_trade("AAPL")
 | research-agent | Comprehensive strategy research |
 | research-worker-agent | Parallelizable sector research |
 | alpha-discovery-agent | Market inefficiency scanning |
-| hypothesis-generator-agent | Insight → strategy |
+| hypothesis-generator-agent | Insight to strategy |
 | brainstorm-agent | Feature ideation |
 
 ### Market Intelligence
@@ -309,42 +307,68 @@ can_trade, reason = pdt.can_day_trade("AAPL")
 
 | Category | Path |
 |----------|------|
+| **Unified State** | `~/quant_results/live/state.json` |
+| **Pre-computed Research** | `~/quant_results/live/research/` |
+| **Theses** | `~/quant_results/theses/` |
+| **Learnings** | `~/quant_results/learnings/` |
+| **Knowledge** | `~/quant_results/knowledge/` |
 | **Skills** | `.claude/skills/*/SKILL.md` |
 | **Agents** | `.claude/agents/*.md` |
+| **Synthesis Layer** | `src/synthesis/` |
+| **Knowledge Layer** | `src/knowledge/` |
+| **Decision Engine** | `src/decision/` |
 | **Strategies** | `src/strategies/` |
 | **Alternative Data** | `src/data/sources/alternative/` |
-| **Decision Engine** | `src/decision/` |
-| **Intraday** | `src/strategies/intraday/`, `src/data/pipeline/intraday.py` |
-| **PDT Manager** | `src/execution/pdt_manager.py` |
-| **Validation** | `src/evaluation/validation/` |
-| **Real-Time** | `src/data/sources/realtime/`, `src/data/pipeline/` |
-| **Alerts** | `src/alerts/` |
-| **Calendars** | `src/data/calendars/` |
-| **Risk Monitor** | `src/risk/position_monitor.py` |
 
 ---
 
 ## Output Directories
 
-All outputs stored in configurable results directory (default: `~/quant_results`, override with `QUANT_RESULTS_DIR` env var).
+All outputs in configurable results directory (default: `~/quant_results`):
 
 | Directory | Contents |
 |-----------|----------|
-| `briefings/` | Morning briefings |
+| `live/state.json` | **THE source of truth** |
+| `live/research/` | Pre-computed features, signals, screens |
+| `theses/` | Investment thesis YAML files |
+| `learnings/` | Monthly learning JSON files |
+| `knowledge/companies/` | Company briefs |
+| `knowledge/sectors/` | Sector context |
 | `decisions/` | Trading decisions with reasoning |
-| `trades/` | Trade execution records |
-| `pdt/` | PDT state tracking |
-| `trading_logs/` | Session logs |
-| `comprehensive_research/` | Research results |
-| `validation_reports/` | Strategy validation |
-| `realtime/news/` | Intraday news snapshots |
-| `realtime/technicals/` | Technical analysis snapshots |
-| `realtime/alerts/` | Alert history |
-| `realtime/breadth/` | Market breadth data |
-| `realtime/sentiment/` | Sentiment indicators |
-| `realtime/open_assessments/` | Morning open protocol results |
+| `briefings/` | Morning briefings |
+| `eod_reviews/` | End-of-day reviews |
 
-Use `from src.core.paths import paths` to access directories programmatically.
+---
+
+## Data Sources
+
+### Statistical Signals
+- **Technical**: RSI, MACD, Bollinger Bands, momentum (50+ features)
+- **ML Models**: XGBoost, LightGBM (require MCPT validation)
+- **Regime**: Volatility regime, trend detection
+
+### Alternative Data
+| Source | File | Signal Type |
+|--------|------|-------------|
+| **Congressional Trades** | `congressional_trades.py` | Cluster buying |
+| **Prediction Markets** | `prediction_markets.py` | Fed policy, macro |
+| **Expert Sentiment** | `expert_sentiment.py` | Inverse Cramer |
+| **Insider Trading** | `insider.py` | Form 4 clusters |
+| **Options Flow** | `options_flow.py` | Unusual activity |
+| **Social Sentiment** | `social_sentiment.py` | Reddit/Twitter |
+
+---
+
+## Real-Time Infrastructure
+
+| Component | Module | Update Interval |
+|-----------|--------|-----------------|
+| **LiveDaemon** | `src/synthesis/daemon.py` | 5 min |
+| **News Daemon** | `src/data/sources/realtime/news_daemon.py` | 30 min |
+| **Market Breadth** | `src/data/pipeline/market_breadth.py` | 5 min |
+| **Sentiment** | `src/data/pipeline/sentiment.py` | 1 hour |
+| **Alert Manager** | `src/alerts/alert_manager.py` | 1 min |
+| **Position Risk** | `src/risk/position_monitor.py` | 15 min |
 
 ---
 
@@ -366,7 +390,7 @@ Use `from src.core.paths import paths` to access directories programmatically.
 |-------|----------|
 | Empty signals | Market closed or thresholds not met |
 | Alpaca connection | Check `config/credentials.yaml` |
-| Feature computation | Needs 60+ days lookback |
+| No unified state | Run `LiveDaemon().update_now()` |
 | PDT violations | System enforces 2-day hold for <$25k |
 
 ---

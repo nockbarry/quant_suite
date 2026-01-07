@@ -77,6 +77,12 @@ class TradingDecision:
     realized_pnl_pct: Optional[float] = None
     outcome_notes: Optional[str] = None
 
+    # Thesis and learning integration (new fields)
+    thesis_id: Optional[str] = None  # Link to investment thesis
+    pre_mortem: Optional[str] = None  # "It's 30 days later and I lost. What happened?"
+    adversarial_notes: Optional[str] = None  # What the adversary said
+    learning_extracted: bool = False  # Has learning been extracted from this?
+
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -103,6 +109,10 @@ class TradingDecision:
             "realized_pnl": self.realized_pnl,
             "realized_pnl_pct": self.realized_pnl_pct,
             "outcome_notes": self.outcome_notes,
+            "thesis_id": self.thesis_id,
+            "pre_mortem": self.pre_mortem,
+            "adversarial_notes": self.adversarial_notes,
+            "learning_extracted": self.learning_extracted,
         }
 
     @classmethod
@@ -132,6 +142,10 @@ class TradingDecision:
             realized_pnl=data.get("realized_pnl"),
             realized_pnl_pct=data.get("realized_pnl_pct"),
             outcome_notes=data.get("outcome_notes"),
+            thesis_id=data.get("thesis_id"),
+            pre_mortem=data.get("pre_mortem"),
+            adversarial_notes=data.get("adversarial_notes"),
+            learning_extracted=data.get("learning_extracted", False),
         )
 
 
@@ -338,6 +352,9 @@ def create_decision(
     take_profit_pct: float = 15.0,
     expected_hold_days: int = 5,
     limit_price: Optional[float] = None,
+    thesis_id: Optional[str] = None,
+    pre_mortem: Optional[str] = None,
+    adversarial_notes: Optional[str] = None,
 ) -> TradingDecision:
     """
     Factory function to create a new trading decision.
@@ -369,4 +386,7 @@ def create_decision(
         key_factors=key_factors,
         risks=risks,
         context=context,
+        thesis_id=thesis_id,
+        pre_mortem=pre_mortem,
+        adversarial_notes=adversarial_notes,
     )

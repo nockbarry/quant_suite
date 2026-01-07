@@ -13,13 +13,34 @@ Pre-market research and intelligence gathering for informed trading decisions.
 This skill gathers and synthesizes:
 1. **Overnight news** - Market-moving events while you slept
 2. **Pre-market data** - Futures, gap direction, volume
-3. **Alternative signals** - Congressional trades, prediction markets, inverse Cramer (coming soon)
+3. **Alternative signals** - Congressional trades, prediction markets, options flow
 4. **Portfolio context** - Current positions and risk exposure
+5. **Active theses** - Investment theses with pending signposts
+6. **Pending decisions** - Decisions awaiting outcomes
 
 ## Quick Start
 
+### Option 1: Read From Unified State (Preferred)
+
+If the LiveDaemon is running, just read the state file:
+
 ```bash
-# Generate full morning briefing
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.synthesis.state import UnifiedState
+from src.core.paths import paths
+
+# Load unified state
+state = UnifiedState.load(paths.live_state)
+if state:
+    print(state.get_summary())
+else:
+    print("No unified state available. Run daemon or generate briefing directly.")
+EOF
+```
+
+### Option 2: Generate Fresh Briefing
+
+```bash
 PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
 import asyncio
 from datetime import datetime
@@ -35,39 +56,157 @@ asyncio.run(main())
 EOF
 ```
 
-## What to Research
+### Option 3: Update Unified State Now
 
-### 1. Overnight Market News
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+import asyncio
+from src.synthesis.daemon import LiveDaemon
 
-Search for major market-moving events:
-- Fed/central bank statements
-- Earnings surprises (after hours and pre-market)
-- Geopolitical developments
-- Economic data releases
-- Sector-specific news for current positions
+async def main():
+    daemon = LiveDaemon()
+    state = await daemon.update_now()
+    print(state.get_summary())
 
-### 2. Pre-Market Price Action
+asyncio.run(main())
+EOF
+```
 
-Check pre-market movers and futures:
-- S&P 500 futures (ES) direction
-- Major index gaps (QQQ, IWM)
-- Pre-market movers in your watchlist
-- Volume compared to normal
+## What's in Unified State
 
-### 3. Current Portfolio Review
+When you read `~/quant_results/live/state.json`, you get:
 
-Review positions from yesterday:
-- Any overnight news affecting holdings
-- Pre-market prices for current positions
-- Risk exposure by sector
+| Section | Contents |
+|---------|----------|
+| `market` | Market breadth, futures, VIX, regime |
+| `sentiment` | Fear/greed, put/call ratio, retail sentiment |
+| `portfolio` | Equity, cash, buying power, day P&L |
+| `positions` | Current holdings with unrealized P&L |
+| `risk` | Portfolio beta, VaR, sector exposure |
+| `watchlist_signals` | Aggregated signals for watchlist |
+| `theses` | Active investment theses with conviction |
+| `pending_decisions` | Decisions awaiting outcomes |
+| `recent_learnings` | Recent trade lessons |
+| `alerts` | Active alerts |
+| `upcoming_events` | Earnings, Fed, etc. |
+| `research_available` | Paths to pre-computed research files |
 
-### 4. Alternative Data (Expand Over Time)
+## Research Files Available
 
-As data sources are implemented:
-- Congressional trades (STOCK Act filings)
-- Prediction market probability shifts
-- Inverse Cramer signals
-- Insider trading clusters
+Pre-computed research (run `scripts/research_prep.py` before market):
+
+```bash
+# Features for watchlist
+cat ~/quant_results/live/research/features.json
+
+# Strategy signals
+cat ~/quant_results/live/research/signals.json
+
+# Alternative data summary
+cat ~/quant_results/live/research/alt_data.json
+
+# Stock screens
+cat ~/quant_results/live/research/screens.json
+```
+
+## Active Theses Review
+
+Check active investment theses:
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.knowledge.thesis import ThesisTracker
+from src.core.paths import paths
+
+tracker = ThesisTracker(paths.theses)
+theses = tracker.get_active_theses()
+
+for thesis in theses:
+    print(f"\n=== {thesis.name} ===")
+    print(f"Conviction: {thesis.conviction:.0f}%")
+    print(f"Positions: {', '.join(thesis.positions)}")
+
+    pending = thesis.get_pending_signposts()
+    if pending:
+        print(f"Next signpost: {pending[0].description}")
+
+    if thesis.check_review_due():
+        print("** REVIEW DUE **")
+EOF
+```
+
+## Pending Decisions
+
+Check decisions awaiting outcomes:
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.decision.decision_logger import DecisionLogger
+
+logger = DecisionLogger()
+pending = logger.get_pending_decisions()
+
+if pending:
+    print(f"{len(pending)} pending decisions:")
+    for d in pending:
+        print(f"  {d.action.value} {d.symbol} @ {d.timestamp.strftime('%Y-%m-%d %H:%M')}")
+else:
+    print("No pending decisions")
+EOF
+```
+
+## Research Process
+
+When this skill runs, Claude should:
+
+### Step 1: Check Unified State
+```python
+from src.synthesis.state import UnifiedState
+from src.core.paths import paths
+
+state = UnifiedState.load(paths.live_state)
+if state and state.is_fresh(max_age_minutes=30):
+    # Use existing state
+    summary = state.get_summary()
+else:
+    # State stale - update it
+    from src.synthesis.daemon import LiveDaemon
+    daemon = LiveDaemon()
+    state = await daemon.update_now()
+```
+
+### Step 2: Web Search for Overnight News
+```
+Search: "stock market news today [current date]"
+Search: "fed interest rates news"
+Search: "[sectors in portfolio] sector news"
+```
+
+### Step 3: Review Active Theses
+- Are any signposts about to trigger?
+- Any overnight news affecting thesis positions?
+- Any theses due for review?
+
+### Step 4: Check Pre-Computed Research
+```python
+import json
+research_dir = paths.live / "research"
+
+# Load signals
+with open(research_dir / "signals.json") as f:
+    signals = json.load(f)
+
+# Load screens
+with open(research_dir / "screens.json") as f:
+    screens = json.load(f)
+```
+
+### Step 5: Synthesize and Recommend
+Based on research:
+- Overall market sentiment
+- Thesis-driven opportunities
+- Specific opportunities or risks
+- Recommended focus for today
 
 ## Output Format
 
@@ -83,7 +222,6 @@ Save briefings to: `/home/nock/quant_results/briefings/briefing_YYYYMMDD.json`
     {
       "headline": "Fed signals patience on rate cuts",
       "source": "Reuters",
-      "time": "2026-01-05T22:30:00",
       "symbols_affected": ["SPY", "QQQ", "TLT"],
       "sentiment": "neutral",
       "importance": "high"
@@ -93,22 +231,37 @@ Save briefings to: `/home/nock/quant_results/briefings/briefing_YYYYMMDD.json`
   "pre_market": {
     "sp500_futures": "+0.3%",
     "nasdaq_futures": "+0.4%",
-    "vix": 14.5,
-    "major_movers": [
-      {"symbol": "NVDA", "change": "+2.1%", "reason": "AI chip demand"}
-    ]
+    "vix": 14.5
   },
+
+  "active_theses": [
+    {
+      "name": "Venezuela Energy Recovery",
+      "conviction": 65,
+      "positions": ["SLB", "HAL"],
+      "status": "Active - monitoring",
+      "next_signpost": "Chevron license extension"
+    }
+  ],
+
+  "pending_decisions": [
+    {
+      "symbol": "HAL",
+      "action": "BUY",
+      "status": "pending",
+      "created": "2026-01-05T14:00:00"
+    }
+  ],
 
   "portfolio_exposure": {
     "total_equity": 95888,
-    "sector_breakdown": {"energy": 45, "tech": 20, "other": 35},
-    "positions_with_news": ["SLB", "HAL"]
+    "sector_breakdown": {"energy": 45, "tech": 20, "other": 35}
   },
 
   "alternative_signals": {
     "congressional_trades": [],
-    "prediction_markets": [],
-    "inverse_cramer": []
+    "options_flow": [],
+    "social_sentiment": {}
   },
 
   "focus_areas": [
@@ -117,110 +270,39 @@ Save briefings to: `/home/nock/quant_results/briefings/briefing_YYYYMMDD.json`
   ],
 
   "risk_warnings": [
-    "Heavy energy concentration (45%)",
-    "Options expiring this week need attention"
+    "Heavy energy concentration (45%)"
   ]
 }
 ```
 
-## Research Process
-
-When this skill runs, Claude should:
-
-### Step 1: Web Search for Market News
-```
-Search: "stock market news today [current date]"
-Search: "fed interest rates news"
-Search: "[sectors in portfolio] sector news"
-```
-
-### Step 2: Check Current Positions
-```python
-# Get portfolio state
-from alpaca.trading.client import TradingClient
-client = TradingClient(api_key, secret_key, paper=True)
-positions = client.get_all_positions()
-
-# List symbols to research
-symbols = [p.symbol for p in positions if len(p.symbol) <= 10]
-```
-
-### Step 3: Research Each Position
-For each major holding:
-- Check overnight news
-- Note any earnings, analyst actions
-- Flag if thesis has changed
-
-### Step 4: Synthesize and Recommend
-Based on research:
-- Overall market sentiment
-- Specific opportunities or risks
-- Recommended focus for today
-
 ## Integration with Trade Decisions
 
-The briefing output is consumed by `/trade-decision`:
+The briefing (or unified state) is consumed by `/trade-decision`:
 
 ```python
 # In trade-decision skill
-with open(f"/home/nock/quant_results/briefings/briefing_{today}.json") as f:
-    briefing = json.load(f)
+from src.synthesis.state import UnifiedState
+from src.core.paths import paths
 
-# Use briefing context for decisions
-market_sentiment = briefing["market_sentiment"]
-overnight_news = briefing["overnight_news"]
-focus_areas = briefing["focus_areas"]
+state = UnifiedState.load(paths.live_state)
+# Use state.market, state.portfolio, state.theses, etc.
 ```
 
 ## Schedule
 
 | Time (ET) | Action |
 |-----------|--------|
-| 6:00 AM | Run morning briefing |
-| 6:30 AM | Review briefing output |
-| 7:00 AM | Feed to /trade-decision |
+| 6:00 AM | Run research_prep.py to pre-compute data |
+| 6:30 AM | Run morning briefing / update daemon |
+| 7:00 AM | Review briefing output |
+| 7:30 AM | Feed to /trade-decision |
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `/home/nock/quant_results/briefings/` | Saved briefings |
-| `/home/nock/quant_results/TRADING_RULES.md` | Trading rules to follow |
-| `/home/nock/quant_results/trading_logs/` | Previous session logs |
-
-## Example Session
-
-```
-User: /morning-briefing
-
-Claude: I'll generate your pre-market briefing for January 6, 2026.
-
-## Research Summary
-
-### Overnight News
-1. **Fed Commentary** - Waller suggests patience on rate cuts
-   - Impact: Slightly hawkish, may pressure growth stocks
-
-2. **China Trade** - New tariff concerns emerging
-   - Impact: Watch semiconductor supply chain
-
-3. **Energy Sector** - Venezuela stability improving per State Dept
-   - Impact: Supports SLB/HAL thesis
-
-### Pre-Market Check
-- S&P futures: +0.2%
-- Nasdaq futures: +0.3%
-- VIX: 14.8 (calm)
-
-### Portfolio Implications
-- Energy positions (SLB, HAL, XLE) should benefit from Venezuela news
-- No overnight news for other major holdings
-- Options expiring Friday need review
-
-### Today's Focus
-1. Monitor energy thesis - add on any dip
-2. Review Feb options for roll decisions
-3. Watch Fed commentary impact
-
-Briefing saved to: /home/nock/quant_results/briefings/briefing_20260106.json
-```
+| `~/quant_results/live/state.json` | Unified state (ONE file to read) |
+| `~/quant_results/live/research/` | Pre-computed research files |
+| `~/quant_results/briefings/` | Saved briefings |
+| `~/quant_results/theses/` | Investment theses |
+| `~/quant_results/decisions/` | Trading decisions |

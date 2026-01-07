@@ -11,26 +11,104 @@ LLM-powered trading decision engine that synthesizes research, signals, and mark
 ## Purpose
 
 This skill makes final trading decisions by:
-1. **Consuming** morning briefing + statistical signals
+1. **Consuming** unified state (market, portfolio, signals, theses)
 2. **Applying** latent knowledge about markets, sectors, companies
-3. **Outputting** BUY/SELL/HOLD decisions with reasoning
-4. **Logging** all decisions for feedback loop
+3. **Running** adversarial analysis to challenge every trade
+4. **Linking** decisions to investment theses
+5. **Outputting** BUY/SELL/HOLD decisions with reasoning
+6. **Logging** all decisions for feedback loop
 
 ## Prerequisites
 
-Run `/morning-briefing` first to generate today's research context.
+Run `/morning-briefing` first or ensure unified state is fresh.
 
 ## Quick Start
 
+### Step 1: Load Context
+
 ```bash
-# Generate decisions (after morning briefing)
 PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
-from src.decision.decision_logger import DecisionLogger
-logger = DecisionLogger()
-decisions = logger.get_today_decisions()
-print(f"Decisions today: {len(decisions)}")
-for d in decisions:
-    print(f"  {d.action.value} {d.symbol} ({d.confidence:.0%} confidence)")
+from src.synthesis.state import UnifiedState
+from src.core.paths import paths
+import json
+
+# Load unified state
+state = UnifiedState.load(paths.live_state)
+if state:
+    print("=== MARKET ===")
+    print(f"Regime: {state.market.regime}")
+    print(f"Trend: {state.market.trend}")
+
+    print("\n=== PORTFOLIO ===")
+    print(f"Equity: ${state.portfolio.equity:,.2f}")
+    print(f"Cash: ${state.portfolio.cash:,.2f}")
+
+    print("\n=== ACTIVE THESES ===")
+    for thesis in state.theses:
+        print(f"  {thesis.name}: {thesis.conviction:.0f}%")
+
+    print("\n=== SIGNALS ===")
+    for symbol, signal in list(state.watchlist_signals.items())[:5]:
+        print(f"  {symbol}: composite={signal.composite_score:.2f}, conf={signal.confidence:.2f}")
+EOF
+```
+
+### Step 2: Review Knowledge Base
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.knowledge.base import KnowledgeBase
+from src.core.paths import paths
+
+kb = KnowledgeBase(paths.knowledge)
+
+# Check if we have knowledge about a symbol
+symbol = "SLB"
+company = kb.get_company(symbol)
+if company:
+    print(f"=== {company.symbol} ===")
+    print(f"Business: {company.business_model}")
+    print(f"Moat: {company.moat}")
+    print(f"Best setups: {company.best_setups}")
+else:
+    print(f"No knowledge for {symbol}")
+EOF
+```
+
+### Step 3: Run Adversarial Analysis
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.decision.adversary import AdversarialAgent
+
+adversary = AdversarialAgent()
+
+# Challenge a proposed trade
+analysis = adversary.challenge(
+    symbol="SLB",
+    proposed_action="BUY",
+    reasoning="Venezuela thesis + pre-market strength",
+    confidence=0.75,
+    context={
+        "sector_exposure": 0.45,
+        "regime": "risk-on",
+    }
+)
+
+print(f"=== ADVERSARIAL ANALYSIS ===")
+print(f"Concern Level: {analysis.overall_concern_level}")
+print(f"Proceed Recommendation: {analysis.proceed_recommendation}")
+print(f"Confidence Adjustment: {analysis.confidence_adjustment:+.0%}")
+
+print("\nTiming Concerns:")
+for c in analysis.timing_concerns:
+    print(f"  - {c}")
+
+print("\nThesis Weaknesses:")
+for w in analysis.thesis_weaknesses:
+    print(f"  - {w}")
+
+print(f"\nWorst Case: {analysis.worst_case}")
 EOF
 ```
 
@@ -38,110 +116,154 @@ EOF
 
 When making trading decisions, I (Claude) should systematically consider:
 
-### 1. Statistical Signal Quality
+### 1. Thesis Alignment
+
+**Check active theses:**
+- Is this symbol linked to an active thesis?
+- What is the current conviction level?
+- Have any signposts triggered recently?
+- Is the thesis on track or deteriorating?
+
+```python
+from src.knowledge.thesis import ThesisTracker
+from src.core.paths import paths
+
+tracker = ThesisTracker(paths.theses)
+theses = tracker.get_theses_for_symbol("SLB")
+```
+
+### 2. Statistical Signal Quality
+
 - What is the signal confidence?
 - How many confirming indicators?
 - Historical performance of this signal type?
+- Does signal agree with thesis direction?
 
-### 2. Research Context (from briefing)
-- Any overnight news affecting this symbol?
-- Prediction market shifts relevant?
-- Congressional trading signals?
+### 3. Knowledge Base Context
 
-### 3. Latent Market Knowledge
+```python
+from src.knowledge.base import KnowledgeBase
 
-For each symbol, explicitly consider:
+kb = KnowledgeBase(paths.knowledge)
+company = kb.get_company(symbol)
+sector = kb.get_sector("energy")
+```
 
 **Company-Specific:**
 - Business model and competitive moat
 - Recent earnings quality and guidance
-- Management track record and credibility
-- Key customers, suppliers, and dependencies
-- Regulatory exposure and risks
+- Management track record
+- Best trading setups for this stock
 
 **Sector Dynamics:**
-- Where in the sector cycle (early/mid/late)?
+- Where in the sector cycle?
 - Key sector catalysts or headwinds?
-- Relative valuations within sector?
-- Cross-sector correlations?
+- Relative valuations?
 
-**Macro Context:**
-- Fed policy implications?
-- Economic cycle position?
-- Geopolitical risks?
-- Seasonal patterns (January effect, summer doldrums, etc.)?
+### 4. Adversarial Challenge
 
-**Behavioral Factors:**
-- Current sentiment extremes?
-- Crowded trades (everyone on same side)?
-- Retail vs institutional positioning?
-- Options market signals (put/call, skew)?
+**CRITICAL: Every trade gets challenged.**
 
-### 4. Portfolio Context
+```python
+from src.decision.adversary import AdversarialAgent
+
+adversary = AdversarialAgent()
+analysis = adversary.challenge(symbol, action, reasoning, confidence, context)
+
+# Adjust confidence based on adversarial analysis
+adjusted_confidence = confidence + analysis.confidence_adjustment
+```
+
+If adversary raises high/critical concerns:
+- Reconsider the trade
+- Address the concerns explicitly in reasoning
+- Reduce position size or pass
+
+### 5. Portfolio Context
+
 - Current exposure to this symbol/sector?
 - Correlation with existing positions?
 - Risk capacity remaining?
-- PDT constraints (if <$25k account)?
+- PDT constraints?
 
-### 5. Risk Assessment
-- What could go wrong?
-- What's the max loss scenario?
-- How liquid is exit if thesis fails?
+### 6. Pre-Mortem
+
+Before finalizing any BUY decision, write a pre-mortem:
+
+> "It's 30 days later and this trade lost money. What happened?"
+
+This forces you to identify failure modes before entering.
 
 ## Decision Output Format
 
-For each decision, log:
-
 ```python
 from src.decision.decision_logger import create_decision, Action, DecisionLogger
+from src.knowledge.thesis import ThesisTracker
+from src.decision.adversary import AdversarialAgent
 
+# 1. Run adversarial analysis
+adversary = AdversarialAgent()
+analysis = adversary.challenge(
+    symbol="SLB",
+    proposed_action="BUY",
+    reasoning="Venezuela thesis confirmed...",
+    confidence=0.75,
+    context={...}
+)
+
+# 2. Find linked thesis
+tracker = ThesisTracker(paths.theses)
+theses = tracker.get_theses_for_symbol("SLB")
+thesis_id = theses[0].id if theses else None
+
+# 3. Create decision with all context
 decision = create_decision(
     symbol="SLB",
     action=Action.BUY,
-    confidence=0.75,
-    size_pct=10.0,  # % of portfolio
+    confidence=0.70,  # Adjusted after adversary
+    size_pct=10.0,
     reasoning="""
     Venezuela reconstruction thesis confirmed by overnight State Dept comments.
     SLB has 15 rigs already in-country, first-mover advantage.
-    Pre-market showing strength (+1.2%).
-    Options flow showing institutional accumulation.
 
     Latent knowledge: SLB is the dominant oilfield services player with
-    proven ability to ramp operations quickly. Management has navigated
-    sanctions before. Their Middle East operations provide template for
-    Venezuela ramp.
+    proven ability to ramp operations quickly.
+
+    Adversary noted: High sector concentration (45%), potential for
+    policy reversal. Reducing position size from 15% to 10%.
     """,
     key_factors=[
         "Venezuela contract announcements imminent",
         "Pre-market strength confirming thesis",
-        "Institutional options flow bullish",
-        "First-mover advantage with stored equipment",
+        "First-mover advantage",
     ],
     risks=[
         "Geopolitical reversal (US policy change)",
         "Oil price collapse",
-        "Operational delays in Venezuela",
-        "Sector rotation away from energy",
+        "Already high energy exposure",
     ],
     context={
         "briefing_date": "2026-01-06",
-        "market_sentiment": "bullish",
-        "sp500_futures": "+0.3%",
-        "sector_performance": "energy +1.5%",
+        "regime": "risk-on",
+        "sector_exposure": 0.45,
     },
-    stop_loss_pct=15.0,
-    take_profit_pct=30.0,
+    stop_loss_pct=10.0,
+    take_profit_pct=25.0,
     expected_hold_days=10,
+    thesis_id=thesis_id,
+    pre_mortem="Policy reversal forces exit at loss; or oil collapse <$60 kills thesis",
+    adversarial_notes=f"Concern level: {analysis.overall_concern_level}. " +
+                      f"Adjusted confidence: -5%. Key issue: sector concentration.",
 )
 
-# Log the decision
+# 4. Log the decision
 logger = DecisionLogger()
 logger.log_decision(decision)
 ```
 
 ## Decision Rules
 
-### Position Sizing
+### Position Sizing by Confidence
 | Confidence | Size (% of portfolio) |
 |------------|----------------------|
 | 90%+ | 20% max |
@@ -149,58 +271,62 @@ logger.log_decision(decision)
 | 60-75% | 10% max |
 | <60% | 5% max or HOLD |
 
+**Note:** Adversarial analysis may reduce confidence and thus position size.
+
 ### Stop Loss Guidelines
 | Type | Stop Loss |
 |------|-----------|
 | High conviction thesis | -15% |
 | Moderate conviction | -10% |
 | Speculative | -5% |
-| Day trade | -3% |
 
 ### When to HOLD (No Action)
-- Confidence <50%
-- Signal + context misalignment
+- Confidence <50% after adversarial adjustment
+- Signal + thesis misalignment
 - Already at max sector exposure
-- Unclear risk/reward
+- Adversary raises critical concerns
 - PDT constraint would be triggered
 
 ### When to BUY
-- Statistical signal + research alignment
-- Clear thesis with defined exit
-- Acceptable risk/reward (2:1 minimum)
+- Statistical signal + thesis alignment
+- Adversary clears (low/medium concern)
+- Clear exit criteria defined
 - Portfolio has capacity
+- Pre-mortem identifies manageable risks
 
 ### When to SELL/CLOSE
 - Thesis invalidated
 - Stop loss triggered
 - Take profit target reached
+- Adversary raises new concerns
 - Better opportunity elsewhere
-- Risk management (reduce exposure)
 
 ## Example Session
 
 ```
 User: /trade-decision
 
-Claude: I'll analyze today's signals against the morning briefing and make trading decisions.
+Claude: I'll analyze today's context against active theses and make trading decisions.
 
 ## Context Review
 
-**Morning Briefing Summary:**
-- Market Sentiment: Bullish
+**Unified State Summary:**
+- Market Regime: risk-on
 - S&P Futures: +0.3%
-- Key News: Venezuela stability improving, Fed patient on rates
-- Focus Areas: Energy thesis, Options expiring Friday
+- VIX: 14.8 (calm)
 
-**Current Portfolio:**
+**Portfolio:**
 - Total Equity: $95,888
 - Energy exposure: 45% (high)
 - Cash available: ~$10,000
 
-**Statistical Signals Today:**
-1. SLB: BUY signal (bollinger_reversal, strength 0.72)
-2. HAL: BUY signal (insider_technical, strength 0.65)
-3. VLO: HOLD (no signal)
+**Active Theses:**
+1. Venezuela Energy Recovery (65% conviction) - SLB, HAL
+
+**Watchlist Signals:**
+- SLB: composite=0.65, swing_signal=0.72
+- HAL: composite=0.58, insider_signal=0.65
+- VLO: composite=0.30 (no action)
 
 ---
 
@@ -208,89 +334,67 @@ Claude: I'll analyze today's signals against the morning briefing and make tradi
 
 ### Decision 1: SLB - HOLD (despite BUY signal)
 
-**Reasoning:**
-Although SLB has a BUY signal, I'm recommending HOLD because:
-1. Already have significant SLB exposure (16% of portfolio)
-2. Energy sector at 45% - adding more increases concentration risk
-3. The thesis is playing out as expected - no need to add aggressively
+**Adversarial Analysis:**
+- Concern Level: MEDIUM
+- Key Issue: Already 16% SLB exposure + 45% energy sector
+- Recommendation: Do not add
 
-**Latent Knowledge Applied:**
-- SLB typically moves with oil prices in short term
-- Reconstruction contracts are multi-year - no urgency to add
-- Sector rotation could hurt short-term even if thesis correct
+**Reasoning:**
+Although SLB has a BUY signal and thesis is intact:
+1. Already have significant SLB exposure (16%)
+2. Energy sector at 45% - concentration risk
+3. Adversary correctly notes adding increases drawdown risk
+
+**Pre-mortem thought:**
+"If I add more and Venezuela policy reverses, I could lose 15%+ on
+an even larger position."
 
 **Action:** HOLD
-**Confidence:** 65% (in HOLD decision)
+**Confidence:** 70% (in HOLD decision)
 
 ---
 
 ### Decision 2: HAL - SMALL ADD
 
-**Reasoning:**
-HAL has insider_technical signal and is our second-highest conviction name.
-Adding a small position to maintain exposure without over-concentrating.
+**Adversarial Analysis:**
+- Concern Level: LOW
+- Key Issue: Same Venezuela thesis as SLB
+- Recommendation: Proceed with reduced size
 
-**Latent Knowledge Applied:**
-- HAL benefits from same Venezuela thesis as SLB
-- Slightly smaller player = more upside if thesis plays out
-- Options liquidity lower than SLB - prefer stock
+**Reasoning:**
+HAL is our secondary play on Venezuela thesis:
+1. Lower position than SLB - room to add
+2. Insider signal confirms institutional interest
+3. Diversifies within thesis (not just SLB)
+
+**Pre-mortem:**
+"If thesis fails, HAL will correlate with SLB loss. But smaller
+position limits damage."
 
 **Action:** BUY
 **Size:** 3% of portfolio (~$2,900)
-**Entry:** Market order at open
 **Stop Loss:** -10%
 **Take Profit:** +25%
-**Expected Hold:** 10 days
-**Confidence:** 68%
-
----
-
-### Decision 3: Review Feb Options
-
-**Reasoning:**
-Options expiring Feb 6 need attention. Based on current prices:
-- VLO calls: Down 16%, thesis slow - consider closing
-- GLD calls: Down 5%, gold thesis unclear - monitor
-
-**Action:** FLAG FOR REVIEW
-**Note:** Check mid-session prices before deciding
+**Confidence:** 65% (after adversarial)
+**Thesis Link:** venezuela_energy_recovery
 
 ---
 
 ## Decisions Logged
 
-1. HAL BUY - Decision ID: abc123
-2. VLO review flagged
-3. GLD review flagged
+1. SLB HOLD - No new decision logged (maintaining position)
+2. HAL BUY - Decision ID: abc12345
 
 Run /execute-trades to execute the HAL decision.
-```
-
-## Integration
-
-### Input (from morning-briefing)
-```python
-# Load today's briefing
-from src.decision.morning_briefing import MorningBriefingGenerator
-briefing = MorningBriefingGenerator.get_latest_briefing()
-```
-
-### Output (to execute-trades)
-```python
-# Decisions are saved to:
-# /home/nock/quant_results/decisions/decisions_YYYY-MM-DD.json
-
-# Execute-trades skill reads pending decisions:
-from src.decision.decision_logger import DecisionLogger
-logger = DecisionLogger()
-pending = logger.get_pending_decisions()
 ```
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `/home/nock/quant_results/briefings/` | Morning briefing input |
-| `/home/nock/quant_results/decisions/` | Decision logs output |
-| `/home/nock/quant_results/TRADING_RULES.md` | Trading rules to follow |
-| `/home/nock/quant_results/trading_logs/` | Historical session logs |
+| `~/quant_results/live/state.json` | Unified state (read first) |
+| `~/quant_results/theses/` | Investment theses |
+| `~/quant_results/knowledge/` | Company/sector knowledge |
+| `~/quant_results/decisions/` | Decision logs |
+| `src/decision/adversary.py` | Adversarial agent |
+| `src/knowledge/thesis.py` | Thesis tracker |

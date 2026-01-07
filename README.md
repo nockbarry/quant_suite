@@ -1,156 +1,142 @@
 # Project Athena: Hybrid Intelligence Trading System
 
-A trading platform that fuses **statistical alpha generation**, **LLM reasoning**, and **human oversight** for accounts of any size ($200-$25,000+).
+A trading platform that fuses **statistical alpha generation**, **LLM reasoning**, and **human oversight** into a persistent intelligence that learns from every trade.
 
 ---
 
 ## The Core Insight
 
-Within algorithmic trading, there exists a largely unexplored middle ground between two dominant paradigms:
+Within algorithmic trading, there exists a largely unexplored middle ground:
 
-### Camp A: Pure Quantitative
-Statistical models analyzing price, volume, and technical indicators. Rigorous and systematic, but often blind to the broader context that drives markets.
+| Approach | Strength | Weakness |
+|----------|----------|----------|
+| **Pure Quantitative** | Rigorous, systematic | Blind to context |
+| **Pure Discretionary** | Flexible, contextual | Prone to emotion |
+| **Hybrid Intelligence** | Both + learning | What we're building |
 
-### Camp B: Pure Discretionary
-Human judgment interpreting news, sentiment, and macro conditions. Flexible and contextual, but prone to emotion, bias, and inconsistency.
-
-### Camp C: Hybrid Intelligence (Project Athena)
-What if a system could harness the pattern-finding power of statistics, the contextual reasoning of large language models, and the judgment of an informed human? This isn't replacing any single approach but creating something genuinely new: a pipeline where **each layer contributes its unique strength**, and no single point of failure can derail the entire strategy.
+**Project Athena** creates something genuinely new: a system where Claude operates as a **persistent trader** with continuous state awareness, investment thesis tracking, and learning capability. The infrastructure itself becomes the memory.
 
 ---
 
-## System Architecture
+## Architecture: One File to Rule Them All
 
-```mermaid
-flowchart TB
-    subgraph DataLayer["Data Layer"]
-        direction TB
-        Alt["Alternative Data<br/>Congressional, Prediction Markets,<br/>Expert Sentiment, Insider"]
-        Stats["Statistical Signals<br/>50+ Features, Technical,<br/>ML Models"]
-        RT["Real-Time Data<br/>News, Technicals,<br/>Options, Breadth"]
-    end
+The key insight: **centralize state**. One file to read, one place to look.
 
-    subgraph Pipeline["Processing Pipeline"]
-        direction TB
-        Ingest["Data Ingestion<br/>& Caching"]
-        Features["Feature<br/>Engineering"]
-        Signals["Signal<br/>Generation"]
-    end
-
-    subgraph Intelligence["Intelligence Layers"]
-        direction LR
-        Statistical["STATISTICAL<br/>Pattern Detection"]
-        LLM["LLM (Claude)<br/>Synthesis & Reasoning"]
-        Human["HUMAN<br/>Oversight & Approval"]
-    end
-
-    subgraph Execution["Execution Layer"]
-        direction TB
-        Risk["Risk Manager<br/>Limits, PDT, VaR"]
-        Orders["Order Manager<br/>Alpaca API"]
-        Monitor["Portfolio Monitor<br/>Alerts, P&L"]
-    end
-
-    subgraph Research["Research Track"]
-        direction TB
-        Agents["13 Claude Agents<br/>Research, Validation"]
-        Backtest["Backtesting<br/>MCPT, Walk-Forward"]
-        Promote["Strategy<br/>Promotion"]
-    end
-
-    subgraph Output["Output Layer"]
-        direction TB
-        Briefings["Briefings &<br/>Decisions"]
-        Trades["Trade<br/>Records"]
-        Reports["Research<br/>Reports"]
-        Realtime["Real-Time<br/>Snapshots"]
-    end
-
-    Alt --> Ingest
-    Stats --> Ingest
-    RT --> Ingest
-    Ingest --> Features
-    Features --> Signals
-    Signals --> Statistical
-    Statistical --> LLM
-    LLM --> Human
-    Human --> Risk
-    Risk --> Orders
-    Orders --> Monitor
-    Monitor --> Realtime
-
-    Signals --> Agents
-    Agents --> Backtest
-    Backtest --> Promote
-    Promote --> Execution
-
-    LLM --> Briefings
-    Orders --> Trades
-    Agents --> Reports
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     ~/quant_results/live/state.json                  │
+│  Market + Portfolio + Signals + Theses + Decisions + Learnings      │
+└─────────────────────────────────────────────────────────────────────┘
+                                  ▲
+                                  │ writes continuously
+┌─────────────────────────────────────────────────────────────────────┐
+│                      LIVE DAEMON (background)                        │
+│  Pulls from all components, synthesizes, writes unified state       │
+└─────────────────────────────────────────────────────────────────────┘
+                                  ▲
+        ┌─────────────┬───────────┼───────────┬─────────────┐
+        │             │           │           │             │
+   ┌────┴────┐  ┌─────┴─────┐ ┌───┴───┐ ┌─────┴─────┐ ┌─────┴─────┐
+   │ Signals │  │ Portfolio │ │ News  │ │ Theses    │ │ Decisions │
+   │ Engine  │  │ Monitor   │ │ Daemon│ │ Tracker   │ │ Logger    │
+   └─────────┘  └───────────┘ └───────┘ └───────────┘ └───────────┘
 ```
 
+When Claude starts a session, it reads ONE file and knows:
+- Market regime and sentiment
+- Portfolio positions and risk
+- Aggregated signals for the watchlist
+- Active investment theses with conviction levels
+- Pending decisions awaiting outcomes
+- Recent learnings from past trades
+
 ---
 
-## Daily Trading Workflow with Claude Code
+## What Makes This Different
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant User
-    participant Claude as Claude Code
-    participant Data as Data Pipeline
-    participant Risk as Risk Manager
-    participant Alpaca as Alpaca API
+### 1. Investment Theses with Signposts
 
-    rect rgb(40, 40, 60)
-        Note over User,Alpaca: PRE-MARKET (6:00-9:30 AM ET)
-    end
+Every trade is linked to a thesis - a belief about what the market is missing:
 
-    User->>Claude: /morning-briefing
-    Claude->>Data: Fetch overnight news, portfolio, signals
-    Data-->>Claude: Aggregated briefing data
-    Claude-->>User: Structured morning briefing
+```yaml
+name: Venezuela Energy Recovery
+conviction: 65%
+positions: [SLB, HAL]
 
-    User->>Claude: /trade-decision
-    Claude->>Claude: Synthesize signals + latent knowledge
-    Claude-->>User: BUY/SELL/HOLD decisions with reasoning
+signposts:
+  - description: "Chevron license extended"
+    bullish_if: "Full renewal with expanded scope"
+    bearish_if: "Only cosmetic extension"
+    status: pending
 
-    rect rgb(40, 60, 40)
-        Note over User,Alpaca: MARKET OPEN (9:30 AM ET)
-    end
+invalidation_triggers:
+  - "Oil below $60 makes Venezuela uneconomic"
+  - "Policy reversal forces exit"
+```
 
-    User->>Claude: /execute-trades
-    Claude->>Risk: Validate positions, PDT, limits
-    Risk-->>Claude: Approval status
-    Claude-->>User: Request human approval
-    User->>Claude: Approve trades
-    Claude->>Alpaca: Submit orders
-    Alpaca-->>Claude: Order confirmations
-    Claude-->>User: Execution report
+The system tracks signposts, updates conviction, and knows when to exit.
 
-    rect rgb(60, 60, 40)
-        Note over User,Alpaca: INTRADAY MONITORING (9:30-4:00 PM ET)
-    end
+### 2. Adversarial Analysis
 
-    loop Every 30 minutes
-        Data->>Data: News daemon check
-        Data->>Data: Technical updates
-        Data->>Risk: Alert checks
-        Risk-->>User: Alerts (if triggered)
-    end
+Every trade gets challenged before execution:
 
-    User->>Claude: /monitor (as needed)
-    Claude->>Data: Get portfolio status, technicals
-    Claude-->>User: Position report with recommendations
+```
+Proposed: BUY SLB at $45
 
-    rect rgb(60, 40, 40)
-        Note over User,Alpaca: MARKET CLOSE (4:00 PM ET)
-    end
+Adversarial Analysis:
+- Concern Level: MEDIUM
+- Timing Concerns: Already up 15% this month
+- Thesis Weaknesses: Geopolitical reversal risk
+- Worst Case: Policy change forces -20% exit
+- Recommendation: Proceed with reduced size
+- Confidence Adjustment: -5%
+```
 
-    User->>Claude: /eod-review
-    Claude->>Alpaca: Fetch day's trades, P&L
-    Claude->>Claude: Analyze decisions vs outcomes
-    Claude-->>User: Daily review with learnings
+### 3. Learning Loop
+
+Learnings are extracted from every closed position:
+
+```
+Pattern: thesis_insider_confluence
+What happened: Bought HAL on insider signal + Venezuela thesis. Rallied 4.5%.
+What I learned: Insider + thesis alignment is high-conviction setup.
+How this changes approach: Size 5% instead of 3% on this pattern.
+Tags: [insider, thesis, energy, confluence]
+```
+
+These learnings persist and inform future decisions.
+
+### 4. Pre-Mortem Thinking
+
+Before every trade: "It's 30 days later and I lost money. What happened?"
+
+This forces identification of failure modes before entering.
+
+---
+
+## Daily Workflow
+
+```
+6:00 AM  ─── scripts/research_prep.py ───► Pre-compute features, signals, screens
+           │
+6:30 AM  ─── /morning-briefing ───────────► Read unified state + web search
+           │                                 Review active theses
+           │                                 Check pending signposts
+           │
+7:00 AM  ─── /trade-decision ─────────────► Synthesize signals + thesis alignment
+           │                                 Run adversarial analysis
+           │                                 Write pre-mortem
+           │                                 Log decision with thesis link
+           │
+9:30 AM  ─── /execute-trades ─────────────► Human approval required
+           │                                 Execute via Alpaca
+           │
+Intraday ─── LiveDaemon ──────────────────► Update state.json every 5 min
+           │
+4:30 PM  ─── /eod-review ─────────────────► Analyze outcomes vs predictions
+                                            Extract learnings
+                                            Update thesis conviction
+                                            Prepare tomorrow's focus
 ```
 
 ---
@@ -167,217 +153,129 @@ pip install -r requirements.txt
 cp config/credentials.yaml.example config/credentials.yaml
 # Edit with your Alpaca API keys
 
+# Pre-compute research (before market)
+PYTHONPATH=. python scripts/research_prep.py
+
 # Run daily workflow with Claude Code
 claude /morning-briefing
 claude /trade-decision
 claude /execute-trades
-
-# Or run statistical pipeline directly
-PYTHONPATH=. python scripts/run_daily.py --mode paper
+claude /eod-review
 ```
-
----
-
-## Daily Workflow
-
-| Time (ET) | Command | What Happens |
-|-----------|---------|--------------|
-| 6:30 AM | `/morning-briefing` | Gather news, portfolio state, alternative data |
-| 7:00 AM | `/trade-decision` | Claude synthesizes and makes BUY/SELL/HOLD decisions |
-| 7:30 AM | `/execute-trades` | Execute approved trades (human approval required) |
-| 9:35 AM | Morning Open Protocol | Auto-assess gap behavior, sector rotation |
-| Intraday | `/monitor` | Check positions, alerts, technicals |
-| 4:30 PM | `/eod-review` | Analyze outcomes, update learnings |
-
-**Key Innovation**: Claude Code IS the decision engine. Statistical models generate signals, but Claude synthesizes research context and applies latent market knowledge to make final trading decisions with documented reasoning.
-
----
-
-## Real-Time Trading Infrastructure
-
-The system includes comprehensive intraday monitoring:
-
-```mermaid
-flowchart LR
-    subgraph Sources["Data Sources"]
-        YF["Yahoo Finance"]
-        RSS["RSS Feeds"]
-        SEC["SEC EDGAR"]
-    end
-
-    subgraph Daemons["Background Daemons"]
-        News["News Daemon<br/>30-min intervals"]
-        Tech["Technical Analyzer<br/>5-min intervals"]
-        Alerts["Alert Manager<br/>1-min intervals"]
-    end
-
-    subgraph Analytics["Real-Time Analytics"]
-        Breadth["Market Breadth<br/>Sector Rotation"]
-        Options["Options Analytics<br/>Greeks, IV Rank"]
-        Sentiment["Sentiment<br/>Fear & Greed"]
-        Risk["Position Risk<br/>VaR, Correlation"]
-    end
-
-    subgraph Output["Output"]
-        Files["JSON Snapshots"]
-        Console["Console Alerts"]
-        LLM["LLM Summaries"]
-    end
-
-    YF --> Tech
-    RSS --> News
-    SEC --> News
-    YF --> Breadth
-    YF --> Options
-
-    News --> Files
-    Tech --> Files
-    Alerts --> Console
-    Breadth --> LLM
-    Options --> LLM
-    Sentiment --> LLM
-    Risk --> LLM
-```
-
-### Components
-
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| **Alert System** | `src/alerts/` | Configurable price, volume, options alerts |
-| **Morning Open Protocol** | `src/decision/morning_open.py` | 9:35 AM gap/sector assessment |
-| **Intraday Technicals** | `src/data/pipeline/intraday_technicals.py` | S/R, patterns, multi-timeframe |
-| **News Daemon** | `src/data/sources/realtime/news_daemon.py` | Continuous news monitoring |
-| **Options Analytics** | `src/data/pipeline/options_analytics.py` | Greeks, IV, roll recommendations |
-| **Market Breadth** | `src/data/pipeline/market_breadth.py` | Sector rotation, VIX analysis |
-| **Sentiment** | `src/data/pipeline/sentiment.py` | Put/call, Fear & Greed, contrarian |
-| **Calendar Manager** | `src/data/calendars/calendar_manager.py` | Earnings, economic events |
-| **Position Risk Monitor** | `src/risk/position_monitor.py` | VaR, correlation, limits |
 
 ---
 
 ## Output Directory Structure
 
-All outputs are stored in a configurable results directory (default: `~/quant_results`):
-
 ```
-quant_results/
-├── briefings/              # Morning briefings and daily summaries
-├── decisions/              # Trading decisions with reasoning logs
-├── trades/                 # Trade execution records
-├── trading_logs/           # Detailed session logs
+~/quant_results/
+├── live/                       # THE source of truth
+│   ├── state.json             # Unified state (READ THIS FIRST)
+│   └── research/              # Pre-computed research files
+│       ├── features.json
+│       ├── signals.json
+│       ├── alt_data.json
+│       └── screens.json
 │
-├── realtime/               # Real-time intraday data
-│   ├── news/               # News snapshots (30-min intervals)
-│   ├── technicals/         # Technical analysis snapshots
-│   ├── alerts/             # Alert history
-│   ├── breadth/            # Market breadth snapshots
-│   ├── sentiment/          # Sentiment indicator snapshots
-│   └── open_assessments/   # Morning open protocol results
+├── theses/                     # Investment theses (YAML)
+│   └── venezuela_energy.yaml
 │
-├── comprehensive_research/ # Full research cycle outputs
-├── research_sessions/      # Text research session data
-├── research_reports/       # Analysis reports
-├── strategy_reports/       # Strategy documentation
+├── learnings/                  # Trade learnings (monthly JSON)
+│   └── 2026-01.json
 │
-├── alpha_discovery/        # Alpha scan results
-├── macro_research/         # Geopolitical and macro analysis
-├── regime_reports/         # Market regime classifications
+├── knowledge/                  # Persistent knowledge
+│   ├── companies/
+│   │   └── SLB.yaml
+│   └── sectors/
+│       └── energy.yaml
 │
-├── validation_reports/     # Strategy validation (MCPT, walk-forward)
-├── critic_reports/         # Safety validation for bias detection
-├── options_validation/     # Options strategy validation
-├── plots/                  # Strategy visualizations
-│
-├── promotions/             # Strategy promotion records
-├── paper_trading/          # Paper trading outputs
-├── pdt/                    # PDT compliance tracking
-├── performance_reports/    # Performance analytics
-│
-├── scraped_data/           # Alternative data cache
-├── sessions/               # Session-based research data
-└── archive/                # Historical data
-```
-
-### Configuring Output Location
-
-```bash
-# Default (uses ~/quant_results)
-python scripts/run_trading.py
-
-# Custom location
-QUANT_RESULTS_DIR=/data/trading/results python scripts/run_trading.py
-```
-
-Or use the PathConfig programmatically:
-
-```python
-from src.core.paths import paths
-
-# Access directories
-briefing_dir = paths.briefings
-decisions_dir = paths.decisions
-realtime_news = paths.realtime_news
-realtime_alerts = paths.realtime_alerts
+├── decisions/                  # Trading decisions with reasoning
+├── briefings/                  # Morning briefings
+├── eod_reviews/               # End-of-day reviews
+└── ...
 ```
 
 ---
 
-## Features
+## Core Components
 
-### Alternative Data Sources
+### Synthesis Layer
+| Component | Purpose |
+|-----------|---------|
+| `UnifiedState` | Everything in one dataclass |
+| `LiveDaemon` | Writes state.json continuously |
+| `SignalAggregator` | Combines all signal sources |
 
-| Source | Signals |
-|--------|---------|
-| Congressional Trades | Cluster buying (Pelosi, committee members) |
-| Prediction Markets | Fed policy, recession odds, macro events |
-| Expert Sentiment | Inverse Cramer, follow/fade pundits |
-| Insider Trading | SEC Form 4 cluster buying |
-| Options Flow | Unusual activity, institutional positioning |
-| News/Reddit | Sentiment, trending tickers |
+### Knowledge Layer
+| Component | Purpose |
+|-----------|---------|
+| `ThesisTracker` | Investment theses with signposts |
+| `LearningLog` | Extracted trade learnings |
+| `KnowledgeBase` | Company/sector understanding |
 
-### PDT Compliance
-
-For accounts under $25,000:
-- Tracks 3 day trades per 5 rolling days
-- Enforces 2-day minimum hold for swings
-- PDTManager for real-time capacity tracking
-
-### Intraday Trading
-
-- VWAP bounce strategy
-- Momentum continuation
-- ATR-based stops and targets
-- Session phase awareness (opening, power hour)
-
-### Research Framework
-
-- 13 specialized Claude Code agents
-- MCPT validation (p < 0.05 required)
-- Walk-forward testing
-- Critic validation for bias detection
+### Decision Layer
+| Component | Purpose |
+|-----------|---------|
+| `DecisionLogger` | Full decision records |
+| `AdversarialAgent` | Challenge every trade |
+| `MorningBriefing` | Pre-market context |
 
 ---
 
-## Claude Code Integration
+## Claude Code Skills (12)
 
-### Skills (11)
+### Daily Trading
+| Skill | Purpose |
+|-------|---------|
+| `/morning-briefing` | Read unified state, research overnight news |
+| `/trade-decision` | Synthesize + adversarial analysis + thesis linking |
+| `/execute-trades` | Execute with human approval |
+| `/eod-review` | Extract learnings, update thesis conviction |
+| `/thesis` | **NEW** - Create/review/update investment theses |
 
-**Daily Trading:**
-- `/morning-briefing` - Pre-market research
-- `/trade-decision` - LLM decision engine
-- `/execute-trades` - Execute with approval
-- `/eod-review` - Daily analysis
+### Research & Validation
+| Skill | Purpose |
+|-------|---------|
+| `/research` | Run research cycles |
+| `/critic` | Safety validation |
+| `/validate` | Full validation suite |
+| `/brainstorm` | Feature and strategy ideation |
+| `/promote` | Move to production |
+| `/monitor` | Portfolio oversight |
+| `/report` | Generate documentation |
 
-**Research:**
-- `/research`, `/validate`, `/critic`, `/brainstorm`, `/promote`, `/monitor`, `/report`
+---
 
-### Agents (13)
+## Claude Code Agents (13)
 
-**Research:** research-agent, research-worker-agent, alpha-discovery-agent, hypothesis-generator-agent, brainstorm-agent
+### Research Track
+research-agent, research-worker-agent, alpha-discovery-agent, hypothesis-generator-agent, brainstorm-agent
 
-**Market Intelligence:** macro-research-agent, news-analyst-agent, regime-detector-agent
+### Market Intelligence
+macro-research-agent, news-analyst-agent, regime-detector-agent
 
-**Operations:** critic-agent, monitor-agent, data-acquisition-agent, orchestrator-agent
+### Operations
+critic-agent, monitor-agent, data-acquisition-agent, orchestrator-agent
+
+---
+
+## Key Principles
+
+### Token Efficiency
+- Pre-compute everything possible (`research_prep.py`)
+- Claude reads files, doesn't run pipelines
+- ONE unified state file instead of scattered queries
+
+### Session Continuity
+- The infrastructure IS the memory
+- Theses persist across sessions
+- Learnings accumulate over time
+- No separate SESSION.md needed
+
+### Latent Knowledge Access
+- Externalize knowledge (company/sector briefs)
+- Structured decision frameworks
+- Adversarial challenge before every trade
 
 ---
 
@@ -388,12 +286,6 @@ Before production:
 - **Out-of-sample Sharpe > 0.5**
 - **Critic validation** (no lookahead bias, overfitting)
 
-```python
-from src.evaluation.validation.mcpt import mcpt_test
-result = mcpt_test(strategy_returns, benchmark_returns, n_permutations=1000)
-print(f"p-value: {result.p_value:.4f}")
-```
-
 ---
 
 ## Trading Rules
@@ -403,9 +295,28 @@ print(f"p-value: {result.p_value:.4f}")
 | Max single position | 25% |
 | Max sector exposure | 40% |
 | Max daily loss | 5% |
-| Stop loss | 5-15% |
-| PDT day trades | 3 per 5 days |
+| Stop loss | 5-15% (based on conviction) |
+| PDT day trades | 3 per 5 days (<$25k) |
 | Min swing hold | 2 days |
+
+---
+
+## Data Sources
+
+### Statistical Signals
+- 50+ technical features (RSI, MACD, Bollinger, momentum)
+- ML models (require MCPT validation)
+- Regime detection
+
+### Alternative Data
+| Source | Signal Type |
+|--------|-------------|
+| Congressional Trades | Cluster buying patterns |
+| Prediction Markets | Fed policy, macro events |
+| Expert Sentiment | Inverse Cramer, pundit fade |
+| Insider Trading | Form 4 cluster buying |
+| Options Flow | Unusual activity, positioning |
+| Social Sentiment | Reddit/Twitter trending |
 
 ---
 
@@ -416,10 +327,8 @@ print(f"p-value: {result.p_value:.4f}")
 | `CLAUDE.md` | Claude Code reference |
 | `docs/EVALUATION_API.md` | Backtesting, validation |
 | `docs/ALPHA_DISCOVERY.md` | Alternative data |
-| `docs/REALTIME_DATA_SPEC.md` | Real-time infrastructure spec |
+| `docs/TEXT_RESEARCH.md` | Text research, embeddings |
 | `docs/TRADING_GUIDE.md` | User guide |
-| `DEVLOG.md` | Development log |
-| `RESEARCH_LOG.md` | Research findings |
 
 ---
 

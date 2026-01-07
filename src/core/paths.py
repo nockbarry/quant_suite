@@ -278,6 +278,50 @@ class PathConfig:
         """Archived historical data."""
         return self._ensure_dir(self.base / "archive")
 
+    # === Live State (Unified State Engine) ===
+
+    @property
+    def live(self) -> Path:
+        """Live state directory - THE source of truth."""
+        return self._ensure_dir(self.base / "live")
+
+    @property
+    def live_state(self) -> Path:
+        """Unified state JSON file."""
+        return self.live / "state.json"
+
+    @property
+    def live_research(self) -> Path:
+        """Pre-computed research files for quick access."""
+        return self._ensure_dir(self.live / "research")
+
+    # === Knowledge Base ===
+
+    @property
+    def theses(self) -> Path:
+        """Investment thesis tracking."""
+        return self._ensure_dir(self.base / "theses")
+
+    @property
+    def learnings(self) -> Path:
+        """Trade learnings and patterns."""
+        return self._ensure_dir(self.base / "learnings")
+
+    @property
+    def knowledge(self) -> Path:
+        """Persistent knowledge base."""
+        return self._ensure_dir(self.base / "knowledge")
+
+    @property
+    def knowledge_companies(self) -> Path:
+        """Company briefs."""
+        return self._ensure_dir(self.knowledge / "companies")
+
+    @property
+    def knowledge_sectors(self) -> Path:
+        """Sector context."""
+        return self._ensure_dir(self.knowledge / "sectors")
+
     # === Real-Time Data ===
 
     @property

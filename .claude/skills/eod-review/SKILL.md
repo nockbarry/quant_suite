@@ -13,14 +13,16 @@ End-of-day analysis and learning loop for continuous improvement.
 This skill:
 1. Reviews today's trading decisions and outcomes
 2. Compares predictions to actual results
-3. Extracts lessons learned
-4. Updates knowledge base with insights
-5. Prepares focus areas for tomorrow
+3. **Extracts learnings** and stores them in learning log
+4. **Updates thesis conviction** based on signpost checks
+5. Updates knowledge base with insights
+6. Prepares focus areas for tomorrow
 
 ## Quick Start
 
+### Step 1: Get Performance Summary
+
 ```bash
-# Run EOD review
 PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
 from datetime import datetime
 from src.decision.decision_logger import DecisionLogger
@@ -33,6 +35,69 @@ print(f"=== EOD Review - {datetime.now().strftime('%Y-%m-%d')} ===")
 print(f"Decisions today: {len(decisions)}")
 print(f"7-day win rate: {summary.get('win_rate', 'N/A')}")
 print(f"7-day total P&L: ${summary.get('total_pnl', 0):,.2f}")
+EOF
+```
+
+### Step 2: Check Thesis Signposts
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.knowledge.thesis import ThesisTracker
+from src.core.paths import paths
+
+tracker = ThesisTracker(paths.theses)
+
+# Check for theses due for review
+due = tracker.get_theses_due_for_review()
+if due:
+    print("=== THESES DUE FOR REVIEW ===")
+    for thesis in due:
+        print(f"\n{thesis.name}")
+        print(f"  Conviction: {thesis.conviction:.0f}%")
+        print(f"  Positions: {', '.join(thesis.positions)}")
+
+        # Show conviction trend
+        if len(thesis.conviction_history) >= 2:
+            recent = thesis.conviction_history[-2:]
+            print(f"  Trend: {recent[0].old_value:.0f}% -> {recent[-1].new_value:.0f}%")
+
+# Check all active theses for triggered signposts
+print("\n=== SIGNPOST CHECK ===")
+for thesis in tracker.get_active_theses():
+    pending = thesis.get_pending_signposts()
+    for sp in pending:
+        print(f"[{thesis.name}] Pending: {sp.description}")
+EOF
+```
+
+### Step 3: Extract Learnings
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.decision.decision_logger import DecisionLogger
+from src.knowledge.learnings import LearningLog
+from src.core.paths import paths
+from datetime import datetime, timedelta
+
+logger = DecisionLogger()
+learning_log = LearningLog(paths.learnings)
+
+# Find closed decisions without extracted learnings
+for i in range(7):
+    date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+    filepath = paths.decisions / f"decisions_{date}.json"
+
+    if filepath.exists():
+        import json
+        with open(filepath) as f:
+            data = json.load(f)
+
+        for d in data["decisions"]:
+            if d.get("status") == "closed" and not d.get("learning_extracted"):
+                print(f"\n=== Unextracted Learning: {d['symbol']} {d['action']} ===")
+                print(f"  P&L: {d.get('realized_pnl_pct', 'N/A'):.1f}%")
+                print(f"  Reasoning: {d['reasoning'][:100]}...")
+                print("  ** NEEDS LEARNING EXTRACTION **")
 EOF
 ```
 
@@ -54,107 +119,133 @@ client = TradingClient(
 )
 
 account = client.get_account()
-positions = client.get_all_positions()
-
-# Calculate today's P&L
 equity = float(account.equity)
 last_equity = float(account.last_equity)
 day_pnl = equity - last_equity
 day_pnl_pct = (day_pnl / last_equity) * 100
 
 print(f"Today's P&L: ${day_pnl:+,.2f} ({day_pnl_pct:+.2f}%)")
-print(f"Equity: ${equity:,.2f}")
 ```
 
 ### Step 2: Decision Outcome Analysis
 
 For each decision made today:
+- Was the reasoning correct?
+- Did key factors play out?
+- What was missed?
+
+### Step 3: Learning Extraction
+
+**CRITICAL: Extract a learning from every closed position.**
 
 ```python
-from src.decision.decision_logger import DecisionLogger
+from src.knowledge.learnings import LearningLog, Learning
+from src.core.paths import paths
 
-logger = DecisionLogger()
-decisions = logger.get_today_decisions()
+learning_log = LearningLog(paths.learnings)
 
-for decision in decisions:
-    # Get current price for symbol
-    position = next((p for p in positions if p.symbol == decision.symbol), None)
+# Create learning from closed decision
+learning = Learning(
+    decision_id="abc12345",
+    symbol="HAL",
+    action="BUY",
+    outcome="win",  # win, loss, scratch
+    pnl_pct=4.5,
+    what_happened="""
+    Bought HAL at $31.97 based on insider_technical signal and
+    Venezuela thesis. Stock rallied 4.5% over 3 days as thesis
+    played out with Chevron license news.
+    """,
+    what_i_learned="""
+    Insider signal + active thesis creates strong confluence.
+    Pre-market strength was key confirmation signal.
+    Should have sized larger given high signal agreement.
+    """,
+    how_this_changes_approach="""
+    When insider_technical + thesis align, consider 5% position
+    instead of 3%. The confluence is worth the concentration.
+    """,
+    pattern_name="thesis_insider_confluence",
+    pattern_description="Insider buying confirms active investment thesis",
+    tags=["insider", "thesis", "energy", "venezuela", "confluence"],
+)
 
-    if position and decision.execution_price:
-        entry = decision.execution_price
-        current = float(position.current_price)
-        pnl_pct = ((current - entry) / entry) * 100
-
-        print(f"""
-        Decision: {decision.action.value} {decision.symbol}
-        Confidence: {decision.confidence:.0%}
-        Entry: ${entry:.2f}
-        Current: ${current:.2f}
-        P&L: {pnl_pct:+.2f}%
-
-        Original Reasoning:
-        {decision.reasoning[:200]}...
-
-        Key Factors: {', '.join(decision.key_factors)}
-
-        Outcome Assessment:
-        - Was reasoning correct? [Analyze]
-        - Did key factors play out? [Analyze]
-        - What was missed? [Analyze]
-        """)
+learning_log.add_learning(learning)
 ```
 
-### Step 3: Lesson Extraction
-
-Systematically analyze:
-
-1. **Wins - Why did they work?**
-   - Which factors were most predictive?
-   - Was confidence calibrated correctly?
-   - What can be repeated?
-
-2. **Losses - Why did they fail?**
-   - Was the thesis wrong or timing wrong?
-   - Were risks identified but ignored?
-   - What warning signs were missed?
-
-3. **Holds that moved - Should we have acted?**
-   - Stocks we didn't trade but should have
-   - Signals we ignored that worked
-
-### Step 4: Update Knowledge Base
+### Step 4: Thesis Conviction Update
 
 ```python
-from workflows.research.knowledge_base import load_knowledge_base
+from src.knowledge.thesis import ThesisTracker
+from src.core.paths import paths
 
-kb = load_knowledge_base()
+tracker = ThesisTracker(paths.theses)
 
-# Log insight if pattern discovered
-kb.add_insight(
-    category="trading_pattern",
-    content="Venezuela thesis stocks (SLB, HAL) show strong pre-market correlation",
-    evidence=["20260106_decision_abc123"],
-    confidence=0.7,
-)
-
-kb.record_data_source_performance(
-    source="insider_technical",
-    source_type="signal",
-    prediction_correct=True,
-    alpha_generated=2.5,
-    strategy_name="insider_technical",
-    sharpe=1.5,
-    symbols=["HAL"],
-)
+# Update conviction based on today's evidence
+thesis = tracker.get_thesis("venezuela123")
+if thesis:
+    # Signpost triggered positively
+    thesis.update_conviction(
+        new_value=75,
+        reason="Chevron license extended 6 months - bullish signpost triggered"
+    )
+    thesis.trigger_signpost(0, "bullish")
+    tracker._save_thesis(thesis)
 ```
 
-### Step 5: Prepare Tomorrow's Focus
+### Step 5: Knowledge Base Update
 
-Based on today's review:
-- What worked that should continue?
-- What failed that should be avoided?
-- New opportunities identified?
-- Risk areas to monitor?
+```python
+from src.knowledge.base import KnowledgeBase, CompanyBrief
+from src.core.paths import paths
+
+kb = KnowledgeBase(paths.knowledge)
+
+# Update or create company knowledge
+company = kb.get_company("HAL") or CompanyBrief(
+    symbol="HAL",
+    name="Halliburton",
+    business_model="Oilfield services",
+    moat="",
+    earnings_quality="",
+    key_risks=[],
+    key_catalysts=[],
+    best_setups="",
+)
+
+# Update based on what we learned
+company.best_setups = "insider_technical + thesis alignment; pre-market strength entry"
+company.key_catalysts = ["Venezuela contracts", "OPEC+ cuts", "Capex cycle upturn"]
+
+kb.save_company(company)
+```
+
+## Learning Log Format
+
+Learnings are stored in monthly JSON files:
+
+```json
+{
+  "month": "2026-01",
+  "learnings": [
+    {
+      "id": "learn_abc123",
+      "created": "2026-01-06T16:30:00",
+      "decision_id": "abc12345",
+      "symbol": "HAL",
+      "action": "BUY",
+      "outcome": "win",
+      "pnl_pct": 4.5,
+      "what_happened": "...",
+      "what_i_learned": "...",
+      "how_this_changes_approach": "...",
+      "pattern_name": "thesis_insider_confluence",
+      "pattern_description": "Insider buying confirms thesis",
+      "tags": ["insider", "thesis", "energy"]
+    }
+  ]
+}
+```
 
 ## EOD Report Format
 
@@ -175,16 +266,25 @@ Save to: `/home/nock/quant_results/eod_reviews/review_YYYYMMDD.json`
     "losses": 0,
     "pending": 0
   },
-  "lessons_learned": [
-    "HAL followed SLB pattern as predicted",
-    "Pre-market strength was good entry signal"
+  "learnings_extracted": [
+    {
+      "symbol": "HAL",
+      "pattern": "thesis_insider_confluence",
+      "summary": "Insider + thesis alignment is high-conviction setup"
+    }
+  ],
+  "thesis_updates": [
+    {
+      "thesis": "Venezuela Energy Recovery",
+      "old_conviction": 65,
+      "new_conviction": 75,
+      "reason": "Chevron license extended - bullish signpost"
+    }
   ],
   "tomorrow_focus": [
-    "Monitor energy sector for continuation",
-    "Review Feb options expiring Friday"
-  ],
-  "knowledge_base_updates": [
-    "Logged insider_technical performance for HAL"
+    "Monitor HAL for continuation",
+    "Review Feb options expiring Friday",
+    "Check Venezuela news"
   ]
 }
 ```
@@ -202,11 +302,10 @@ Claude: Running end-of-day review for January 6, 2026.
 |--------|-------|
 | Equity | $96,500.45 |
 | Day P&L | +$611.54 (+0.64%) |
-| Total P&L (inception) | -$3,500 (-3.5%) |
 
 ### vs Benchmarks
-- SPY: +0.45% (we outperformed by +0.19%)
-- XLE: +1.2% (we underperformed by -0.56%)
+- SPY: +0.45% (outperformed by +0.19%)
+- XLE: +1.2% (underperformed by -0.56%)
 
 ---
 
@@ -214,83 +313,114 @@ Claude: Running end-of-day review for January 6, 2026.
 
 ### Decision 1: HAL BUY (EXECUTED)
 - **Entry:** $31.97
-- **Current:** $32.45
-- **P&L:** +$43.20 (+1.5%)
-- **Confidence was:** 68%
+- **Current:** $33.41
+- **P&L:** +$129.96 (+4.5%)
+- **Confidence was:** 65%
 - **Status:** WINNING
 
 **Analysis:**
-- Reasoning was correct - HAL followed SLB higher
+- Reasoning was correct - HAL followed thesis
 - Pre-market strength was good entry signal
-- Thesis on Venezuela reconstruction playing out
-
-**Lessons:**
-- Insider_technical signal + Venezuela thesis = strong combination
-- Entry timing at market open captured the move
-
-### Decision 2: VLO Review (NOT EXECUTED)
-- **Flagged for:** Options review
-- **Actual move:** VLO +0.8%
-- **Status:** Options still down, but stock recovering
-
-**Analysis:**
-- Refiner margin thesis is slower than expected
-- Options time decay hurting more than stock appreciation helping
-
-**Lessons:**
-- Consider closing Feb VLO calls if they don't recover this week
-- Thesis may be right but timeline wrong for options
+- Insider_technical signal was predictive
 
 ---
 
-## Lessons Learned
+## Learning Extracted
 
-1. **Signal Quality:** insider_technical on HAL was accurate
-2. **Sector Theme:** Energy thesis continues working, but options timing problematic
-3. **Risk Management:** Staying disciplined on position sizing helped
+**Pattern:** thesis_insider_confluence
+
+**What happened:**
+Bought HAL based on insider_technical signal and Venezuela thesis.
+Stock rallied 4.5% as Chevron license news confirmed thesis.
+
+**What I learned:**
+Insider signal + active thesis creates strong confluence.
+Pre-market strength was key confirmation.
+
+**How this changes approach:**
+When insider_technical + thesis align, size 5% instead of 3%.
+
+**Tags:** insider, thesis, energy, confluence
+
+---
+
+## Thesis Updates
+
+### Venezuela Energy Recovery
+- **Previous conviction:** 65%
+- **New conviction:** 75%
+- **Reason:** Chevron license extended 6 months - bullish signpost triggered
+
+**Signpost triggered:**
+[+] Chevron license extended beyond 6 months - BULLISH
+
+---
 
 ## Knowledge Base Updates
 
-Logged:
-- insider_technical signal performance (+1.5% in 1 day)
-- Venezuela thesis confirmation evidence
+- Updated HAL company brief with best_setups
+- Logged insider_technical signal performance
+
+---
 
 ## Tomorrow's Focus
 
 1. **Monitor:** HAL position for continuation or profit-taking
 2. **Review:** Feb options (VLO, GLD) for potential exit
-3. **Watch:** Energy sector breadth - are laggards catching up?
-4. **Research:** Any overnight news on Venezuela/Cuba
+3. **Watch:** Energy sector breadth
+4. **Research:** Any further Venezuela/Cuba news
+5. **Thesis:** SLB signpost pending - contract announcements
 
 ---
 
 Review saved to: /home/nock/quant_results/eod_reviews/review_20260106.json
+Learning saved to: /home/nock/quant_results/learnings/2026-01.json
 ```
 
 ## Learning Loop Integration
 
-The EOD review feeds into tomorrow's decision-making:
+The EOD review feeds back into tomorrow's decisions:
 
 ```
-/morning-briefing → reads yesterday's EOD review
-/trade-decision → incorporates lessons learned
-/execute-trades → validates against historical patterns
-/eod-review → generates new lessons
+/morning-briefing → reads yesterday's EOD review + recent learnings
+/trade-decision → applies learned patterns + thesis context
+/execute-trades → validates against risk rules
+/eod-review → generates new learnings → cycle continues
+```
+
+## Retrieving Past Learnings
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.knowledge.learnings import LearningLog
+from src.core.paths import paths
+
+log = LearningLog(paths.learnings)
+
+# Get recent learnings
+recent = log.get_recent(days=30)
+print(f"Last 30 days: {len(recent)} learnings\n")
+
+# Get learnings by pattern
+confluence = log.get_by_tag("confluence")
+print(f"Confluence patterns: {len(confluence)}")
+
+# Get learnings for a symbol
+hal_learnings = log.get_by_symbol("HAL")
+for l in hal_learnings:
+    print(f"  {l.created.strftime('%Y-%m-%d')}: {l.outcome} ({l.pnl_pct:+.1f}%)")
+    print(f"    Pattern: {l.pattern_name}")
+EOF
 ```
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `/home/nock/quant_results/decisions/` | Today's decisions |
-| `/home/nock/quant_results/eod_reviews/` | EOD review outputs |
-| `/home/nock/quant_results/trading_logs/` | Session logs |
-| `workflows/research/knowledge_base.py` | Knowledge storage |
-
-## Performance Tracking
-
-Track over time:
-- **Win rate** by signal type, sector, confidence level
-- **Alpha** vs benchmarks (SPY, sector ETFs)
-- **Drawdown** patterns
-- **Decision quality** (confidence calibration)
+| `~/quant_results/decisions/` | Today's decisions |
+| `~/quant_results/learnings/` | Learning log (monthly files) |
+| `~/quant_results/theses/` | Investment theses |
+| `~/quant_results/knowledge/` | Company/sector knowledge |
+| `~/quant_results/eod_reviews/` | EOD review outputs |
+| `src/knowledge/learnings.py` | LearningLog class |
+| `src/knowledge/thesis.py` | ThesisTracker class |

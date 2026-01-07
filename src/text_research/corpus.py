@@ -521,3 +521,418 @@ class TextCorpus:
         else:
             range_str = "empty"
         return f"TextCorpus({len(self)} documents, {range_str})"
+
+    # ================================================================
+    # News & Social Ingest Methods
+    # ================================================================
+
+    def ingest_news_batch(
+        self,
+        news_items: list[dict],
+        source: str = "news",
+    ) -> list[str]:
+        """
+        Batch ingest news items from news daemon or other sources.
+
+        Args:
+            news_items: List of news dictionaries with fields:
+                - headline or title: str
+                - content or text: str (optional)
+                - published_at or timestamp: datetime or str
+                - symbols: list[str] (optional)
+                - url: str (optional)
+                - sentiment: str (optional)
+            source: Document source type (default: "news")
+
+        Returns:
+            List of added document IDs
+
+        Example:
+            news = [
+                {
+                    "headline": "Apple announces record earnings",
+                    "content": "Apple Inc reported...",
+                    "published_at": "2026-01-06T08:30:00",
+                    "symbols": ["AAPL"],
+                }
+            ]
+            doc_ids = corpus.ingest_news_batch(news)
+        """
+        doc_ids = []
+
+        for item in news_items:
+            try:
+                # Extract headline/title
+                headline = item.get("headline") or item.get("title", "")
+
+                # Extract content
+                content = item.get("content") or item.get("text") or item.get("summary", "")
+
+                # Combine headline and content
+                full_text = f"{headline}\n\n{content}".strip() if content else headline
+
+                if not full_text:
+                    continue
+
+                # Extract timestamp
+                timestamp = item.get("published_at") or item.get("timestamp")
+                if isinstance(timestamp, str):
+                    timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                elif timestamp is None:
+                    timestamp = datetime.now()
+
+                # Extract symbols
+                symbols = item.get("symbols") or item.get("tickers") or []
+                if isinstance(symbols, str):
+                    symbols = [symbols]
+
+                # Build metadata
+                metadata = {}
+                if item.get("url"):
+                    metadata["url"] = item["url"]
+                if item.get("sentiment"):
+                    metadata["sentiment"] = item["sentiment"]
+                if item.get("importance"):
+                    metadata["importance"] = item["importance"]
+                if item.get("source_name"):
+                    metadata["source_name"] = item["source_name"]
+
+                doc = TextDocument(
+                    text=full_text,
+                    timestamp=timestamp,
+                    source=source,
+                    symbols=symbols,
+                    sector=item.get("sector"),
+                    metadata=metadata,
+                )
+
+                doc_id = self.add_document(doc)
+                doc_ids.append(doc_id)
+
+            except Exception as e:
+                logger.warning(f"Failed to ingest news item: {e}")
+
+        logger.info(f"Ingested {len(doc_ids)} news items")
+        return doc_ids
+
+    def add_reddit_post(
+        self,
+        subreddit: str,
+        post: dict,
+    ) -> str | None:
+        """
+        Add a Reddit post to the corpus.
+
+        Args:
+            subreddit: Subreddit name (e.g., "wallstreetbets")
+            post: Post dictionary with fields:
+                - title: str
+                - selftext: str (post body, optional)
+                - created_utc: float or datetime
+                - score: int
+                - url: str
+                - num_comments: int
+                - tickers: list[str] (extracted tickers)
+
+        Returns:
+            Document ID or None if failed
+
+        Example:
+            post = {
+                "title": "AAPL to the moon!",
+                "selftext": "Just bought 100 shares...",
+                "created_utc": 1704538800,
+                "score": 500,
+                "tickers": ["AAPL"],
+            }
+            doc_id = corpus.add_reddit_post("wallstreetbets", post)
+        """
+        try:
+            title = post.get("title", "")
+            body = post.get("selftext") or post.get("body", "")
+
+            # Combine title and body
+            full_text = f"{title}\n\n{body}".strip() if body else title
+
+            if not full_text:
+                return None
+
+            # Extract timestamp
+            created = post.get("created_utc") or post.get("created")
+            if isinstance(created, (int, float)):
+                timestamp = datetime.fromtimestamp(created)
+            elif isinstance(created, str):
+                timestamp = datetime.fromisoformat(created)
+            elif isinstance(created, datetime):
+                timestamp = created
+            else:
+                timestamp = datetime.now()
+
+            # Extract tickers
+            symbols = post.get("tickers") or post.get("symbols") or []
+            if isinstance(symbols, str):
+                symbols = [symbols]
+
+            metadata = {
+                "subreddit": subreddit,
+                "score": post.get("score", 0),
+                "num_comments": post.get("num_comments", 0),
+                "url": post.get("url", ""),
+                "post_id": post.get("id", ""),
+            }
+
+            if post.get("sentiment_score") is not None:
+                metadata["sentiment_score"] = post["sentiment_score"]
+
+            doc = TextDocument(
+                text=full_text,
+                timestamp=timestamp,
+                source="reddit",
+                symbols=symbols,
+                metadata=metadata,
+            )
+
+            return self.add_document(doc)
+
+        except Exception as e:
+            logger.warning(f"Failed to add Reddit post: {e}")
+            return None
+
+    def add_twitter_sentiment(
+        self,
+        symbol: str,
+        sentiment_data: dict,
+    ) -> str | None:
+        """
+        Add Twitter/X sentiment data for a symbol.
+
+        Args:
+            symbol: Stock ticker
+            sentiment_data: Sentiment dictionary with fields:
+                - summary: str (overall sentiment summary)
+                - tweets: list[dict] (optional, individual tweets)
+                - sentiment_score: float (-1 to 1)
+                - bullish_count: int
+                - bearish_count: int
+                - timestamp: datetime or str
+
+        Returns:
+            Document ID or None if failed
+
+        Example:
+            sentiment = {
+                "summary": "Overall bullish on AAPL after earnings...",
+                "sentiment_score": 0.65,
+                "bullish_count": 150,
+                "bearish_count": 50,
+            }
+            doc_id = corpus.add_twitter_sentiment("AAPL", sentiment)
+        """
+        try:
+            summary = sentiment_data.get("summary", "")
+            tweets = sentiment_data.get("tweets", [])
+
+            # Build text from summary and sample tweets
+            text_parts = [f"Twitter Sentiment for {symbol}"]
+            if summary:
+                text_parts.append(f"\n{summary}")
+
+            # Add sample tweets if available
+            if tweets:
+                text_parts.append("\nSample tweets:")
+                for tweet in tweets[:5]:  # Limit to 5 samples
+                    tweet_text = tweet.get("text", "")
+                    if tweet_text:
+                        text_parts.append(f"- {tweet_text[:200]}")
+
+            full_text = "\n".join(text_parts)
+
+            # Extract timestamp
+            timestamp = sentiment_data.get("timestamp")
+            if isinstance(timestamp, str):
+                timestamp = datetime.fromisoformat(timestamp)
+            elif timestamp is None:
+                timestamp = datetime.now()
+
+            metadata = {
+                "sentiment_score": sentiment_data.get("sentiment_score", 0),
+                "bullish_count": sentiment_data.get("bullish_count", 0),
+                "bearish_count": sentiment_data.get("bearish_count", 0),
+                "total_tweets": sentiment_data.get("total_tweets", len(tweets)),
+            }
+
+            doc = TextDocument(
+                text=full_text,
+                timestamp=timestamp,
+                source="twitter",
+                symbols=[symbol],
+                metadata=metadata,
+            )
+
+            return self.add_document(doc)
+
+        except Exception as e:
+            logger.warning(f"Failed to add Twitter sentiment: {e}")
+            return None
+
+    def add_earnings_call(
+        self,
+        symbol: str,
+        transcript: str,
+        call_date: datetime,
+        metadata: dict | None = None,
+    ) -> str | None:
+        """
+        Add an earnings call transcript.
+
+        Args:
+            symbol: Company ticker
+            transcript: Full transcript text
+            call_date: When the call occurred
+            metadata: Additional metadata (quarter, fiscal_year, etc.)
+
+        Returns:
+            Document ID or None if failed
+        """
+        try:
+            doc = TextDocument(
+                text=transcript,
+                timestamp=call_date,
+                source="earnings_call",
+                symbols=[symbol],
+                metadata=metadata or {},
+            )
+            return self.add_document(doc)
+
+        except Exception as e:
+            logger.warning(f"Failed to add earnings call: {e}")
+            return None
+
+    def add_analyst_report(
+        self,
+        symbol: str,
+        report_text: str,
+        report_date: datetime,
+        analyst_firm: str | None = None,
+        rating: str | None = None,
+        price_target: float | None = None,
+    ) -> str | None:
+        """
+        Add an analyst report.
+
+        Args:
+            symbol: Company ticker
+            report_text: Report content
+            report_date: When report was published
+            analyst_firm: Name of the firm
+            rating: Buy/Hold/Sell rating
+            price_target: Target price if provided
+
+        Returns:
+            Document ID or None if failed
+        """
+        try:
+            metadata = {}
+            if analyst_firm:
+                metadata["analyst_firm"] = analyst_firm
+            if rating:
+                metadata["rating"] = rating
+            if price_target:
+                metadata["price_target"] = price_target
+
+            doc = TextDocument(
+                text=report_text,
+                timestamp=report_date,
+                source="analyst_report",
+                symbols=[symbol],
+                metadata=metadata,
+            )
+            return self.add_document(doc)
+
+        except Exception as e:
+            logger.warning(f"Failed to add analyst report: {e}")
+            return None
+
+    def get_recent_sentiment(
+        self,
+        symbol: str,
+        hours: int = 24,
+        sources: list[str] | None = None,
+    ) -> list[TextDocument]:
+        """
+        Get recent sentiment-related documents for a symbol.
+
+        Args:
+            symbol: Stock ticker
+            hours: How many hours back to look
+            sources: Sources to include (default: reddit, twitter, news)
+
+        Returns:
+            List of documents sorted by timestamp (newest first)
+        """
+        sources = sources or ["reddit", "twitter", "news"]
+        cutoff = datetime.now() - timedelta(hours=hours)
+
+        docs = []
+        for doc_id, info in self._doc_index.items():
+            if info["source"] not in sources:
+                continue
+            if symbol not in info.get("symbols", []):
+                continue
+
+            doc_timestamp = datetime.fromisoformat(info["timestamp"])
+            if doc_timestamp >= cutoff:
+                doc = self.get_document(doc_id)
+                if doc:
+                    docs.append(doc)
+
+        docs.sort(key=lambda d: d.timestamp, reverse=True)
+        return docs
+
+    def get_sentiment_summary(
+        self,
+        symbol: str,
+        hours: int = 24,
+    ) -> dict:
+        """
+        Get aggregated sentiment summary for a symbol.
+
+        Args:
+            symbol: Stock ticker
+            hours: How many hours back to look
+
+        Returns:
+            Dictionary with sentiment metrics
+        """
+        docs = self.get_recent_sentiment(symbol, hours)
+
+        if not docs:
+            return {
+                "symbol": symbol,
+                "doc_count": 0,
+                "avg_sentiment": None,
+                "sources": {},
+            }
+
+        # Aggregate by source
+        by_source: dict[str, list] = {}
+        sentiment_scores = []
+
+        for doc in docs:
+            source = doc.source
+            if source not in by_source:
+                by_source[source] = []
+            by_source[source].append(doc)
+
+            # Extract sentiment score if available
+            score = doc.metadata.get("sentiment_score")
+            if score is not None:
+                sentiment_scores.append(score)
+
+        return {
+            "symbol": symbol,
+            "doc_count": len(docs),
+            "avg_sentiment": sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else None,
+            "sources": {s: len(d) for s, d in by_source.items()},
+            "time_range_hours": hours,
+        }
