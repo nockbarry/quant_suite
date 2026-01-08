@@ -229,18 +229,46 @@ decision = create_decision(
 
 ## Trading Rules
 
+### CRITICAL: Thesis Position Sizing (Learned 2026-01-07)
+
+**HIGH CONVICTION ≠ HIGH CONCENTRATION**
+
+When a thesis has multiple vehicles:
+
+1. **START EQUAL WEIGHT**: Allocate thesis capital equally across ALL vehicles
+   - Example: 6 Venezuela positions = ~6% each, not 22% SLB + 17% XLE
+
+2. **LET WINNERS PROVE THEMSELVES**: Only concentrate AFTER 10%+ outperformance
+   - The market knows timing better than you
+   - Winners naturally grow; don't force it
+
+3. **SEPARATE IMMEDIATE vs FUTURE BENEFICIARIES**:
+   - Immediate: Benefit NOW (tankers shipping oil)
+   - Future: Benefit LATER (services for reconstruction)
+   - Equal weight captures the right timing
+
+**Evidence (Venezuela thesis, 2026-01-07):**
+- Concentrated allocation: +0.55% ROI
+- Equal weight allocation: +1.92% ROI
+- Difference: **~$1,000 left on the table**
+- Tankers (1-9% each): +10-13%
+- SLB+XLE (39% combined): -2 to -3%
+
+See: `~/quant_results/knowledge/position_sizing.yaml`
+
 ### Position Sizing by Confidence
 | Confidence | Max Size |
 |------------|----------|
-| 90%+ | 20% |
-| 75-90% | 15% |
-| 60-75% | 10% |
+| 90%+ | 15% (not 20%) |
+| 75-90% | 10% |
+| 60-75% | 7% |
 | <60% | 5% or HOLD |
 
 ### Risk Limits
 | Limit | Value |
 |-------|-------|
-| Single position | 25% max |
+| Single position | **15% max** (reduced from 25%) |
+| Single thesis total | **35% max** |
 | Sector exposure | 40% max |
 | Daily loss | 5% max |
 | Stop loss | 5-15% based on conviction |

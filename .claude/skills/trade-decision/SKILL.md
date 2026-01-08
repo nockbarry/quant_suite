@@ -273,6 +273,35 @@ logger.log_decision(decision)
 
 **Note:** Adversarial analysis may reduce confidence and thus position size.
 
+### CRITICAL: Thesis Position Sizing Rule (Learned 2026-01-07)
+
+**HIGH CONVICTION ≠ HIGH CONCENTRATION**
+
+When a thesis has multiple vehicles (e.g., services, tankers, refiners, E&P for an energy thesis):
+
+1. **START EQUAL WEIGHT**: Allocate thesis capital equally across ALL thesis vehicles
+   - Example: 6 Venezuela positions = ~6% each, not 22% SLB + 17% XLE + 1% others
+
+2. **LET WINNERS PROVE THEMSELVES**: Only concentrate AFTER a vehicle demonstrates 10%+ outperformance
+   - The market knows timing better than you do
+   - Winners will naturally grow; don't force it
+
+3. **SEPARATE IMMEDIATE vs FUTURE BENEFICIARIES**:
+   - Immediate beneficiaries: Benefit NOW (e.g., tankers shipping oil)
+   - Future beneficiaries: Benefit LATER (e.g., services for reconstruction)
+   - Equal weight ensures you capture the right timing
+
+4. **MAX LIMITS**:
+   - Max single thesis position: 15% (not 22%)
+   - Max total thesis exposure: 35% (not 39%)
+
+**Why This Matters (from real results):**
+- Actual allocation (concentrated): +0.55% ROI
+- Equal weight allocation: +1.92% ROI
+- Difference: ~$1,000 left on the table
+- Tankers (small positions) returned +10-13%
+- SLB/XLE (large positions) returned -2 to -3%
+
 ### Stop Loss Guidelines
 | Type | Stop Loss |
 |------|-----------|
