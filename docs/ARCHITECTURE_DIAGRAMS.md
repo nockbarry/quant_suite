@@ -8,8 +8,8 @@ This document maps all modules, functions, data flows, and integrations in the q
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    CLAUDE INTERFACE                                      │
-│                                                                                          │
+│                                    CLAUDE INTERFACE                                     │
+│                                                                                         │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐        │
 │  │  /morning-  │ │   /trade-   │ │  /execute-  │ │   /eod-     │ │  /thesis    │        │
 │  │  briefing   │ │  decision   │ │   trades    │ │   review    │ │             │        │
@@ -22,18 +22,18 @@ This document maps all modules, functions, data flows, and integrations in the q
                                           │
                                           ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                               UNIFIED STATE (state.json)                                 │
-│                                                                                          │
+│                               UNIFIED STATE (state.json)                                │
+│                                                                                         │
 │    THE ONE FILE - Market + Portfolio + Signals + Theses + Decisions + Learnings         │
-│                                                                                          │
-│    ~/quant_results/live/state.json                                                       │
+│                                                                                         │
+│    ~/quant_results/live/state.json                                                      │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
                                           │
                                           ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   SYNTHESIS LAYER                                        │
-│                                   src/synthesis/                                         │
-│                                                                                          │
+│                                   SYNTHESIS LAYER                                       │
+│                                   src/synthesis/                                        │
+│                                                                                         │
 │  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐                 │
 │  │    UnifiedState    │  │   SignalAggregator │  │     LiveDaemon     │                 │
 │  │    state.py        │  │    signals.py      │  │     daemon.py      │                 │
@@ -332,60 +332,60 @@ src/alerts/
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                  EXTERNAL DATA SOURCES                                   │
+│                                  EXTERNAL DATA SOURCES                                  │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
          │              │              │              │              │
     Yahoo Finance   Alpaca API    Web Scraping   Free APIs     SEC EDGAR
          │              │              │              │              │
          ▼              ▼              ▼              ▼              ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   DATA INGESTION                                         │
-│                                                                                          │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐  │
-│  │ yahoo.py     │ │ alpaca.py    │ │ news_daemon  │ │ free_api_hub │ │ sec_filings  │  │
-│  │              │ │              │ │              │ │              │ │              │  │
-│  │ • OHLCV      │ │ • Account    │ │ • Real-time  │ │ • FRED       │ │ • 10-K/10-Q  │  │
-│  │ • Splits     │ │ • Positions  │ │   news       │ │ • Weather    │ │ • 8-K        │  │
-│  │ • Dividends  │ │ • Orders     │ │ • Sentiment  │ │ • Commodities│ │ • Form 4     │  │
-│  └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘  │
+│                                   DATA INGESTION                                        │
+│                                                                                         │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐   │
+│  │ yahoo.py     │ │ alpaca.py    │ │ news_daemon  │ │ free_api_hub │ │ sec_filings  │   │
+│  │              │ │              │ │              │ │              │ │              │   │
+│  │ • OHLCV      │ │ • Account    │ │ • Real-time  │ │ • FRED       │ │ • 10-K/10-Q  │   │
+│  │ • Splits     │ │ • Positions  │ │   news       │ │ • Weather    │ │ • 8-K        │   │
+│  │ • Dividends  │ │ • Orders     │ │ • Sentiment  │ │ • Commodities│ │ • Form 4     │   │
+│  └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘   │
 └─────────┼────────────────┼────────────────┼────────────────┼────────────────┼───────────┘
           │                │                │                │                │
           ▼                ▼                ▼                ▼                ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 FEATURE ENGINEERING                                      │
-│                                                                                          │
+│                                 FEATURE ENGINEERING                                     │
+│                                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────────────────────┐    │
-│  │                           features.py - FeatureEngine                             │    │
-│  │                                                                                   │    │
-│  │  Technical (50+)         Alternative Data          Text Features                  │    │
-│  │  • RSI, MACD, BB         • Congressional signals   • Embeddings                   │    │
-│  │  • Momentum (5/10/20d)   • Insider signals         • Sentiment scores             │    │
-│  │  • Volume patterns       • Options flow            • Named entities               │    │
-│  │  • Support/Resistance    • Social sentiment        • Topic clusters               │    │
+│  │                           features.py - FeatureEngine                           │    │
+│  │                                                                                 │    │
+│  │  Technical (50+)         Alternative Data          Text Features                │    │
+│  │  • RSI, MACD, BB         • Congressional signals   • Embeddings                 │    │
+│  │  • Momentum (5/10/20d)   • Insider signals         • Sentiment scores           │    │
+│  │  • Volume patterns       • Options flow            • Named entities             │    │
+│  │  • Support/Resistance    • Social sentiment        • Topic clusters             │    │
 │  └─────────────────────────────────────────────────────────────────────────────────┘    │
-│                                         │                                                │
-│                                         ▼                                                │
+│                                         │                                               │
+│                                         ▼                                               │
 │  ┌─────────────────────────────────────────────────────────────────────────────────┐    │
-│  │                      feature_store.py - DuckDB Storage                            │    │
-│  │                                                                                   │    │
-│  │  • Versioned features    • Point-in-time safety    • Fast retrieval               │    │
+│  │                      feature_store.py - DuckDB Storage                          │    │
+│  │                                                                                 │    │
+│  │  • Versioned features    • Point-in-time safety    • Fast retrieval             │    │
 │  └─────────────────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
                                           │
                                           ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                  SIGNAL GENERATION                                       │
-│                                                                                          │
-│  ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐ ┌─────────────────┐ │
-│  │  Traditional      │ │  ML Strategies    │ │  Alternative      │ │  Regime         │ │
-│  │                   │ │                   │ │                   │ │                 │ │
-│  │ • Trend following │ │ • XGBoost         │ │ • Sentiment       │ │ • Risk-on/off   │ │
-│  │ • Mean reversion  │ │ • LightGBM        │ │ • Congressional   │ │ • Transitioning │ │
-│  │ • Factor models   │ │ • LSTM            │ │ • Contrarian      │ │                 │ │
-│  └─────────┬─────────┘ └─────────┬─────────┘ └─────────┬─────────┘ └────────┬────────┘ │
-│            │                     │                     │                    │          │
-│            └─────────────────────┼─────────────────────┼────────────────────┘          │
-│                                  ▼                     ▼                               │
+│                                  SIGNAL GENERATION                                      │
+│                                                                                         │
+│  ┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐ ┌─────────────────┐  │
+│  │  Traditional      │ │  ML Strategies    │ │  Alternative      │ │  Regime         │  │
+│  │                   │ │                   │ │                   │ │                 │  │
+│  │ • Trend following │ │ • XGBoost         │ │ • Sentiment       │ │ • Risk-on/off   │  │
+│  │ • Mean reversion  │ │ • LightGBM        │ │ • Congressional   │ │ • Transitioning │  │
+│  │ • Factor models   │ │ • LSTM            │ │ • Contrarian      │ │                 │  │
+│  └─────────┬─────────┘ └─────────┬─────────┘ └─────────┬─────────┘ └────────┬────────┘  │
+│            │                     │                     │                    │           │
+│            └─────────────────────┼─────────────────────┼────────────────────┘           │
+│                                  ▼                     ▼                                │
 │                    ┌─────────────────────────────────────────────────┐                  │
 │                    │         SignalAggregator (signals.py)           │                  │
 │                    │                                                 │                  │
@@ -397,25 +397,25 @@ src/alerts/
                                            │
                                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   UNIFIED STATE                                          │
-│                                                                                          │
-│                          ~/quant_results/live/state.json                                 │
-│                                                                                          │
+│                                   UNIFIED STATE                                         │
+│                                                                                         │
+│                          ~/quant_results/live/state.json                                │
+│                                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────────────────────┐    │
-│  │  {                                                                               │    │
-│  │    "timestamp": "...",                                                           │    │
-│  │    "market_open": true,                                                          │    │
+│  │  {                                                                              │    │
+│  │    "timestamp": "...",                                                          │    │
+│  │    "market_open": true,                                                         │    │
 │  │    "market": { spy_price, vix, regime, ... },                                   │    │
 │  │    "sentiment": { fear_greed, put_call, ... },                                  │    │
 │  │    "portfolio": { equity, cash, positions, ... },                               │    │
 │  │    "risk": { var, correlation_risk, ... },                                      │    │
 │  │    "watchlist_signals": { "SLB": {...}, "HAL": {...} },                         │    │
 │  │    "theses": [ { name, conviction, signposts, ... } ],                          │    │
-│  │    "pending_decisions": [ ... ],                                                 │    │
-│  │    "recent_learnings": [ ... ],                                                  │    │
-│  │    "alerts": [ ... ],                                                            │    │
+│  │    "pending_decisions": [ ... ],                                                │    │
+│  │    "recent_learnings": [ ... ],                                                 │    │
+│  │    "alerts": [ ... ],                                                           │    │
 │  │    "research": { features_file, signals_file, ... }                             │    │
-│  │  }                                                                               │    │
+│  │  }                                                                              │    │
 │  └─────────────────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
                                            │
@@ -456,7 +456,7 @@ src/alerts/
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                              DAILY TRADING WORKFLOW                                      │
+│                              DAILY TRADING WORKFLOW                                     │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 
 6:00 AM ET ─── scripts/research_prep.py ───────────────────────────────────────────────────
@@ -605,12 +605,12 @@ Intraday ─── LiveDaemon (background) ────────────�
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                            RESEARCH & VALIDATION PIPELINE                                │
+│                            RESEARCH & VALIDATION PIPELINE                               │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│  IDEA GENERATION                                                                         │
-│                                                                                          │
+│  IDEA GENERATION                                                                        │
+│                                                                                         │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐ │
 │  │ /brainstorm      │  │ Alpha Discovery  │  │ Hypothesis Gen   │  │ Macro Research   │ │
 │  │                  │  │ Agent            │  │ Agent            │  │ Agent            │ │
@@ -618,57 +618,57 @@ Intraday ─── LiveDaemon (background) ────────────�
 │  │ • Strategy vars  │  │ • Market scans   │  │ • Text → signal  │  │ • Geopolitical   │ │
 │  │ • Gap analysis   │  │ • Anomalies      │  │ • Correlations   │  │ • Economic       │ │
 │  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘ │
-│           └─────────────────────┴────────────────────┴────────────────────┘             │
+│           └─────────────────────┴─────────────────────┴─────────────────────┘           │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
                                            │
                                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│  STRATEGY DEVELOPMENT                                                                    │
-│                                                                                          │
+│  STRATEGY DEVELOPMENT                                                                   │
+│                                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────────────────────┐    │
-│  │  /research - Research Agent                                                      │    │
-│  │                                                                                  │    │
-│  │  1. Define strategy parameters                                                   │    │
-│  │     └─► strategy_spec.py                                                         │    │
-│  │                                                                                  │    │
-│  │  2. Compute features                                                             │    │
-│  │     └─► FeatureEngine.compute(symbols, start, end)                               │    │
-│  │                                                                                  │    │
-│  │  3. Generate signals                                                             │    │
-│  │     └─► Strategy.generate_signals(features)                                      │    │
-│  │                                                                                  │    │
-│  │  4. Initial backtest                                                             │    │
-│  │     └─► BacktestEngine.run(strategy, data)                                       │    │
+│  │  /research - Research Agent                                                     │    │
+│  │                                                                                 │    │
+│  │  1. Define strategy parameters                                                  │    │
+│  │     └─► strategy_spec.py                                                        │    │
+│  │                                                                                 │    │
+│  │  2. Compute features                                                            │    │
+│  │     └─► FeatureEngine.compute(symbols, start, end)                              │    │
+│  │                                                                                 │    │
+│  │  3. Generate signals                                                            │    │
+│  │     └─► Strategy.generate_signals(features)                                     │    │
+│  │                                                                                 │    │
+│  │  4. Initial backtest                                                            │    │
+│  │     └─► BacktestEngine.run(strategy, data)                                      │    │
 │  └─────────────────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
                                            │
                                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│  VALIDATION SUITE                                                                        │
-│                                                                                          │
+│  VALIDATION SUITE                                                                       │
+│                                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────────────────────┐    │
-│  │  /validate - Full Validation                                                     │    │
-│  │                                                                                  │    │
+│  │  /validate - Full Validation                                                    │    │
+│  │                                                                                 │    │
 │  │  ┌────────────────────────────────────────────────────────────────────────────┐ │    │
 │  │  │  1. MCPT (Monte Carlo Permutation Test)  ***CRITICAL***                    │ │    │
 │  │  │     └─► mcpt.py                                                            │ │    │
 │  │  │     └─► Shuffle returns 1000x, compute p-value                             │ │    │
 │  │  │     └─► REQUIRED: p < 0.05                                                 │ │    │
 │  │  └────────────────────────────────────────────────────────────────────────────┘ │    │
-│  │                                                                                  │    │
+│  │                                                                                 │    │
 │  │  ┌────────────────────────────────────────────────────────────────────────────┐ │    │
 │  │  │  2. Walk-Forward Validation                                                │ │    │
 │  │  │     └─► walk_forward.py                                                    │ │    │
 │  │  │     └─► Train on window, test on next period, roll forward                 │ │    │
 │  │  │     └─► Check OOS Sharpe > 0.5                                             │ │    │
 │  │  └────────────────────────────────────────────────────────────────────────────┘ │    │
-│  │                                                                                  │    │
+│  │                                                                                 │    │
 │  │  ┌────────────────────────────────────────────────────────────────────────────┐ │    │
 │  │  │  3. Regime Validation                                                      │ │    │
 │  │  │     └─► regime.py                                                          │ │    │
 │  │  │     └─► Test across risk-on, risk-off, transitioning                       │ │    │
 │  │  └────────────────────────────────────────────────────────────────────────────┘ │    │
-│  │                                                                                  │    │
+│  │                                                                                 │    │
 │  │  ┌────────────────────────────────────────────────────────────────────────────┐ │    │
 │  │  │  4. Purged Cross-Validation                                                │ │    │
 │  │  │     └─► purged_cv.py                                                       │ │    │
@@ -679,39 +679,39 @@ Intraday ─── LiveDaemon (background) ────────────�
                                            │
                                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│  SAFETY CHECK                                                                            │
-│                                                                                          │
+│  SAFETY CHECK                                                                           │
+│                                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────────────────────┐    │
-│  │  /critic - Critic Agent                                                          │    │
-│  │                                                                                  │    │
-│  │  Checks for:                                                                     │    │
+│  │  /critic - Critic Agent                                                         │    │
+│  │                                                                                 │    │
+│  │  Checks for:                                                                    │    │
 │  │  • Lookahead bias (using future data)                                           │    │
 │  │  • Overfitting (too many parameters)                                            │    │
 │  │  • Data leakage (train/test contamination)                                      │    │
 │  │  • Survivorship bias                                                            │    │
 │  │  • Unrealistic assumptions                                                      │    │
 │  │  • Implementation bugs                                                          │    │
-│  │                                                                                  │    │
+│  │                                                                                 │    │
 │  │  REQUIRED: Pass all checks before promotion                                     │    │
 │  └─────────────────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
                                            │
                                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│  PROMOTION                                                                               │
-│                                                                                          │
+│  PROMOTION                                                                              │
+│                                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────────────────────┐    │
-│  │  /promote - Strategy Promoter                                                    │    │
-│  │                                                                                  │    │
-│  │  Requirements:                                                                   │    │
+│  │  /promote - Strategy Promoter                                                   │    │
+│  │                                                                                 │    │
+│  │  Requirements:                                                                  │    │
 │  │  ✓ MCPT p-value < 0.05                                                          │    │
 │  │  ✓ OOS Sharpe > 0.5                                                             │    │
 │  │  ✓ Critic validation passed                                                     │    │
 │  │  ✓ Walk-forward consistent                                                      │    │
-│  │                                                                                  │    │
+│  │                                                                                 │    │
 │  │  Promotion path:                                                                │    │
 │  │  Research → Paper Trading → Live Trading                                        │    │
-│  │                                                                                  │    │
+│  │                                                                                 │    │
 │  │  OUTPUT: config/production/strategies/{strategy}.yaml                           │    │
 │  └─────────────────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
@@ -723,7 +723,7 @@ Intraday ─── LiveDaemon (background) ────────────�
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                               CLAUDE AGENT NETWORK                                       │
+│                               CLAUDE AGENT NETWORK                                      │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 
                               ┌─────────────────────┐
@@ -783,7 +783,7 @@ Intraday ─── LiveDaemon (background) ────────────�
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                              ~/quant_results/ DIRECTORY                                  │
+│                              ~/quant_results/ DIRECTORY                                 │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 
 ~/quant_results/

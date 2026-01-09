@@ -24,13 +24,13 @@ The key insight: **centralize state**. One file to read, one place to look.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     ~/quant_results/live/state.json                  │
+│                     ~/quant_results/live/state.json                 │
 │  Market + Portfolio + Signals + Theses + Decisions + Learnings      │
 └─────────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ writes continuously
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      LIVE DAEMON (background)                        │
+│                      LIVE DAEMON (background)                       │
 │  Pulls from all components, synthesizes, writes unified state       │
 └─────────────────────────────────────────────────────────────────────┘
                                   ▲

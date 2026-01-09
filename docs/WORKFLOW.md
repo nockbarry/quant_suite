@@ -46,42 +46,42 @@ claude "/trade-decision"
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    BACKGROUND LAYER                          │
-│                   (runs automatically)                       │
+│                    BACKGROUND LAYER                         │
+│                   (runs automatically)                      │
 ├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐    │
-│  │ Live Daemon  │   │ Pre-Market   │   │ State.json   │    │
-│  │ (every 5m)   │──▶│    Prep      │──▶│  (unified)   │    │
-│  └──────────────┘   └──────────────┘   └──────────────┘    │
-│                                                              │
-│  Updates:                                                    │
-│  - Portfolio from Alpaca                                     │
-│  - Market breadth & regime                                   │
-│  - Signals for watchlist                                     │
-│  - Thesis status                                             │
-│  - Risk metrics                                              │
-│                                                              │
+│                                                             │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐     │
+│  │ Live Daemon  │   │ Pre-Market   │   │ State.json   │     │
+│  │ (every 5m)   │──▶│    Prep      │──▶│  (unified)  │     │
+│  └──────────────┘   └──────────────┘   └──────────────┘     │
+│                                                             │
+│  Updates:                                                   │
+│  - Portfolio from Alpaca                                    │
+│  - Market breadth & regime                                  │
+│  - Signals for watchlist                                    │
+│  - Thesis status                                            │
+│  - Risk metrics                                             │
+│                                                             │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                     CLAUDE LAYER                             │
-│                 (called on-demand)                           │
+│                     CLAUDE LAYER                            │
+│                 (called on-demand)                          │
 ├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  Claude reads state.json → Already has:                      │
-│  - Current positions & P&L                                   │
-│  - Market regime & sentiment                                 │
-│  - Pre-aggregated signals                                    │
-│  - Active theses                                             │
-│  - Recent learnings                                          │
-│                                                              │
-│  Claude only needs to:                                       │
-│  - Search current news (web)                                 │
-│  - Apply judgment & adversarial analysis                     │
-│  - Make decisions                                            │
-│                                                              │
+│                                                             │
+│  Claude reads state.json → Already has:                     │
+│  - Current positions & P&L                                  │
+│  - Market regime & sentiment                                │
+│  - Pre-aggregated signals                                   │
+│  - Active theses                                            │
+│  - Recent learnings                                         │
+│                                                             │
+│  Claude only needs to:                                      │
+│  - Search current news (web)                                │
+│  - Apply judgment & adversarial analysis                    │
+│  - Make decisions                                           │
+│                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 

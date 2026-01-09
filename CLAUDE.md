@@ -30,16 +30,16 @@ This single file contains:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                       INTELLIGENCE LAYERS                         │
-│                                                                    │
-│  STATISTICAL      →    LLM (Claude)    →    HUMAN                 │
-│  Signal Generation     Decision Engine      Oversight              │
-│                                                                    │
-│  • 50+ features        • Reads state.json   • EOD review          │
-│  • Technical signals   • Applies theses     • Approve trades      │
-│  • Alternative data    • Adversarial check  • Override            │
-│  • Pattern detection   • Pre-mortem         • Set rules           │
-│                        • Documents reasoning                       │
+│                       INTELLIGENCE LAYERS                        │
+│                                                                  │
+│  STATISTICAL      →    LLM (Claude)    →    HUMAN                │
+│  Signal Generation     Decision Engine      Oversight            │
+│                                                                  │
+│  • 50+ features        • Reads state.json   • EOD review         │
+│  • Technical signals   • Applies theses     • Approve trades     │
+│  • Alternative data    • Adversarial check  • Override           │
+│  • Pattern detection   • Pre-mortem         • Set rules          │
+│                        • Documents reasoning                     │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
