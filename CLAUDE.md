@@ -49,24 +49,47 @@ This single file contains:
 
 ## Daily Trading Workflow
 
-| Time (ET) | Skill | What Happens |
-|-----------|-------|--------------|
-| 6:00 AM | `research_prep.py` | Pre-compute features, signals, screens |
-| 6:30 AM | `/morning-briefing` | Read unified state, web search, review theses |
-| 7:00 AM | `/trade-decision` | Synthesize + adversarial analysis + thesis linking |
-| 7:30 AM | `/execute-trades` | Execute with human approval |
-| 4:30 PM | `/eod-review` | Extract learnings, update thesis conviction |
+### Automated (Background)
 
 ```bash
-# Pre-market prep
-PYTHONPATH=. python scripts/research_prep.py
+# One-time setup - installs cron jobs
+./scripts/setup_cron.sh install
 
-# Run the workflow
-claude /morning-briefing
-claude /trade-decision
-claude /execute-trades
-claude /eod-review
+# Or manually start each day
+./scripts/trading_day.sh start
 ```
+
+This runs automatically:
+- **6:00 AM**: Start daemons, pre-market prep
+- **Every 5 min**: Update state.json
+- **5:00 PM**: Stop daemons
+
+### Your Workflow (Claude Sessions)
+
+| Time (ET) | Command | What Happens |
+|-----------|---------|--------------|
+| 6:30 AM | `claude "/morning-briefing"` | Read state, search news, review theses |
+| 9:30 AM+ | `claude "/trade-decision"` | Adversarial analysis, make decisions |
+| When ready | `claude "/execute-trades"` | Execute with your approval |
+| 4:30 PM | `claude "/eod-review"` | Extract learnings, update conviction |
+
+### Recommended Starting Prompts
+
+```bash
+# Morning - full briefing
+claude "/morning-briefing"
+
+# Quick check during day
+claude "check positions"
+
+# Make decisions
+claude "/trade-decision"
+
+# End of day
+claude "/eod-review"
+```
+
+See `docs/WORKFLOW.md` for detailed automation guide.
 
 ---
 

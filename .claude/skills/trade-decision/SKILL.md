@@ -309,6 +309,46 @@ When a thesis has multiple vehicles (e.g., services, tankers, refiners, E&P for 
 | Moderate conviction | -10% |
 | Speculative | -5% |
 
+### OPTIONS DECISION TREE (NEW - Added 2026-01-08)
+
+Clear rules for managing options positions:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  OPTIONS DECISION TREE                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Is underlying THESIS still VALID?                           │
+│  ├── NO → CUT IMMEDIATELY (regardless of P&L)               │
+│  │        Thesis invalidation = exit signal                  │
+│  │                                                           │
+│  └── YES → Continue evaluation...                            │
+│       │                                                      │
+│       ├── Option down >30%?                                  │
+│       │   └── HOLD - IV crush is temporary if thesis valid   │
+│       │       (We held SLB calls through -50% → recovered +90%)│
+│       │                                                      │
+│       ├── Option up >50%?                                    │
+│       │   └── Consider PARTIAL PROFIT (sell 50%)             │
+│       │       Lock in gains, let rest ride                   │
+│       │                                                      │
+│       ├── Less than 2 weeks to expiry?                       │
+│       │   └── ROLL or CLOSE - theta accelerates              │
+│       │       Don't let time decay eat profits               │
+│       │                                                      │
+│       └── Position >5% of portfolio?                         │
+│           └── TRIM to 3% max                                 │
+│               Options are leveraged, limit risk              │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Lesson (from Jan 7-8, 2026):**
+- Options went from -50% to +30% in one day
+- Panic selling at -50% would have missed +90% recovery
+- IF thesis is valid, IV crush is TEMPORARY
+- Hold through volatility, but set mental stops if thesis breaks
+
 ### When to HOLD (No Action)
 - Confidence <50% after adversarial adjustment
 - Signal + thesis misalignment

@@ -201,12 +201,84 @@ with open(research_dir / "screens.json") as f:
     screens = json.load(f)
 ```
 
-### Step 5: Synthesize and Recommend
+### Step 5: Run Morning Checklist (NEW - Added 2026-01-08)
+
+For each active thesis position, systematically check:
+
+```
+MORNING CHECKLIST
+═══════════════════════════════════════════════════════════
+
+THESIS: [Name]
+Conviction: [X]%
+
+□ VALIDITY CHECK
+  - Any invalidation triggers hit? [Y/N]
+  - If Y, what action needed?
+
+□ OVERSOLD SCAN
+  - Any thesis positions down >2% yesterday on valid thesis? [Y/N]
+  - If Y, flag as potential ADD opportunity
+
+□ NEWS REINFORCEMENT
+  - Does overnight news SUPPORT or CONTRADICT thesis?
+  - News impact score: [calculate below]
+
+□ SECTOR ROTATION
+  - Is sector rotating IN or OUT?
+  - Tailwind or headwind?
+
+□ REGIME CHECK
+  - VIX level: [X] (calm <15, elevated 15-25, fear >25)
+  - Risk-on or risk-off?
+
+DECISION PER POSITION:
+  [SYMBOL]: ADD / HOLD / TRIM
+  Reasoning: [brief]
+
+═══════════════════════════════════════════════════════════
+```
+
+### Step 5b: Score News Impact (NEW)
+
+For each significant news item, calculate impact score:
+
+```
+NEWS IMPACT SCORE
+─────────────────────────────────────────────────────────
+Headline: [headline]
+
+Relevance (1-5):  How related to active thesis?        [X]
+Sentiment (1-5):  Bullish=5, Neutral=3, Bearish=1      [X]
+Magnitude (1-5):  Market-moving potential              [X]
+Surprise (1-5):   Expected=1, Total surprise=5         [X]
+
+SCORE = (R × S × M × Su) / 625 = [X.XX]
+
+Interpretation:
+  > 0.50 = STRONG signal - consider action
+  0.20-0.50 = MODERATE signal - monitor closely
+  < 0.20 = WEAK signal - note but no action
+─────────────────────────────────────────────────────────
+```
+
+### Step 5c: Check Sold Position Tracker (NEW)
+
+```bash
+# Check if any recently sold positions have moved significantly
+cat ~/quant_results/tracking/sold_positions.json
+```
+
+Flag any sold positions up >5% since sale for learning review.
+
+### Step 6: Synthesize and Recommend
 Based on research:
 - Overall market sentiment
 - Thesis-driven opportunities
 - Specific opportunities or risks
 - Recommended focus for today
+- **ADD opportunities** (oversold thesis positions)
+- **Regret check** (sold positions that moved)
 
 ## Output Format
 
