@@ -57,7 +57,7 @@ def compute_features_for_universe(
     results = {}
 
     try:
-        from src.data.pipeline.features import FeatureEngine
+        from src.data.features import FeatureEngine
         import yfinance as yf
 
         for symbol in symbols:

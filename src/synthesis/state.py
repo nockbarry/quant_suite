@@ -494,6 +494,568 @@ class AlertSnapshot:
         )
 
 
+# ============================================================================
+# NEW: Pre-computed data structures for efficient Claude queries
+# ============================================================================
+
+@dataclass
+class ThesisPositionDetail:
+    """Individual position within a thesis."""
+    symbol: str
+    quantity: int
+    market_value: float
+    cost_basis: float
+    unrealized_pnl: float
+    unrealized_pnl_pct: float
+    day_pnl: float
+    weight_in_thesis_pct: float
+    weight_in_portfolio_pct: float
+
+    def to_dict(self) -> dict:
+        return {
+            "symbol": self.symbol,
+            "quantity": self.quantity,
+            "market_value": self.market_value,
+            "cost_basis": self.cost_basis,
+            "unrealized_pnl": self.unrealized_pnl,
+            "unrealized_pnl_pct": self.unrealized_pnl_pct,
+            "day_pnl": self.day_pnl,
+            "weight_in_thesis_pct": self.weight_in_thesis_pct,
+            "weight_in_portfolio_pct": self.weight_in_portfolio_pct,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ThesisPositionDetail":
+        return cls(**data)
+
+
+@dataclass
+class ThesisPerformance:
+    """Pre-computed performance for a single thesis."""
+    thesis_id: str
+    thesis_name: str
+    conviction: float
+    status: str
+    total_value: float
+    total_cost: float
+    total_pnl: float
+    total_pnl_pct: float
+    day_pnl: float
+    day_pnl_pct: float
+    weight_in_portfolio_pct: float
+    position_count: int
+    positions: list[ThesisPositionDetail]
+
+    # Divergence tracking
+    best_performer: Optional[str] = None
+    best_performer_pnl_pct: float = 0.0
+    worst_performer: Optional[str] = None
+    worst_performer_pnl_pct: float = 0.0
+    divergence_pct: float = 0.0  # Spread between best and worst
+
+    def to_dict(self) -> dict:
+        return {
+            "thesis_id": self.thesis_id,
+            "thesis_name": self.thesis_name,
+            "conviction": self.conviction,
+            "status": self.status,
+            "total_value": self.total_value,
+            "total_cost": self.total_cost,
+            "total_pnl": self.total_pnl,
+            "total_pnl_pct": self.total_pnl_pct,
+            "day_pnl": self.day_pnl,
+            "day_pnl_pct": self.day_pnl_pct,
+            "weight_in_portfolio_pct": self.weight_in_portfolio_pct,
+            "position_count": self.position_count,
+            "positions": [p.to_dict() for p in self.positions],
+            "best_performer": self.best_performer,
+            "best_performer_pnl_pct": self.best_performer_pnl_pct,
+            "worst_performer": self.worst_performer,
+            "worst_performer_pnl_pct": self.worst_performer_pnl_pct,
+            "divergence_pct": self.divergence_pct,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ThesisPerformance":
+        positions = [ThesisPositionDetail.from_dict(p) for p in data.get("positions", [])]
+        return cls(
+            thesis_id=data["thesis_id"],
+            thesis_name=data["thesis_name"],
+            conviction=data["conviction"],
+            status=data["status"],
+            total_value=data["total_value"],
+            total_cost=data["total_cost"],
+            total_pnl=data["total_pnl"],
+            total_pnl_pct=data["total_pnl_pct"],
+            day_pnl=data["day_pnl"],
+            day_pnl_pct=data["day_pnl_pct"],
+            weight_in_portfolio_pct=data["weight_in_portfolio_pct"],
+            position_count=data["position_count"],
+            positions=positions,
+            best_performer=data.get("best_performer"),
+            best_performer_pnl_pct=data.get("best_performer_pnl_pct", 0.0),
+            worst_performer=data.get("worst_performer"),
+            worst_performer_pnl_pct=data.get("worst_performer_pnl_pct", 0.0),
+            divergence_pct=data.get("divergence_pct", 0.0),
+        )
+
+
+@dataclass
+class ConcentrationAnalysis:
+    """Pre-computed concentration risk analysis."""
+    by_thesis: dict[str, float]  # thesis_name -> weight %
+    by_sector: dict[str, float]  # sector -> weight %
+    largest_position: str
+    largest_position_pct: float
+    warnings: list[str]
+    limit_breaches: list[str]
+
+    # Limits for reference
+    max_single_position_limit: float = 15.0
+    max_thesis_limit: float = 35.0
+    max_sector_limit: float = 40.0
+
+    def to_dict(self) -> dict:
+        return {
+            "by_thesis": self.by_thesis,
+            "by_sector": self.by_sector,
+            "largest_position": self.largest_position,
+            "largest_position_pct": self.largest_position_pct,
+            "warnings": self.warnings,
+            "limit_breaches": self.limit_breaches,
+            "max_single_position_limit": self.max_single_position_limit,
+            "max_thesis_limit": self.max_thesis_limit,
+            "max_sector_limit": self.max_sector_limit,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ConcentrationAnalysis":
+        return cls(
+            by_thesis=data["by_thesis"],
+            by_sector=data["by_sector"],
+            largest_position=data["largest_position"],
+            largest_position_pct=data["largest_position_pct"],
+            warnings=data["warnings"],
+            limit_breaches=data["limit_breaches"],
+            max_single_position_limit=data.get("max_single_position_limit", 15.0),
+            max_thesis_limit=data.get("max_thesis_limit", 35.0),
+            max_sector_limit=data.get("max_sector_limit", 40.0),
+        )
+
+
+@dataclass
+class PeriodPerformance:
+    """Pre-computed period returns."""
+    today_pnl: float
+    today_pnl_pct: float
+    week_pnl: float
+    week_pnl_pct: float
+    month_pnl: float
+    month_pnl_pct: float
+
+    # Benchmark comparison
+    spy_today_pct: float
+    spy_week_pct: float
+    spy_month_pct: float
+    vs_spy_today: float  # Our return - SPY return
+    vs_spy_week: float
+    vs_spy_month: float
+
+    def to_dict(self) -> dict:
+        return {
+            "today_pnl": self.today_pnl,
+            "today_pnl_pct": self.today_pnl_pct,
+            "week_pnl": self.week_pnl,
+            "week_pnl_pct": self.week_pnl_pct,
+            "month_pnl": self.month_pnl,
+            "month_pnl_pct": self.month_pnl_pct,
+            "spy_today_pct": self.spy_today_pct,
+            "spy_week_pct": self.spy_week_pct,
+            "spy_month_pct": self.spy_month_pct,
+            "vs_spy_today": self.vs_spy_today,
+            "vs_spy_week": self.vs_spy_week,
+            "vs_spy_month": self.vs_spy_month,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PeriodPerformance":
+        return cls(**data)
+
+
+@dataclass
+class SoldPositionTrack:
+    """Tracking for a sold position."""
+    symbol: str
+    sell_date: str
+    sell_price: float
+    sell_quantity: int
+    sell_total: float
+    current_price: float
+    current_value_if_held: float
+    opportunity_cost: float  # Positive = missed gain, Negative = avoided loss
+    opportunity_cost_pct: float
+    days_since_sale: int
+    thesis_id: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {
+            "symbol": self.symbol,
+            "sell_date": self.sell_date,
+            "sell_price": self.sell_price,
+            "sell_quantity": self.sell_quantity,
+            "sell_total": self.sell_total,
+            "current_price": self.current_price,
+            "current_value_if_held": self.current_value_if_held,
+            "opportunity_cost": self.opportunity_cost,
+            "opportunity_cost_pct": self.opportunity_cost_pct,
+            "days_since_sale": self.days_since_sale,
+            "thesis_id": self.thesis_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SoldPositionTrack":
+        return cls(**data)
+
+
+@dataclass
+class SoldTracking:
+    """Aggregate sold position tracking."""
+    sold_positions: list[SoldPositionTrack]
+    total_opportunity_cost: float
+    biggest_miss: Optional[str]  # Symbol with biggest missed gain
+    biggest_miss_amount: float
+    biggest_avoided: Optional[str]  # Symbol with biggest avoided loss
+    biggest_avoided_amount: float
+
+    def to_dict(self) -> dict:
+        return {
+            "sold_positions": [p.to_dict() for p in self.sold_positions],
+            "total_opportunity_cost": self.total_opportunity_cost,
+            "biggest_miss": self.biggest_miss,
+            "biggest_miss_amount": self.biggest_miss_amount,
+            "biggest_avoided": self.biggest_avoided,
+            "biggest_avoided_amount": self.biggest_avoided_amount,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SoldTracking":
+        positions = [SoldPositionTrack.from_dict(p) for p in data.get("sold_positions", [])]
+        return cls(
+            sold_positions=positions,
+            total_opportunity_cost=data["total_opportunity_cost"],
+            biggest_miss=data.get("biggest_miss"),
+            biggest_miss_amount=data.get("biggest_miss_amount", 0.0),
+            biggest_avoided=data.get("biggest_avoided"),
+            biggest_avoided_amount=data.get("biggest_avoided_amount", 0.0),
+        )
+
+
+@dataclass
+class ProfitTierStatus:
+    """Profit tier tracking for a position."""
+    symbol: str
+    current_gain_pct: float
+    tier_10_triggered: bool
+    tier_15_triggered: bool
+    tier_20_triggered: bool
+    shares_remaining_pct: float  # What % of original position remains
+    recommended_action: Optional[str]  # e.g., "Take 25% profit at tier 10"
+    next_tier_pct: Optional[float]  # Next profit tier to watch
+
+    def to_dict(self) -> dict:
+        return {
+            "symbol": self.symbol,
+            "current_gain_pct": self.current_gain_pct,
+            "tier_10_triggered": self.tier_10_triggered,
+            "tier_15_triggered": self.tier_15_triggered,
+            "tier_20_triggered": self.tier_20_triggered,
+            "shares_remaining_pct": self.shares_remaining_pct,
+            "recommended_action": self.recommended_action,
+            "next_tier_pct": self.next_tier_pct,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ProfitTierStatus":
+        return cls(**data)
+
+
+@dataclass
+class TodayOrder:
+    """Single order from today."""
+    time: str
+    action: str  # BUY or SELL
+    symbol: str
+    quantity: int
+    price: float
+    total: float
+    order_id: str
+
+    def to_dict(self) -> dict:
+        return {
+            "time": self.time,
+            "action": self.action,
+            "symbol": self.symbol,
+            "quantity": self.quantity,
+            "price": self.price,
+            "total": self.total,
+            "order_id": self.order_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "TodayOrder":
+        return cls(**data)
+
+
+@dataclass
+class TodayOrders:
+    """Aggregate of today's orders."""
+    orders: list[TodayOrder]
+    total_buys: float
+    total_sells: float
+    net_flow: float
+    order_count: int
+
+    def to_dict(self) -> dict:
+        return {
+            "orders": [o.to_dict() for o in self.orders],
+            "total_buys": self.total_buys,
+            "total_sells": self.total_sells,
+            "net_flow": self.net_flow,
+            "order_count": self.order_count,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "TodayOrders":
+        orders = [TodayOrder.from_dict(o) for o in data.get("orders", [])]
+        return cls(
+            orders=orders,
+            total_buys=data["total_buys"],
+            total_sells=data["total_sells"],
+            net_flow=data["net_flow"],
+            order_count=data["order_count"],
+        )
+
+
+@dataclass
+class DataValidation:
+    """Data quality validation results."""
+    is_valid: bool
+    last_successful_update: str
+    stale_components: list[str]  # Components with stale data
+    missing_components: list[str]  # Components that failed to load
+    warnings: list[str]
+
+    # Component freshness (minutes since last update)
+    market_age_minutes: float
+    portfolio_age_minutes: float
+    positions_age_minutes: float
+
+    def to_dict(self) -> dict:
+        return {
+            "is_valid": self.is_valid,
+            "last_successful_update": self.last_successful_update,
+            "stale_components": self.stale_components,
+            "missing_components": self.missing_components,
+            "warnings": self.warnings,
+            "market_age_minutes": self.market_age_minutes,
+            "portfolio_age_minutes": self.portfolio_age_minutes,
+            "positions_age_minutes": self.positions_age_minutes,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "DataValidation":
+        return cls(**data)
+
+
+# ============================================================================
+# NEW: News Urgency and Signpost Alerts (Added 2026-01-10)
+# ============================================================================
+
+
+@dataclass
+class SignpostAlert:
+    """Alert when a thesis signpost is triggered by news."""
+    thesis_id: str
+    thesis_name: str
+    signpost_description: str
+    triggered_at: str
+    outcome: str  # bullish, bearish, neutral
+    news_headline: str
+    news_source: str
+    recommended_action: str
+    urgency: str  # high, medium, low
+
+    def to_dict(self) -> dict:
+        return {
+            "thesis_id": self.thesis_id,
+            "thesis_name": self.thesis_name,
+            "signpost_description": self.signpost_description,
+            "triggered_at": self.triggered_at,
+            "outcome": self.outcome,
+            "news_headline": self.news_headline,
+            "news_source": self.news_source,
+            "recommended_action": self.recommended_action,
+            "urgency": self.urgency,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SignpostAlert":
+        return cls(**data)
+
+
+@dataclass
+class NewsUrgencyAlert:
+    """Urgent news that may require immediate action."""
+    timestamp: str
+    headline: str
+    source: str
+    urgency: str  # critical, high, medium
+    affected_symbols: list[str]
+    affected_theses: list[str]
+    category: str  # earnings, acquisition, fda, contract, policy, other
+    sentiment: str  # bullish, bearish, neutral
+    recommended_action: str
+
+    def to_dict(self) -> dict:
+        return {
+            "timestamp": self.timestamp,
+            "headline": self.headline,
+            "source": self.source,
+            "urgency": self.urgency,
+            "affected_symbols": self.affected_symbols,
+            "affected_theses": self.affected_theses,
+            "category": self.category,
+            "sentiment": self.sentiment,
+            "recommended_action": self.recommended_action,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "NewsUrgencyAlert":
+        return cls(**data)
+
+
+# ============================================================================
+# NEW: Conviction Decay (Added 2026-01-10)
+# ============================================================================
+
+
+@dataclass
+class ConvictionDecayResult:
+    """Result of conviction decay calculation for a thesis."""
+    thesis_id: str
+    thesis_name: str
+    original_conviction: float
+    current_conviction: float
+    decay_applied: float
+    decay_reasons: list[str]
+    days_since_last_signpost: int
+    days_since_creation: int
+    status: str  # healthy, warning, critical, auto_paused
+
+    def to_dict(self) -> dict:
+        return {
+            "thesis_id": self.thesis_id,
+            "thesis_name": self.thesis_name,
+            "original_conviction": self.original_conviction,
+            "current_conviction": self.current_conviction,
+            "decay_applied": self.decay_applied,
+            "decay_reasons": self.decay_reasons,
+            "days_since_last_signpost": self.days_since_last_signpost,
+            "days_since_creation": self.days_since_creation,
+            "status": self.status,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ConvictionDecayResult":
+        return cls(**data)
+
+
+# ============================================================================
+# NEW: Historical Portfolio Tracking (Added 2026-01-10)
+# ============================================================================
+
+
+@dataclass
+class PortfolioHistorySnapshot:
+    """Single point in portfolio history."""
+    date: str
+    equity: float
+    cash: float
+    positions_value: float
+    day_pnl: float
+    day_pnl_pct: float
+    spy_close: float
+    spy_pct: float
+
+    def to_dict(self) -> dict:
+        return {
+            "date": self.date,
+            "equity": self.equity,
+            "cash": self.cash,
+            "positions_value": self.positions_value,
+            "day_pnl": self.day_pnl,
+            "day_pnl_pct": self.day_pnl_pct,
+            "spy_close": self.spy_close,
+            "spy_pct": self.spy_pct,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PortfolioHistorySnapshot":
+        return cls(**data)
+
+
+@dataclass
+class PortfolioHistory:
+    """Historical portfolio data for accurate period returns."""
+    snapshots: list[PortfolioHistorySnapshot]
+
+    # Computed period returns
+    week_start_equity: float
+    week_pnl: float
+    week_pnl_pct: float
+    month_start_equity: float
+    month_pnl: float
+    month_pnl_pct: float
+
+    # vs SPY
+    week_spy_pct: float
+    month_spy_pct: float
+    vs_spy_week: float
+    vs_spy_month: float
+
+    def to_dict(self) -> dict:
+        return {
+            "snapshots": [s.to_dict() for s in self.snapshots],
+            "week_start_equity": self.week_start_equity,
+            "week_pnl": self.week_pnl,
+            "week_pnl_pct": self.week_pnl_pct,
+            "month_start_equity": self.month_start_equity,
+            "month_pnl": self.month_pnl,
+            "month_pnl_pct": self.month_pnl_pct,
+            "week_spy_pct": self.week_spy_pct,
+            "month_spy_pct": self.month_spy_pct,
+            "vs_spy_week": self.vs_spy_week,
+            "vs_spy_month": self.vs_spy_month,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PortfolioHistory":
+        snapshots = [PortfolioHistorySnapshot.from_dict(s) for s in data.get("snapshots", [])]
+        return cls(
+            snapshots=snapshots,
+            week_start_equity=data.get("week_start_equity", 0.0),
+            week_pnl=data.get("week_pnl", 0.0),
+            week_pnl_pct=data.get("week_pnl_pct", 0.0),
+            month_start_equity=data.get("month_start_equity", 0.0),
+            month_pnl=data.get("month_pnl", 0.0),
+            month_pnl_pct=data.get("month_pnl_pct", 0.0),
+            week_spy_pct=data.get("week_spy_pct", 0.0),
+            month_spy_pct=data.get("month_spy_pct", 0.0),
+            vs_spy_week=data.get("vs_spy_week", 0.0),
+            vs_spy_month=data.get("vs_spy_month", 0.0),
+        )
+
+
 @dataclass
 class UnifiedState:
     """
@@ -501,6 +1063,10 @@ class UnifiedState:
 
     This is the central state object that aggregates all data sources.
     Written to ~/quant_results/live/state.json by the LiveDaemon.
+
+    ENHANCED: Now includes pre-computed thesis performance, concentration
+    analysis, and human-readable summary to eliminate the need for Claude
+    to generate Python code for standard queries.
     """
 
     # Metadata
@@ -541,9 +1107,27 @@ class UnifiedState:
     # Summary for quick LLM consumption
     summary: str = ""
 
+    # NEW: Pre-computed data for efficient queries
+    thesis_performance: dict[str, ThesisPerformance] = field(default_factory=dict)
+    concentration: Optional[ConcentrationAnalysis] = None
+    period_performance: Optional[PeriodPerformance] = None
+    sold_tracking: Optional[SoldTracking] = None
+    profit_tiers: dict[str, ProfitTierStatus] = field(default_factory=dict)
+    today_orders: Optional[TodayOrders] = None
+    validation: Optional[DataValidation] = None
+
+    # Human-readable summary text (THE key efficiency gain)
+    summary_text: str = ""
+
+    # NEW: P2 features (Added 2026-01-10)
+    signpost_alerts: list[SignpostAlert] = field(default_factory=list)
+    news_urgency_alerts: list[NewsUrgencyAlert] = field(default_factory=list)
+    conviction_decay: list[ConvictionDecayResult] = field(default_factory=list)
+    portfolio_history: Optional[PortfolioHistory] = None
+
     def to_dict(self) -> dict:
         """Serialize to dictionary for JSON."""
-        return {
+        result = {
             "timestamp": self.timestamp.isoformat(),
             "market_open": self.market_open,
             "last_updated_by": self.last_updated_by,
@@ -560,11 +1144,55 @@ class UnifiedState:
             "upcoming_events": [e.to_dict() for e in self.upcoming_events],
             "research": self.research.to_dict(),
             "summary": self.summary,
+            # NEW: Pre-computed data
+            "thesis_performance": {k: v.to_dict() for k, v in self.thesis_performance.items()},
+            "concentration": self.concentration.to_dict() if self.concentration else None,
+            "period_performance": self.period_performance.to_dict() if self.period_performance else None,
+            "sold_tracking": self.sold_tracking.to_dict() if self.sold_tracking else None,
+            "profit_tiers": {k: v.to_dict() for k, v in self.profit_tiers.items()},
+            "today_orders": self.today_orders.to_dict() if self.today_orders else None,
+            "validation": self.validation.to_dict() if self.validation else None,
+            "summary_text": self.summary_text,
+            # NEW: P2 features
+            "signpost_alerts": [a.to_dict() for a in self.signpost_alerts],
+            "news_urgency_alerts": [a.to_dict() for a in self.news_urgency_alerts],
+            "conviction_decay": [d.to_dict() for d in self.conviction_decay],
+            "portfolio_history": self.portfolio_history.to_dict() if self.portfolio_history else None,
         }
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> "UnifiedState":
         """Deserialize from dictionary."""
+        # Parse new optional fields
+        thesis_perf = {}
+        if data.get("thesis_performance"):
+            thesis_perf = {k: ThesisPerformance.from_dict(v) for k, v in data["thesis_performance"].items()}
+
+        concentration = None
+        if data.get("concentration"):
+            concentration = ConcentrationAnalysis.from_dict(data["concentration"])
+
+        period_perf = None
+        if data.get("period_performance"):
+            period_perf = PeriodPerformance.from_dict(data["period_performance"])
+
+        sold_tracking = None
+        if data.get("sold_tracking"):
+            sold_tracking = SoldTracking.from_dict(data["sold_tracking"])
+
+        profit_tiers = {}
+        if data.get("profit_tiers"):
+            profit_tiers = {k: ProfitTierStatus.from_dict(v) for k, v in data["profit_tiers"].items()}
+
+        today_orders = None
+        if data.get("today_orders"):
+            today_orders = TodayOrders.from_dict(data["today_orders"])
+
+        validation = None
+        if data.get("validation"):
+            validation = DataValidation.from_dict(data["validation"])
+
         return cls(
             timestamp=datetime.fromisoformat(data["timestamp"]),
             market_open=data["market_open"],
@@ -582,6 +1210,20 @@ class UnifiedState:
             upcoming_events=[CalendarEvent.from_dict(e) for e in data["upcoming_events"]],
             research=ResearchIndex.from_dict(data["research"]),
             summary=data.get("summary", ""),
+            # NEW: Pre-computed data
+            thesis_performance=thesis_perf,
+            concentration=concentration,
+            period_performance=period_perf,
+            sold_tracking=sold_tracking,
+            profit_tiers=profit_tiers,
+            today_orders=today_orders,
+            validation=validation,
+            summary_text=data.get("summary_text", ""),
+            # NEW: P2 features
+            signpost_alerts=[SignpostAlert.from_dict(a) for a in data.get("signpost_alerts", [])],
+            news_urgency_alerts=[NewsUrgencyAlert.from_dict(a) for a in data.get("news_urgency_alerts", [])],
+            conviction_decay=[ConvictionDecayResult.from_dict(d) for d in data.get("conviction_decay", [])],
+            portfolio_history=PortfolioHistory.from_dict(data["portfolio_history"]) if data.get("portfolio_history") else None,
         )
 
     def to_file(self, path: Path) -> None:

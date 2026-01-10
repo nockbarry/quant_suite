@@ -18,7 +18,7 @@ start_daemon() {
     echo "Starting live daemon..."
     cd "$PROJECT_ROOT"
 
-    nohup python -c "
+    nohup python3 -c "
 import asyncio
 import sys
 sys.path.insert(0, '.')

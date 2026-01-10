@@ -58,7 +58,7 @@ run_premarket() {
     log "Running pre-market research preparation..."
     cd "$PROJECT_ROOT"
 
-    PYTHONPATH="$PROJECT_ROOT" python scripts/research_prep.py >> "$LOG_DIR/premarket_$(date +%Y%m%d).log" 2>&1
+    PYTHONPATH="$PROJECT_ROOT" python3 scripts/research_prep.py >> "$LOG_DIR/premarket_$(date +%Y%m%d).log" 2>&1
 
     if [ $? -eq 0 ]; then
         log "Pre-market prep complete"
@@ -71,7 +71,7 @@ update_state_now() {
     log "Updating unified state..."
     cd "$PROJECT_ROOT"
 
-    PYTHONPATH="$PROJECT_ROOT" python -c "
+    PYTHONPATH="$PROJECT_ROOT" python3 -c "
 import asyncio
 from src.synthesis.daemon import LiveDaemon
 
