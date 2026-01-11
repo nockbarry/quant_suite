@@ -130,6 +130,177 @@ from .expert_sentiment import (
     get_expert_consensus,
 )
 
+# VIX Term Structure
+from .vix_structure import (
+    VIXTermStructure,
+    VIXStructureSource,
+    get_vix_structure,
+    get_vix_signal,
+)
+
+# Put/Call Ratio
+from .put_call import (
+    PutCallData,
+    PutCallSource,
+    get_put_call_data,
+    get_put_call_signal,
+)
+
+# AAII Sentiment
+from .aaii_sentiment import (
+    AAIISentiment,
+    AAIISentimentSource,
+    get_aaii_sentiment,
+    get_aaii_signal,
+)
+
+# Finviz Screener
+from .finviz_screens import (
+    ScreenResult,
+    FinvizScreens,
+    FinvizScreener,
+    SCREEN_DEFINITIONS,
+    get_finviz_screens,
+    get_screen_candidates,
+)
+
+# Newsletter Sentiment (Investors Intelligence)
+from .newsletter_sentiment import (
+    NewsletterSentiment,
+    NewsletterSentimentSource,
+    get_newsletter_sentiment,
+    get_newsletter_signal,
+)
+
+# Commitment of Traders (COT)
+from .cot_report import (
+    COTPosition,
+    COTReport,
+    COTSource,
+    CONTRACT_MAP as COT_CONTRACT_MAP,
+    get_cot_report,
+    get_cot_signal,
+    get_equity_cot_signal,
+)
+
+# Earnings Calendar
+from .earnings_calendar import (
+    EarningsEvent,
+    EarningsCalendar,
+    EarningsCalendarSource,
+    get_earnings_calendar,
+    get_earnings_today,
+    check_earnings_soon,
+)
+
+# Economic Calendar
+from .economic_calendar import (
+    ReleaseCategory,
+    ReleaseImportance,
+    EconomicRelease,
+    EconomicCalendar,
+    EconomicCalendarSource,
+    RELEASE_DEFINITIONS,
+    get_economic_calendar,
+    get_high_impact_releases,
+    has_fomc_this_week,
+)
+
+# Fed Futures
+from .fed_futures import (
+    FOMCMeeting,
+    FedExpectations,
+    FedFuturesSource,
+    FOMC_DATES_2026,
+    get_fed_expectations,
+    get_next_fomc_date,
+    get_rate_path_signal,
+)
+
+# Treasury Calendar
+from .treasury_calendar import (
+    SecurityType,
+    TreasuryAuction,
+    TreasuryCalendar,
+    TreasuryCalendarSource,
+    SECURITY_IMPACT,
+    get_treasury_calendar,
+    get_high_impact_auctions,
+    get_weekly_issuance,
+)
+
+# IPO Calendar
+from .ipo_calendar import (
+    IPOEvent,
+    IPOCalendar,
+    IPOCalendarSource,
+    get_ipo_calendar,
+    get_upcoming_ipos,
+    get_large_ipos,
+)
+
+# FDA Calendar
+from .fda_calendar import (
+    EventType as FDAEventType,
+    FDAEvent,
+    FDACalendar,
+    FDACalendarSource,
+    APPROVAL_RATES,
+    get_fda_calendar,
+    get_upcoming_pdufa,
+    get_binary_events,
+    check_fda_catalyst,
+)
+
+# Patent Filings
+from .patent_filings import (
+    Patent,
+    PatentActivity,
+    PatentDatabase,
+    USPTOSource,
+    COMPANY_ASSIGNEES,
+    get_patent_activity,
+    get_top_innovators,
+    get_accelerating_innovation,
+)
+
+# Job Postings
+from .job_postings import (
+    JobPostings,
+    JobDatabase,
+    JobPostingSource,
+    CAREER_PAGES,
+    get_job_postings,
+    get_expanding_companies,
+    get_contracting_companies,
+)
+
+# App Rankings
+from .app_rankings import (
+    AppStore,
+    AppCategory,
+    AppRanking,
+    CompanyAppSummary,
+    AppRankingDatabase,
+    AppRankingSource,
+    APP_COMPANY_MAP,
+    get_app_rankings,
+    get_top_apps,
+    get_rising_apps,
+)
+
+# GitHub Activity
+from .github_activity import (
+    GitHubRepo,
+    GitHubActivity,
+    GitHubDatabase,
+    GitHubSource,
+    COMPANY_ORGS,
+    get_github_activity,
+    get_top_github_companies,
+    get_growing_github_presence,
+)
+
 __all__ = [
     # News
     "NewsArticle",
@@ -233,4 +404,127 @@ __all__ = [
     "fetch_expert_calls",
     "get_inverse_cramer",
     "get_expert_consensus",
+    # VIX Term Structure
+    "VIXTermStructure",
+    "VIXStructureSource",
+    "get_vix_structure",
+    "get_vix_signal",
+    # Put/Call Ratio
+    "PutCallData",
+    "PutCallSource",
+    "get_put_call_data",
+    "get_put_call_signal",
+    # AAII Sentiment
+    "AAIISentiment",
+    "AAIISentimentSource",
+    "get_aaii_sentiment",
+    "get_aaii_signal",
+    # Finviz Screener
+    "ScreenResult",
+    "FinvizScreens",
+    "FinvizScreener",
+    "SCREEN_DEFINITIONS",
+    "get_finviz_screens",
+    "get_screen_candidates",
+    # Newsletter Sentiment
+    "NewsletterSentiment",
+    "NewsletterSentimentSource",
+    "get_newsletter_sentiment",
+    "get_newsletter_signal",
+    # COT Report
+    "COTPosition",
+    "COTReport",
+    "COTSource",
+    "COT_CONTRACT_MAP",
+    "get_cot_report",
+    "get_cot_signal",
+    "get_equity_cot_signal",
+    # Earnings Calendar
+    "EarningsEvent",
+    "EarningsCalendar",
+    "EarningsCalendarSource",
+    "get_earnings_calendar",
+    "get_earnings_today",
+    "check_earnings_soon",
+    # Economic Calendar
+    "ReleaseCategory",
+    "ReleaseImportance",
+    "EconomicRelease",
+    "EconomicCalendar",
+    "EconomicCalendarSource",
+    "RELEASE_DEFINITIONS",
+    "get_economic_calendar",
+    "get_high_impact_releases",
+    "has_fomc_this_week",
+    # Fed Futures
+    "FOMCMeeting",
+    "FedExpectations",
+    "FedFuturesSource",
+    "FOMC_DATES_2026",
+    "get_fed_expectations",
+    "get_next_fomc_date",
+    "get_rate_path_signal",
+    # Treasury Calendar
+    "SecurityType",
+    "TreasuryAuction",
+    "TreasuryCalendar",
+    "TreasuryCalendarSource",
+    "SECURITY_IMPACT",
+    "get_treasury_calendar",
+    "get_high_impact_auctions",
+    "get_weekly_issuance",
+    # IPO Calendar
+    "IPOEvent",
+    "IPOCalendar",
+    "IPOCalendarSource",
+    "get_ipo_calendar",
+    "get_upcoming_ipos",
+    "get_large_ipos",
+    # FDA Calendar
+    "FDAEventType",
+    "FDAEvent",
+    "FDACalendar",
+    "FDACalendarSource",
+    "APPROVAL_RATES",
+    "get_fda_calendar",
+    "get_upcoming_pdufa",
+    "get_binary_events",
+    "check_fda_catalyst",
+    # Patent Filings
+    "Patent",
+    "PatentActivity",
+    "PatentDatabase",
+    "USPTOSource",
+    "COMPANY_ASSIGNEES",
+    "get_patent_activity",
+    "get_top_innovators",
+    "get_accelerating_innovation",
+    # Job Postings
+    "JobPostings",
+    "JobDatabase",
+    "JobPostingSource",
+    "CAREER_PAGES",
+    "get_job_postings",
+    "get_expanding_companies",
+    "get_contracting_companies",
+    # App Rankings
+    "AppStore",
+    "AppCategory",
+    "AppRanking",
+    "CompanyAppSummary",
+    "AppRankingDatabase",
+    "AppRankingSource",
+    "APP_COMPANY_MAP",
+    "get_app_rankings",
+    "get_top_apps",
+    "get_rising_apps",
+    # GitHub Activity
+    "GitHubRepo",
+    "GitHubActivity",
+    "GitHubDatabase",
+    "GitHubSource",
+    "COMPANY_ORGS",
+    "get_github_activity",
+    "get_top_github_companies",
+    "get_growing_github_presence",
 ]

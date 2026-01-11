@@ -153,7 +153,28 @@ src/data/
 │   │   ├── iv_rank.py               ──► IV percentile rank
 │   │   ├── etf_flows.py             ──► ETF flow tracking
 │   │   ├── weather.py               ──► Weather data (commodities)
-│   │   └── google_trends.py         ──► Google Trends
+│   │   ├── google_trends.py         ──► Google Trends
+│   │   │
+│   │   │  # Free Data Sources (Added 2026-01-10)
+│   │   │  # Reason: Expand signal diversity at zero cost, activate latent knowledge
+│   │   ├── vix_structure.py         ──► VIX term structure (CBOE)
+│   │   ├── put_call.py              ──► Put/call ratios (CBOE)
+│   │   ├── finviz_screens.py        ──► Pre-built stock screens
+│   │   ├── aaii_sentiment.py        ──► AAII retail sentiment (weekly)
+│   │   ├── newsletter_sentiment.py  ──► Investors Intelligence
+│   │   ├── cot_report.py            ──► CFTC Commitment of Traders
+│   │   ├── earnings_calendar.py     ──► Earnings with whisper numbers
+│   │   ├── economic_calendar.py     ──► BLS, Fed, Treasury releases
+│   │   ├── fed_futures.py           ──► CME FedWatch rate expectations
+│   │   ├── treasury_calendar.py     ──► Treasury auction schedule
+│   │   ├── ipo_calendar.py          ──► NASDAQ IPO calendar
+│   │   ├── fda_calendar.py          ──► PDUFA dates, AdCom meetings
+│   │   ├── patent_filings.py        ──► USPTO patent activity
+│   │   ├── job_postings.py          ──► Job posting growth signals
+│   │   ├── app_rankings.py          ──► App Store/Play rankings
+│   │   └── github_activity.py       ──► GitHub org metrics
+│   │
+│   ├── collection_daemon.py         ──► Orchestrates all free data sources (Added 2026-01-10)
 │   │
 │   ├── realtime/
 │   │   ├── news_daemon.py           ──► Continuous news monitoring
@@ -974,5 +995,101 @@ Based on the integration analysis, these modules may need better integration:
 
 ---
 
+## 11. Data Collection Daemon Architecture
+
+**Added**: 2026-01-10
+**Reason**: Orchestrate 20+ free data sources with configurable schedules, proper caching, and rate limiting to expand signal diversity at zero API cost.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                            DATA COLLECTION DAEMON                                        │
+│                         src/data/sources/collection_daemon.py                            │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+                                          │
+         ┌────────────────────────────────┼────────────────────────────────┐
+         │                                │                                │
+         ▼                                ▼                                ▼
+┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
+│   REAL-TIME (5-15m) │    │     HOURLY          │    │      DAILY          │
+│   Market hours only │    │                     │    │                     │
+├─────────────────────┤    ├─────────────────────┤    ├─────────────────────┤
+│ vix_structure   15m │    │ fed_futures     60m │    │ finviz_screens  4hr │
+│ put_call        60m │    │                     │    │ earnings_cal    6hr │
+│ breadth          5m │    │                     │    │ economic_cal   12hr │
+└─────────────────────┘    └─────────────────────┘    │ ipo_calendar   12hr │
+                                                       │ fda_calendar   12hr │
+         ┌────────────────────────────────┐            │ app_rankings   24hr │
+         │                                │            │ github_activity24hr │
+         ▼                                ▼            │ short_interest 24hr │
+┌─────────────────────┐    ┌─────────────────────┐    └─────────────────────┘
+│      WEEKLY         │    │     PERIODIC        │
+├─────────────────────┤    ├─────────────────────┤
+│ aaii_sentiment      │    │ job_postings    3d  │
+│ newsletter_sentiment│    │                     │
+│ cot_report          │    │                     │
+│ patents             │    │                     │
+└─────────────────────┘    └─────────────────────┘
+         │                                │
+         └────────────────┬───────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                              CACHING & STORAGE                                           │
+│                                                                                          │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐   │
+│  │  ~/quant_results/live/data_cache/                                                │   │
+│  │                                                                                  │   │
+│  │  vix_structure.json    ─► {"timestamp": "...", "slope": 0.15, "signal": 0.3}    │   │
+│  │  put_call.json         ─► {"timestamp": "...", "equity_ratio": 0.68, ...}       │   │
+│  │  aaii_sentiment.json   ─► {"survey_date": "...", "bullish_pct": 42.5, ...}      │   │
+│  │  cot_report.json       ─► {"report_date": "...", "ES": {...}, "NQ": {...}}      │   │
+│  │  fed_expectations.json ─► {"timestamp": "...", "prob_cut": 0.65, ...}           │   │
+│  │  earnings_calendar.json ─► {"events": [...], "timestamp": "..."}                │   │
+│  │  fda_calendar.json     ─► {"events": [...], "timestamp": "..."}                 │   │
+│  │  ... etc                                                                         │   │
+│  └──────────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                          │
+│  All files include timestamps for point-in-time backtesting safety                       │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                              SIGNAL AGGREGATOR                                           │
+│                              src/synthesis/signals.py                                    │
+│                                                                                          │
+│  New signal fields (Added 2026-01-10):                                                   │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐   │
+│  │  vix_structure_signal: float   # -1 to +1 (contango/backwardation)               │   │
+│  │  breadth_signal: float         # -1 to +1 (weak/strong breadth)                  │   │
+│  │  aaii_signal: float            # -1 to +1 (contrarian: high bull = sell)         │   │
+│  │  cot_signal: float             # -1 to +1 (follow commercials)                   │   │
+│  │  put_call_signal: float        # -1 to +1 (contrarian at extremes)               │   │
+│  │  short_squeeze_score: float    # 0 to 1 (squeeze potential)                      │   │
+│  └──────────────────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Free Data Source Categories
+
+| Category | Sources | Update Frequency | Use Case |
+|----------|---------|-----------------|----------|
+| **Market Regime** | VIX structure, Put/call, NYSE breadth, Finviz screens | 5-60 min | Core market context |
+| **Sentiment Extremes** | AAII survey, Newsletter sentiment, COT report | Weekly | Contrarian signals |
+| **Economic Calendar** | Earnings, Economic releases, Fed futures, Treasury auctions | 1-12 hr | Event preparation |
+| **Event Catalysts** | IPO calendar, FDA calendar | 12 hr | Binary event awareness |
+| **Innovation Signals** | Patents, Job postings, App rankings, GitHub activity | 1-7 days | Growth/momentum proxy |
+
+### Key Design Decisions (2026-01-10)
+
+1. **Variable Update Frequencies**: Different data sources have different freshness requirements
+2. **Market Hours Awareness**: Real-time sources only poll during market hours to save resources
+3. **Graceful Failure Handling**: Exponential backoff on source failures, continue with other sources
+4. **Point-in-Time Safety**: All cached data includes timestamps for accurate backtesting
+5. **Rate Limiting**: Respects source-specific rate limits to avoid being blocked
+6. **Zero Cost**: All sources are free (CBOE, CFTC, SEC, USPTO, etc.)
+
+---
+
 *Generated: 2026-01-07*
+*Updated: 2026-01-10 - Added Data Collection Daemon and 20+ free data sources*
 *This document should be updated when major architectural changes are made.*

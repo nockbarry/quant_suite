@@ -96,6 +96,30 @@ class SentimentSnapshot:
     overall_sentiment: str  # bullish, bearish, neutral
     contrarian_signal: Optional[str]  # buy, sell, or None
 
+    # NEW: Enhanced VIX term structure
+    vix_1m: Optional[float] = None
+    vix_3m: Optional[float] = None
+    vix_slope: Optional[float] = None  # (longer - shorter) / shorter
+    vix_regime: Optional[str] = None  # "steep_contango", "contango", "flat", "backwardation"
+
+    # NEW: Retail sentiment (AAII)
+    aaii_bullish: Optional[float] = None  # % bullish
+    aaii_bearish: Optional[float] = None  # % bearish
+    aaii_signal: Optional[str] = None  # "extreme_bullish", "bullish", "neutral", "bearish", "extreme_bearish"
+
+    # NEW: Advisor sentiment (Investors Intelligence)
+    newsletter_bulls: Optional[float] = None  # % bulls
+    newsletter_signal: Optional[str] = None  # bullish, bearish, neutral
+
+    # NEW: COT summary (Commitment of Traders)
+    cot_sp500_commercial_net: Optional[int] = None  # Commercial net position
+    cot_signal: Optional[str] = None  # "bullish" (follow commercials), "bearish", "neutral"
+
+    # NEW: Fed expectations
+    fed_prob_cut: Optional[float] = None  # Probability of rate cut at next meeting
+    fed_prob_hike: Optional[float] = None  # Probability of rate hike
+    fed_path_signal: Optional[str] = None  # "hawkish", "dovish", "neutral"
+
     def to_dict(self) -> dict:
         return {
             "timestamp": self.timestamp.isoformat(),
@@ -106,6 +130,25 @@ class SentimentSnapshot:
             "vix_term_structure": self.vix_term_structure,
             "overall_sentiment": self.overall_sentiment,
             "contrarian_signal": self.contrarian_signal,
+            # NEW: Enhanced VIX
+            "vix_1m": self.vix_1m,
+            "vix_3m": self.vix_3m,
+            "vix_slope": self.vix_slope,
+            "vix_regime": self.vix_regime,
+            # NEW: Retail sentiment
+            "aaii_bullish": self.aaii_bullish,
+            "aaii_bearish": self.aaii_bearish,
+            "aaii_signal": self.aaii_signal,
+            # NEW: Advisor sentiment
+            "newsletter_bulls": self.newsletter_bulls,
+            "newsletter_signal": self.newsletter_signal,
+            # NEW: COT
+            "cot_sp500_commercial_net": self.cot_sp500_commercial_net,
+            "cot_signal": self.cot_signal,
+            # NEW: Fed
+            "fed_prob_cut": self.fed_prob_cut,
+            "fed_prob_hike": self.fed_prob_hike,
+            "fed_path_signal": self.fed_path_signal,
         }
 
     @classmethod
@@ -119,6 +162,25 @@ class SentimentSnapshot:
             vix_term_structure=data["vix_term_structure"],
             overall_sentiment=data["overall_sentiment"],
             contrarian_signal=data.get("contrarian_signal"),
+            # NEW: Enhanced VIX
+            vix_1m=data.get("vix_1m"),
+            vix_3m=data.get("vix_3m"),
+            vix_slope=data.get("vix_slope"),
+            vix_regime=data.get("vix_regime"),
+            # NEW: Retail sentiment
+            aaii_bullish=data.get("aaii_bullish"),
+            aaii_bearish=data.get("aaii_bearish"),
+            aaii_signal=data.get("aaii_signal"),
+            # NEW: Advisor sentiment
+            newsletter_bulls=data.get("newsletter_bulls"),
+            newsletter_signal=data.get("newsletter_signal"),
+            # NEW: COT
+            cot_sp500_commercial_net=data.get("cot_sp500_commercial_net"),
+            cot_signal=data.get("cot_signal"),
+            # NEW: Fed
+            fed_prob_cut=data.get("fed_prob_cut"),
+            fed_prob_hike=data.get("fed_prob_hike"),
+            fed_path_signal=data.get("fed_path_signal"),
         )
 
 
@@ -1262,6 +1324,26 @@ class UnifiedState:
             f"- VIX: {self.market.vix:.1f} ({self.market.vix_change_pct:+.1f}%)",
             f"- Regime: **{self.market.regime}** ({self.market.regime_confidence:.0%} confidence)",
             f"- Sentiment: {self.sentiment.overall_sentiment} (Fear/Greed: {self.sentiment.fear_greed_value:.0f})",
+        ]
+
+        # NEW: Enhanced sentiment indicators (if available)
+        if self.sentiment.vix_regime:
+            lines.append(f"- VIX Structure: {self.sentiment.vix_regime}" +
+                        (f" (slope: {self.sentiment.vix_slope:.2f})" if self.sentiment.vix_slope else ""))
+        if self.sentiment.aaii_bullish is not None:
+            lines.append(f"- AAII: {self.sentiment.aaii_bullish:.1f}% bull / {self.sentiment.aaii_bearish:.1f}% bear" +
+                        (f" ({self.sentiment.aaii_signal})" if self.sentiment.aaii_signal else ""))
+        if self.sentiment.fed_prob_cut is not None or self.sentiment.fed_prob_hike is not None:
+            fed_parts = []
+            if self.sentiment.fed_prob_cut:
+                fed_parts.append(f"cut: {self.sentiment.fed_prob_cut:.0%}")
+            if self.sentiment.fed_prob_hike:
+                fed_parts.append(f"hike: {self.sentiment.fed_prob_hike:.0%}")
+            if fed_parts:
+                lines.append(f"- Fed Expectations: {', '.join(fed_parts)}" +
+                            (f" ({self.sentiment.fed_path_signal})" if self.sentiment.fed_path_signal else ""))
+
+        lines.extend([
             "",
             "## Portfolio",
             f"- Equity: ${self.portfolio.equity:,.0f}",
@@ -1269,7 +1351,7 @@ class UnifiedState:
             f"- Exposure: {self.portfolio.market_exposure_pct:.0f}%",
             f"- Day Trades Remaining: {self.portfolio.day_trades_remaining}",
             "",
-        ]
+        ])
 
         if self.positions:
             lines.append("## Positions")

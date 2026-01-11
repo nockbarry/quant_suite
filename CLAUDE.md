@@ -398,7 +398,7 @@ All outputs in configurable results directory (default: `~/quant_results`):
 - **ML Models**: XGBoost, LightGBM (require MCPT validation)
 - **Regime**: Volatility regime, trend detection
 
-### Alternative Data
+### Alternative Data (Core)
 | Source | File | Signal Type |
 |--------|------|-------------|
 | **Congressional Trades** | `congressional_trades.py` | Cluster buying |
@@ -408,6 +408,17 @@ All outputs in configurable results directory (default: `~/quant_results`):
 | **Options Flow** | `options_flow.py` | Unusual activity |
 | **Social Sentiment** | `social_sentiment.py` | Reddit/Twitter |
 
+### Free Data Sources (20+)
+| Category | Sources | Files |
+|----------|---------|-------|
+| **Market Regime** | VIX term structure, Put/call ratios, Finviz screens | `vix_structure.py`, `put_call.py`, `finviz_screens.py` |
+| **Sentiment** | AAII survey, Newsletter sentiment, COT report | `aaii_sentiment.py`, `newsletter_sentiment.py`, `cot_report.py` |
+| **Economic** | Earnings calendar, Economic releases, Fed futures, Treasury auctions | `earnings_calendar.py`, `economic_calendar.py`, `fed_futures.py`, `treasury_calendar.py` |
+| **Events** | IPO calendar, FDA calendar | `ipo_calendar.py`, `fda_calendar.py` |
+| **Innovation** | USPTO patents, Job postings, App rankings, GitHub activity | `patent_filings.py`, `job_postings.py`, `app_rankings.py`, `github_activity.py` |
+
+All sources in `src/data/sources/alternative/`
+
 ---
 
 ## Real-Time Infrastructure
@@ -415,11 +426,32 @@ All outputs in configurable results directory (default: `~/quant_results`):
 | Component | Module | Update Interval |
 |-----------|--------|-----------------|
 | **LiveDaemon** | `src/synthesis/daemon.py` | 5 min |
+| **DataCollectionDaemon** | `src/data/sources/collection_daemon.py` | Variable |
 | **News Daemon** | `src/data/sources/realtime/news_daemon.py` | 30 min |
 | **Market Breadth** | `src/data/pipeline/market_breadth.py` | 5 min |
 | **Sentiment** | `src/data/pipeline/sentiment.py` | 1 hour |
 | **Alert Manager** | `src/alerts/alert_manager.py` | 1 min |
 | **Position Risk** | `src/risk/position_monitor.py` | 15 min |
+
+### Data Collection Daemon Schedules
+
+```python
+# Real-time (market hours only)
+vix_structure: 15 min, put_call: 60 min, breadth: 5 min
+
+# Hourly
+fed_futures: 60 min
+
+# Daily
+finviz_screens: 4 hr, earnings_calendar: 6 hr, economic_calendar: 12 hr
+ipo_calendar: 12 hr, fda_calendar: 12 hr, app_rankings: 24 hr, github_activity: 24 hr
+
+# Weekly
+aaii_sentiment: weekly, newsletter_sentiment: weekly, cot_report: weekly, patents: weekly
+
+# Periodic
+job_postings: 3 days
+```
 
 ---
 
@@ -454,5 +486,7 @@ All outputs in configurable results directory (default: `~/quant_results`):
 | `docs/ALPHA_DISCOVERY.md` | Alternative data, market scanning |
 | `docs/TEXT_RESEARCH.md` | Text research, embeddings |
 | `docs/TRADING_GUIDE.md` | End-user trading guide |
+| `docs/FREE_DATA_SOURCES.md` | Free data sources (20+) implementation guide |
+| `docs/ARCHITECTURE_DIAGRAMS.md` | Complete system architecture |
 | `DEVLOG.md` | Development progress |
 | `RESEARCH_LOG.md` | Research findings |

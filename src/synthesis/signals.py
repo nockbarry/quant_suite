@@ -35,6 +35,18 @@ class AggregatedSignal:
     options_flow_signal: float = 0.0
     sentiment_signal: float = 0.0
 
+    # NEW: Market regime signals (-1 to 1 scale)
+    vix_structure_signal: float = 0.0  # -1 = sell vol/risk-on, +1 = buy vol/risk-off
+    breadth_signal: float = 0.0        # -1 = weak breadth, +1 = strong breadth
+    put_call_signal: float = 0.0       # -1 = extreme greed, +1 = extreme fear (contrarian)
+
+    # NEW: Sentiment extremes (-1 to 1 scale)
+    aaii_signal: float = 0.0           # -1 = too bullish (contrarian sell), +1 = too bearish (contrarian buy)
+    cot_signal: float = 0.0            # -1 = speculators bullish, +1 = commercials bullish
+
+    # NEW: Short interest
+    short_squeeze_score: float = 0.0   # 0 to 1, higher = more squeeze potential
+
     # From existing technicals
     technical_bias: str = "neutral"  # bullish, bearish, neutral
     rsi: float = 50.0
@@ -68,6 +80,15 @@ class AggregatedSignal:
             "insider_signal": self.insider_signal,
             "options_flow_signal": self.options_flow_signal,
             "sentiment_signal": self.sentiment_signal,
+            # NEW: Market regime signals
+            "vix_structure_signal": self.vix_structure_signal,
+            "breadth_signal": self.breadth_signal,
+            "put_call_signal": self.put_call_signal,
+            # NEW: Sentiment extremes
+            "aaii_signal": self.aaii_signal,
+            "cot_signal": self.cot_signal,
+            # NEW: Short interest
+            "short_squeeze_score": self.short_squeeze_score,
             "technical_bias": self.technical_bias,
             "rsi": self.rsi,
             "macd_histogram": self.macd_histogram,
@@ -96,6 +117,15 @@ class AggregatedSignal:
             insider_signal=data.get("insider_signal", 0.0),
             options_flow_signal=data.get("options_flow_signal", 0.0),
             sentiment_signal=data.get("sentiment_signal", 0.0),
+            # NEW: Market regime signals
+            vix_structure_signal=data.get("vix_structure_signal", 0.0),
+            breadth_signal=data.get("breadth_signal", 0.0),
+            put_call_signal=data.get("put_call_signal", 0.0),
+            # NEW: Sentiment extremes
+            aaii_signal=data.get("aaii_signal", 0.0),
+            cot_signal=data.get("cot_signal", 0.0),
+            # NEW: Short interest
+            short_squeeze_score=data.get("short_squeeze_score", 0.0),
             technical_bias=data.get("technical_bias", "neutral"),
             rsi=data.get("rsi", 50.0),
             macd_histogram=data.get("macd_histogram", 0.0),
@@ -127,15 +157,26 @@ class SignalAggregator:
     """
 
     # Signal weights for composite score
+    # Note: Weights are normalized when computing composite, so they don't need to sum to 1.0
     WEIGHTS = {
-        "swing": 0.25,
-        "intraday": 0.15,
-        "ml": 0.15,
-        "congressional": 0.10,
-        "insider": 0.10,
-        "options_flow": 0.10,
-        "sentiment": 0.05,
-        "technical": 0.10,
+        # Existing signals
+        "swing": 0.20,
+        "intraday": 0.10,
+        "ml": 0.10,
+        "congressional": 0.08,
+        "insider": 0.08,
+        "options_flow": 0.08,
+        "sentiment": 0.04,
+        "technical": 0.08,
+        # NEW: Market regime signals
+        "vix_structure": 0.05,
+        "breadth": 0.05,
+        "put_call": 0.04,
+        # NEW: Sentiment extremes
+        "aaii": 0.03,
+        "cot": 0.04,
+        # NEW: Short interest
+        "short_interest": 0.03,
     }
 
     def __init__(self, watchlist: Optional[list[str]] = None):
@@ -288,6 +329,57 @@ class SignalAggregator:
         except Exception as e:
             logger.debug(f"Sentiment signal unavailable for {symbol}: {e}")
 
+        # 6. NEW: Market regime signals (market-wide, applied to all symbols)
+        try:
+            vix_sig = self._get_vix_structure_signal()
+            if vix_sig is not None:
+                signal.vix_structure_signal = vix_sig
+                available_signals.append("vix_structure")
+        except Exception as e:
+            logger.debug(f"VIX structure signal unavailable: {e}")
+
+        try:
+            breadth_sig = self._get_breadth_signal()
+            if breadth_sig is not None:
+                signal.breadth_signal = breadth_sig
+                available_signals.append("breadth")
+        except Exception as e:
+            logger.debug(f"Breadth signal unavailable: {e}")
+
+        try:
+            pc_sig = self._get_put_call_signal()
+            if pc_sig is not None:
+                signal.put_call_signal = pc_sig
+                available_signals.append("put_call")
+        except Exception as e:
+            logger.debug(f"Put/Call signal unavailable: {e}")
+
+        # 7. NEW: Sentiment extremes
+        try:
+            aaii_sig = self._get_aaii_signal()
+            if aaii_sig is not None:
+                signal.aaii_signal = aaii_sig
+                available_signals.append("aaii")
+        except Exception as e:
+            logger.debug(f"AAII signal unavailable: {e}")
+
+        try:
+            cot_sig = self._get_cot_signal(symbol)
+            if cot_sig is not None:
+                signal.cot_signal = cot_sig
+                available_signals.append("cot")
+        except Exception as e:
+            logger.debug(f"COT signal unavailable for {symbol}: {e}")
+
+        # 8. NEW: Short interest
+        try:
+            squeeze = self._get_short_squeeze_score(symbol)
+            if squeeze is not None:
+                signal.short_squeeze_score = squeeze
+                available_signals.append("short_interest")
+        except Exception as e:
+            logger.debug(f"Short interest unavailable for {symbol}: {e}")
+
         # Compute composite
         signal.signals_available = available_signals
         signal.composite_score = self._compute_composite(signal)
@@ -365,6 +457,144 @@ class SignalAggregator:
         # Could integrate with sentiment.py or text_research
         return None
 
+    def _get_vix_structure_signal(self) -> Optional[float]:
+        """Get VIX term structure signal (market-wide, not per-symbol)."""
+        try:
+            from src.data.sources.alternative.vix_structure import VIXStructureSource
+            import asyncio
+
+            source = VIXStructureSource()
+            # Try to get cached signal first
+            signal = source.get_signal()
+            if signal != 0.0:
+                return signal
+            # If no cache, return None (will be populated by daemon)
+            return None
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"VIX structure signal unavailable: {e}")
+        return None
+
+    def _get_breadth_signal(self) -> Optional[float]:
+        """Get market breadth signal (market-wide, not per-symbol)."""
+        try:
+            from src.data.pipeline.market_breadth import MarketBreadth
+
+            breadth = MarketBreadth()
+            data = breadth.get_breadth()
+            if data:
+                # Convert breadth to -1 to 1 signal
+                # Strong breadth (>60% advancing) = bullish
+                # Weak breadth (<40% advancing) = bearish
+                advance_pct = data.get("advance_pct", 50.0)
+                if advance_pct >= 60:
+                    return (advance_pct - 50) / 50  # 0 to 1
+                elif advance_pct <= 40:
+                    return (advance_pct - 50) / 50  # -1 to 0
+                return 0.0
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Breadth signal unavailable: {e}")
+        return None
+
+    def _get_put_call_signal(self) -> Optional[float]:
+        """Get put/call ratio signal (market-wide, not per-symbol)."""
+        try:
+            from src.data.sources.alternative.put_call import PutCallSource
+
+            source = PutCallSource()
+            # Try to get cached signal first
+            signal = source.get_signal()
+            if signal != 0.0:
+                return signal
+            return None
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Put/Call signal unavailable: {e}")
+        return None
+
+    def _get_aaii_signal(self) -> Optional[float]:
+        """Get AAII sentiment signal (market-wide, not per-symbol)."""
+        try:
+            from src.data.sources.alternative.aaii_sentiment import AAIISentimentSource
+
+            source = AAIISentimentSource()
+            # Try to get cached signal first
+            signal = source.get_signal()
+            if signal != 0.0:
+                return signal
+            return None
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"AAII signal unavailable: {e}")
+        return None
+
+    def _get_cot_signal(self, symbol: str) -> Optional[float]:
+        """Get Commitment of Traders signal for a symbol."""
+        try:
+            from src.data.sources.alternative.cot_report import COTSource
+
+            source = COTSource()
+            # Try to get cached signal first
+            signal = source.get_signal(symbol)
+            if signal != 0.0:
+                return signal
+            return None
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"COT signal unavailable for {symbol}: {e}")
+        return None
+
+    def _get_newsletter_signal(self) -> Optional[float]:
+        """Get newsletter sentiment signal (market-wide, not per-symbol)."""
+        try:
+            from src.data.sources.alternative.newsletter_sentiment import NewsletterSentimentSource
+
+            source = NewsletterSentimentSource()
+            # Try to get cached signal first
+            signal = source.get_signal()
+            if signal != 0.0:
+                return signal
+            return None
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Newsletter signal unavailable: {e}")
+        return None
+
+    def _get_short_squeeze_score(self, symbol: str) -> Optional[float]:
+        """Get short squeeze potential score for a symbol."""
+        try:
+            from src.data.sources.alternative.short_interest import get_short_interest
+
+            # Check if short interest data is available
+            data = get_short_interest(symbol)
+            if data:
+                # Calculate squeeze score based on:
+                # - High short interest % float (>20%)
+                # - Low days to cover (<2 days)
+                # - Recent price momentum
+                short_pct = data.get("short_pct_float", 0)
+                days_to_cover = data.get("days_to_cover", 10)
+
+                if short_pct > 30 and days_to_cover < 2:
+                    return 0.9  # Very high squeeze potential
+                elif short_pct > 20 and days_to_cover < 3:
+                    return 0.6  # High squeeze potential
+                elif short_pct > 10:
+                    return 0.3  # Moderate squeeze potential
+                return 0.0
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Short interest data unavailable for {symbol}: {e}")
+        return None
+
     def _compute_composite(self, signal: AggregatedSignal) -> float:
         """Compute weighted composite score."""
         weighted_sum = 0.0
@@ -372,6 +602,7 @@ class SignalAggregator:
 
         # Map signal types to values
         signal_values = {
+            # Existing signals
             "swing": signal.swing_signal,
             "intraday": signal.intraday_signal,
             "ml": signal.ml_signal,
@@ -379,6 +610,16 @@ class SignalAggregator:
             "insider": signal.insider_signal,
             "options_flow": signal.options_flow_signal,
             "sentiment": signal.sentiment_signal,
+            # NEW: Market regime signals
+            "vix_structure": signal.vix_structure_signal,
+            "breadth": signal.breadth_signal,
+            "put_call": signal.put_call_signal,
+            # NEW: Sentiment extremes
+            "aaii": signal.aaii_signal,
+            "cot": signal.cot_signal,
+            # NEW: Short interest (0-1 scale, convert to -1 to 1)
+            # High squeeze score is bullish (shorts may cover)
+            "short_interest": signal.short_squeeze_score * 2 - 1 if signal.short_squeeze_score > 0 else 0.0,
         }
 
         # Technical bias as signal
@@ -417,6 +658,16 @@ class SignalAggregator:
             else:
                 signals.append(0.0)
 
+        # NEW: Include market regime signals in agreement calculation
+        if "vix_structure" in signal.signals_available:
+            signals.append(signal.vix_structure_signal)
+        if "breadth" in signal.signals_available:
+            signals.append(signal.breadth_signal)
+        if "put_call" in signal.signals_available:
+            signals.append(signal.put_call_signal)
+        if "aaii" in signal.signals_available:
+            signals.append(signal.aaii_signal)
+
         if len(signals) < 2:
             return 0.5  # Not enough signals to measure agreement
 
@@ -430,7 +681,8 @@ class SignalAggregator:
     def _compute_confidence(self, signal: AggregatedSignal) -> float:
         """Compute overall confidence based on signal availability and agreement."""
         # Base confidence from number of available signals
-        base = min(len(signal.signals_available) / 5, 1.0) * 0.5
+        # With new signals we have up to 14 signal types, so use 8 as the target
+        base = min(len(signal.signals_available) / 8, 1.0) * 0.5
 
         # Boost from agreement
         agreement_boost = signal.signal_agreement * 0.3
@@ -475,5 +727,28 @@ class SignalAggregator:
             notes.append("overbought (RSI)")
         elif signal.rsi < 30:
             notes.append("oversold (RSI)")
+
+        # NEW: Market regime notes
+        if "vix_structure" in signal.signals_available:
+            if signal.vix_structure_signal > 0.5:
+                notes.append("VIX backwardation (fear)")
+            elif signal.vix_structure_signal < -0.5:
+                notes.append("VIX steep contango (complacency)")
+
+        if "put_call" in signal.signals_available:
+            if signal.put_call_signal > 0.5:
+                notes.append("extreme P/C fear (contrarian buy)")
+            elif signal.put_call_signal < -0.5:
+                notes.append("extreme P/C greed (contrarian sell)")
+
+        if "aaii" in signal.signals_available:
+            if signal.aaii_signal > 0.5:
+                notes.append("AAII extreme bearish (contrarian buy)")
+            elif signal.aaii_signal < -0.5:
+                notes.append("AAII extreme bullish (contrarian sell)")
+
+        if "short_interest" in signal.signals_available:
+            if signal.short_squeeze_score > 0.6:
+                notes.append(f"squeeze potential ({signal.short_squeeze_score:.0%})")
 
         return "; ".join(notes) if notes else "No notable signals"

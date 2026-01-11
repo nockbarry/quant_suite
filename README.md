@@ -309,14 +309,23 @@ Before production:
 - Regime detection
 
 ### Alternative Data
-| Source | Signal Type |
-|--------|-------------|
-| Congressional Trades | Cluster buying patterns |
-| Prediction Markets | Fed policy, macro events |
-| Expert Sentiment | Inverse Cramer, pundit fade |
-| Insider Trading | Form 4 cluster buying |
-| Options Flow | Unusual activity, positioning |
-| Social Sentiment | Reddit/Twitter trending |
+| Category | Sources |
+|----------|---------|
+| **Core Alternative** | Congressional Trades, Insider Trading, Options Flow, Expert Sentiment, Prediction Markets, Social Sentiment |
+| **Market Regime** | VIX Term Structure, Put/Call Ratios, NYSE Breadth, Finviz Screens |
+| **Sentiment Extremes** | AAII Survey, Newsletter Sentiment, Commitment of Traders (COT) |
+| **Economic Calendar** | Earnings Calendar, Economic Releases, Fed Futures, Treasury Auctions |
+| **Event Catalysts** | IPO Calendar, FDA Calendar (PDUFA/AdCom) |
+| **Innovation Signals** | USPTO Patents, Job Postings, App Rankings, GitHub Activity |
+
+### Data Collection Daemon
+Orchestrates collection of 20+ free data sources with configurable schedules:
+- **Real-time** (5-15 min): VIX structure, market breadth
+- **Hourly**: Put/call ratios, Fed futures
+- **Daily**: Earnings calendar, IPO calendar, app rankings
+- **Weekly**: COT report, AAII sentiment, patents
+
+All data is cached with proper TTLs and timestamps for point-in-time backtesting.
 
 ---
 
@@ -329,6 +338,8 @@ Before production:
 | `docs/ALPHA_DISCOVERY.md` | Alternative data |
 | `docs/TEXT_RESEARCH.md` | Text research, embeddings |
 | `docs/TRADING_GUIDE.md` | User guide |
+| `docs/FREE_DATA_SOURCES.md` | Free data sources implementation |
+| `docs/ARCHITECTURE_DIAGRAMS.md` | Complete system architecture |
 
 ---
 
