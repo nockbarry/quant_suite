@@ -809,3 +809,47 @@ async def find_cluster_buying(
         return await source.get_cluster_buying(symbols, days)
     finally:
         await source.close()
+
+
+async def get_recent_insider_buys(
+    days: int = 7,
+) -> list[dict]:
+    """
+    Get recent insider buys from the archived data.
+
+    This function reads from the insider archive parquet file
+    maintained by the daily cron job.
+
+    Args:
+        days: Number of days to look back
+
+    Returns:
+        List of insider buy transaction dicts
+    """
+    from pathlib import Path
+
+    archive_path = Path.home() / "quant_results" / "insider_archive" / "all_transactions.parquet"
+
+    if not archive_path.exists():
+        logger.debug(f"Insider archive not found at {archive_path}")
+        return []
+
+    try:
+        df = pd.read_parquet(archive_path)
+
+        # Filter to purchases only
+        df = df[df["is_purchase"] == True]
+
+        # Filter to recent transactions
+        cutoff = datetime.now() - timedelta(days=days)
+        df["transaction_date"] = pd.to_datetime(df["transaction_date"])
+        df = df[df["transaction_date"] >= cutoff]
+
+        # Sort by value
+        df = df.sort_values("value", ascending=False)
+
+        return df.to_dict(orient="records")
+
+    except Exception as e:
+        logger.warning(f"Error reading insider archive: {e}")
+        return []

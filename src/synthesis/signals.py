@@ -27,7 +27,7 @@ class AggregatedSignal:
     # From existing strategies (-1 to 1 scale)
     swing_signal: float = 0.0
     intraday_signal: float = 0.0
-    ml_signal: float = 0.0
+    ml_signal: float = 0.0  # TODO: Not yet integrated - requires trained models (P2 enhancement)
 
     # From existing alt data (-1 to 1 scale)
     congressional_signal: float = 0.0
@@ -413,49 +413,293 @@ class SignalAggregator:
         return None
 
     def _get_swing_signal(self, symbol: str) -> Optional[float]:
-        """Get swing strategy signal."""
-        # TODO: Integrate with src/strategies/swing/
-        # For now, return None (signal not available)
-        return None
+        """Get swing strategy signal from mean reversion strategies."""
+        try:
+            import yfinance as yf
+            import pandas as pd
+
+            # Fetch recent data for signal calculation
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period="30d")
+
+            if df.empty or len(df) < 20:
+                return None
+
+            # Calculate Bollinger Bands
+            close = df["Close"]
+            sma = close.rolling(20).mean()
+            std = close.rolling(20).std()
+            upper = sma + 2 * std
+            lower = sma - 2 * std
+
+            current = close.iloc[-1]
+            upper_val = upper.iloc[-1]
+            lower_val = lower.iloc[-1]
+            sma_val = sma.iloc[-1]
+
+            # Calculate %B (position within bands)
+            pct_b = (current - lower_val) / (upper_val - lower_val) if (upper_val - lower_val) > 0 else 0.5
+
+            # Calculate RSI
+            delta = close.diff()
+            gain = delta.where(delta > 0, 0).rolling(14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            current_rsi = rsi.iloc[-1]
+
+            # Generate signal
+            # Oversold (near lower band + low RSI) = bullish
+            if pct_b < 0.2 and current_rsi < 35:
+                return 0.3 + (0.2 - pct_b) * 2  # 0.3 to 0.7
+            # Overbought (near upper band + high RSI) = bearish
+            elif pct_b > 0.8 and current_rsi > 65:
+                return -0.3 - (pct_b - 0.8) * 2  # -0.3 to -0.7
+            # Neutral zone
+            else:
+                return (pct_b - 0.5) * 0.4  # -0.2 to 0.2
+
+        except Exception as e:
+            logger.debug(f"Swing signal error for {symbol}: {e}")
+            return None
 
     def _get_intraday_signal(self, symbol: str) -> Optional[float]:
-        """Get intraday strategy signal."""
-        # TODO: Integrate with src/strategies/intraday/
-        return None
+        """Get intraday strategy signal from momentum."""
+        try:
+            import yfinance as yf
+
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period="5d", interval="1h")
+
+            if df.empty or len(df) < 20:
+                return None
+
+            close = df["Close"]
+            volume = df["Volume"]
+
+            # Short-term momentum (last 5 hours)
+            momentum_5h = (close.iloc[-1] / close.iloc[-6] - 1) * 100 if len(close) >= 6 else 0
+
+            # Volume confirmation
+            avg_volume = volume.rolling(20).mean().iloc[-1]
+            current_volume = volume.iloc[-1]
+            volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1.0
+
+            # MACD on hourly
+            ema12 = close.ewm(span=12).mean()
+            ema26 = close.ewm(span=26).mean()
+            macd = ema12 - ema26
+            macd_signal = macd.ewm(span=9).mean()
+            macd_hist = (macd - macd_signal).iloc[-1]
+
+            # Combine signals
+            signal = 0.0
+
+            # Momentum component (capped at 0.3)
+            signal += max(-0.3, min(0.3, momentum_5h / 3))
+
+            # MACD component (capped at 0.3)
+            macd_normalized = max(-0.3, min(0.3, macd_hist / close.iloc[-1] * 10))
+            signal += macd_normalized
+
+            # Volume confirmation boost
+            if volume_ratio > 1.5 and abs(signal) > 0.1:
+                signal *= 1.2
+
+            return max(-1.0, min(1.0, signal))
+
+        except Exception as e:
+            logger.debug(f"Intraday signal error for {symbol}: {e}")
+            return None
 
     def _get_congressional_signal(self, symbol: str) -> Optional[float]:
-        """Get congressional trading signal."""
+        """Get congressional cluster trading signal."""
         try:
-            from src.data.sources.alternative.congressional_trades import (
-                find_congressional_clusters,
-            )
-            # This is async, would need to be called differently
-            # For synchronous context, return None
-        except ImportError:
-            pass
-        return None
+            import pandas as pd
+            from pathlib import Path
+            from datetime import datetime, timedelta
+
+            # Load congressional trades data
+            archive_path = Path.home() / "quant_results" / "congressional_archive" / "processed" / "all_trades.parquet"
+
+            if not archive_path.exists():
+                return None
+
+            df = pd.read_parquet(archive_path)
+
+            # Filter to target symbol and recent trades (last 60 days)
+            df = df[df["symbol"] == symbol.upper()]
+
+            if df.empty:
+                return None
+
+            # Convert dates
+            df["transaction_date"] = pd.to_datetime(df["transaction_date"])
+            cutoff = datetime.now() - timedelta(days=60)
+            recent = df[df["transaction_date"] >= cutoff]
+
+            if recent.empty:
+                return None
+
+            # Detect cluster buying (multiple unique politicians buying)
+            purchases = recent[recent["trade_type"].str.contains("purchase", case=False, na=False)]
+
+            if purchases.empty:
+                return None
+
+            unique_buyers = purchases["politician"].nunique()
+            total_volume = purchases["amount_estimate"].sum()
+
+            # Generate signal based on cluster strength
+            # 5+ politicians = strong signal
+            # 4 politicians = moderate signal
+            # 3 politicians = weak signal
+            if unique_buyers >= 5:
+                signal = 0.7
+            elif unique_buyers >= 4:
+                signal = 0.5
+            elif unique_buyers >= 3:
+                signal = 0.3
+            else:
+                signal = 0.0
+
+            # Boost for high volume
+            if total_volume >= 500000:
+                signal += 0.1
+
+            # Check for sales to offset
+            sales = recent[recent["trade_type"].str.contains("sale", case=False, na=False)]
+            if not sales.empty:
+                unique_sellers = sales["politician"].nunique()
+                if unique_sellers >= unique_buyers:
+                    signal *= 0.5  # Mixed signals
+
+            return min(1.0, signal)
+
+        except Exception as e:
+            logger.debug(f"Congressional signal error for {symbol}: {e}")
+            return None
 
     def _get_insider_signal(self, symbol: str) -> Optional[float]:
-        """Get insider trading signal."""
+        """Get insider trading signal from Form 4 data."""
         try:
-            from src.data.sources.alternative.insider import get_insider_signal
-            # Similar async consideration
-        except ImportError:
-            pass
-        return None
+            import asyncio
+            from src.data.sources.alternative.insider import InsiderDataSource
+            from datetime import datetime, timedelta
+
+            # Try to get cached signal or compute
+            cache_key = f"insider_signal:{symbol}"
+            if cache_key in self._cache:
+                ts, val = self._cache[cache_key]
+                if (datetime.now() - ts).seconds < 3600:  # 1 hour cache
+                    return val
+
+            # For synchronous context, use simple heuristic from file if exists
+            import pandas as pd
+            from pathlib import Path
+
+            insider_cache = Path.home() / "quant_results" / "live" / "research" / "insider_signals.json"
+            if insider_cache.exists():
+                import json
+                with open(insider_cache) as f:
+                    data = json.load(f)
+                if symbol in data:
+                    return data[symbol].get("signal", 0.0)
+
+            return None
+
+        except Exception as e:
+            logger.debug(f"Insider signal error for {symbol}: {e}")
+            return None
 
     def _get_options_flow_signal(self, symbol: str) -> Optional[float]:
         """Get unusual options activity signal."""
         try:
-            from src.data.sources.alternative.options_flow import get_options_flow_signal
-        except ImportError:
-            pass
-        return None
+            import yfinance as yf
+            from datetime import datetime, timedelta
+
+            ticker = yf.Ticker(symbol)
+
+            # Get options chain
+            try:
+                exp_dates = ticker.options
+                if not exp_dates:
+                    return None
+
+                # Use nearest expiration
+                chain = ticker.option_chain(exp_dates[0])
+                calls = chain.calls
+                puts = chain.puts
+
+                if calls.empty or puts.empty:
+                    return None
+
+                # Calculate put/call ratio for this symbol
+                total_call_oi = calls["openInterest"].sum()
+                total_put_oi = puts["openInterest"].sum()
+
+                if total_call_oi == 0:
+                    return None
+
+                pc_ratio = total_put_oi / total_call_oi
+
+                # Calculate signal
+                # Low P/C (<0.5) = bullish options flow
+                # High P/C (>1.5) = bearish options flow
+                if pc_ratio < 0.5:
+                    return 0.3 + (0.5 - pc_ratio) * 0.4  # 0.3 to 0.5
+                elif pc_ratio > 1.5:
+                    return -0.3 - (pc_ratio - 1.5) * 0.2  # -0.3 to -0.5
+                else:
+                    return (1.0 - pc_ratio) * 0.3  # -0.15 to 0.15
+
+            except Exception:
+                return None
+
+        except Exception as e:
+            logger.debug(f"Options flow signal error for {symbol}: {e}")
+            return None
 
     def _get_sentiment_signal(self, symbol: str) -> Optional[float]:
-        """Get sentiment signal."""
-        # Could integrate with sentiment.py or text_research
-        return None
+        """Get sentiment signal from cached research data."""
+        try:
+            import json
+            from pathlib import Path
+
+            # Check for pre-computed sentiment in research folder
+            sentiment_file = Path.home() / "quant_results" / "live" / "research" / "sentiment.json"
+
+            if sentiment_file.exists():
+                with open(sentiment_file) as f:
+                    data = json.load(f)
+                if symbol in data:
+                    sent = data[symbol]
+                    # Normalize to -1 to 1
+                    score = sent.get("score", 0.5)
+                    return (score - 0.5) * 2
+
+            # Fallback: Use Fear & Greed as proxy (market-wide sentiment)
+            state_file = Path.home() / "quant_results" / "live" / "state.json"
+            if state_file.exists():
+                with open(state_file) as f:
+                    state = json.load(f)
+
+                sentiment = state.get("sentiment", {})
+                fear_greed = sentiment.get("fear_greed_index", 50)
+
+                # Contrarian signal: extreme fear = bullish, extreme greed = bearish
+                if fear_greed < 25:
+                    return 0.4  # Extreme fear = buy signal
+                elif fear_greed > 75:
+                    return -0.4  # Extreme greed = sell signal
+                else:
+                    return (50 - fear_greed) / 100  # -0.25 to 0.25
+
+            return None
+
+        except Exception as e:
+            logger.debug(f"Sentiment signal error for {symbol}: {e}")
+            return None
 
     def _get_vix_structure_signal(self) -> Optional[float]:
         """Get VIX term structure signal (market-wide, not per-symbol)."""

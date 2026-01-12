@@ -5,6 +5,54 @@
 
 ---
 
+## 2026-01-11: Data Pipeline Fixes & Automation
+
+### Summary
+- Fixed critical data flow issues in research prep pipeline
+- Added insider data collection automation
+- Implemented concentration alert monitoring
+- Expanded cron automation to 7 jobs
+
+### Fixes Applied
+
+| Issue | Fix | Impact |
+|-------|-----|--------|
+| Feature Engine method mismatch | Changed `compute_all_features` to `add_all_features` in research_prep.py | Features now compute correctly |
+| Column name mismatch | Added column normalization (yfinance returns "Close", FeatureEngine expects "close") | Features populate properly |
+| Missing insider cron | Created `cron_insider_collect.py` with archive support | Daily insider data collection |
+| No concentration alerts | Added `check_concentration()` to AlertManager | Position/sector/thesis limits monitored |
+
+### Cron Jobs (7 total)
+
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| research_prep | 6:00 AM weekdays | Pre-compute features and signals |
+| news_collect | Every 4 hours | News aggregation |
+| congressional_collect | 6:30 AM daily | Congressional trades |
+| insider_collect | 7:00 AM daily | Insider trading data |
+| live_daemon_check | Every 5 min weekdays | State.json updates |
+| eod_snapshot | 5:00 PM weekdays | Daily archives |
+| concentration_check | Every 15 min market hours | Limit monitoring |
+
+### Future Enhancements
+
+| Enhancement | Priority | Notes |
+|-------------|----------|-------|
+| ML Signal Integration | P2 | Currently returns 0 - needs model integration |
+| VIX Term Structure | P1 | Per free data source plan |
+| AAII Sentiment | P1 | Per free data source plan |
+| COT Report | P1 | Per free data source plan |
+
+### Files Modified/Created
+- `scripts/research_prep.py` - Fixed method calls and column names
+- `scripts/cron_insider_collect.py` - NEW: Daily insider collection
+- `scripts/cron_concentration_check.py` - NEW: Limit monitoring
+- `scripts/setup_cron.py` - Added 2 new cron jobs
+- `src/data/sources/alternative/insider.py` - Added `get_recent_insider_buys()`
+- `src/alerts/alert_manager.py` - Added `check_concentration()`
+
+---
+
 ## 2026-01-04: Consolidation and Documentation
 
 ### Summary

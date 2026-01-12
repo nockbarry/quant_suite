@@ -206,7 +206,208 @@ class AdversarialAgent:
 
     def __init__(self):
         """Initialize adversarial agent."""
-        pass
+        self._state_cache = None
+        self._state_cache_time = None
+
+    def _get_current_state(self) -> Optional[dict]:
+        """Load current unified state for context-aware analysis."""
+        from datetime import datetime
+        from pathlib import Path
+        import json
+
+        # Cache state for 5 minutes
+        if self._state_cache and self._state_cache_time:
+            if (datetime.now() - self._state_cache_time).seconds < 300:
+                return self._state_cache
+
+        try:
+            state_path = Path.home() / "quant_results" / "live" / "state.json"
+            if state_path.exists():
+                with open(state_path) as f:
+                    self._state_cache = json.load(f)
+                    self._state_cache_time = datetime.now()
+                    return self._state_cache
+        except Exception as e:
+            logger.debug(f"Failed to load state: {e}")
+
+        return None
+
+    def _get_position_for_symbol(self, symbol: str) -> Optional[dict]:
+        """Get current position for a symbol."""
+        state = self._get_current_state()
+        if not state:
+            return None
+
+        positions = state.get("positions", [])
+        for pos in positions:
+            if pos.get("symbol", "").upper() == symbol.upper():
+                return pos
+        return None
+
+    def _get_thesis_for_symbol(self, symbol: str) -> Optional[dict]:
+        """Get active thesis linked to a symbol."""
+        state = self._get_current_state()
+        if not state:
+            return None
+
+        theses = state.get("theses", [])
+        for thesis in theses:
+            if thesis.get("status") == "active":
+                positions = thesis.get("positions", [])
+                if symbol.upper() in [p.upper() for p in positions]:
+                    return thesis
+        return None
+
+    def _calculate_concentration_impact(
+        self,
+        symbol: str,
+        proposed_size_pct: float,
+    ) -> dict:
+        """Calculate how this trade affects portfolio concentration."""
+        state = self._get_current_state()
+        if not state:
+            return {"error": "No state available"}
+
+        portfolio = state.get("portfolio", {})
+        total_equity = portfolio.get("equity", 100000)
+        positions = state.get("positions", [])
+
+        # Current position weight
+        current_weight = 0.0
+        for pos in positions:
+            if pos.get("symbol", "").upper() == symbol.upper():
+                current_weight = pos.get("market_value", 0) / total_equity * 100
+
+        # Projected weight after trade
+        projected_weight = current_weight + proposed_size_pct
+
+        # Thesis concentration
+        thesis = self._get_thesis_for_symbol(symbol)
+        thesis_weight = 0.0
+        if thesis:
+            thesis_positions = thesis.get("positions", [])
+            for pos in positions:
+                if pos.get("symbol", "").upper() in [p.upper() for p in thesis_positions]:
+                    thesis_weight += pos.get("market_value", 0) / total_equity * 100
+            thesis_weight += proposed_size_pct
+
+        # Sector concentration
+        pos_info = self._get_position_for_symbol(symbol)
+        sector = pos_info.get("sector", "Unknown") if pos_info else "Unknown"
+        sector_weight = 0.0
+        for pos in positions:
+            if pos.get("sector", "") == sector:
+                sector_weight += pos.get("market_value", 0) / total_equity * 100
+        sector_weight += proposed_size_pct
+
+        return {
+            "current_position_weight": current_weight,
+            "projected_position_weight": projected_weight,
+            "position_limit": 15.0,
+            "position_limit_breach": projected_weight > 15.0,
+            "thesis_weight": thesis_weight,
+            "thesis_limit": 35.0,
+            "thesis_limit_breach": thesis_weight > 35.0,
+            "sector_weight": sector_weight,
+            "sector_limit": 40.0,
+            "sector_limit_breach": sector_weight > 40.0,
+            "sector": sector,
+            "thesis_name": thesis.get("name") if thesis else None,
+        }
+
+    def _check_thesis_health(self, symbol: str) -> dict:
+        """Check the health of the thesis linked to this symbol."""
+        from datetime import datetime
+
+        thesis = self._get_thesis_for_symbol(symbol)
+        if not thesis:
+            return {"has_thesis": False}
+
+        result = {
+            "has_thesis": True,
+            "thesis_name": thesis.get("name"),
+            "conviction": thesis.get("conviction", 50),
+            "status": thesis.get("status"),
+            "concerns": [],
+        }
+
+        # Check conviction level
+        conviction = thesis.get("conviction", 50)
+        if conviction < 50:
+            result["concerns"].append(f"Low conviction ({conviction}%) - consider reducing exposure")
+        elif conviction < 65:
+            result["concerns"].append(f"Moderate conviction ({conviction}%) - size position accordingly")
+
+        # Check for conviction decay
+        conviction_history = thesis.get("conviction_history", [])
+        if len(conviction_history) >= 2:
+            recent_changes = conviction_history[-3:]
+            if all(c.get("new_value", 50) <= c.get("old_value", 50) for c in recent_changes):
+                result["concerns"].append("Conviction has been declining - reassess thesis")
+
+        # Check signpost status
+        signposts = thesis.get("signposts", [])
+        pending_signposts = [s for s in signposts if s.get("status") == "pending"]
+        triggered_signposts = [s for s in signposts if s.get("status") == "triggered"]
+
+        if not pending_signposts and not triggered_signposts:
+            result["concerns"].append("No signposts defined - thesis lacks validation criteria")
+
+        bearish_triggers = [s for s in triggered_signposts if s.get("outcome") == "bearish"]
+        if bearish_triggers:
+            result["concerns"].append(f"{len(bearish_triggers)} bearish signpost(s) triggered - review thesis")
+
+        # Check last review date
+        last_review = thesis.get("last_review")
+        if last_review:
+            try:
+                last_review_dt = datetime.fromisoformat(last_review.replace("Z", "+00:00"))
+                days_since_review = (datetime.now() - last_review_dt.replace(tzinfo=None)).days
+                if days_since_review > 14:
+                    result["concerns"].append(f"Thesis not reviewed in {days_since_review} days")
+            except Exception:
+                pass
+
+        return result
+
+    def _generate_pre_mortem(
+        self,
+        symbol: str,
+        action: str,
+        context: Optional[dict],
+    ) -> str:
+        """Generate a realistic pre-mortem scenario."""
+        scenarios = []
+
+        # Get thesis context
+        thesis = self._get_thesis_for_symbol(symbol)
+
+        if action.upper() == "BUY":
+            # Position-specific scenarios
+            scenarios.append(f"{symbol} announces disappointing guidance in upcoming earnings")
+            scenarios.append(f"Sector rotation out of {context.get('sector', 'this sector') if context else 'the sector'}")
+
+            # Thesis-specific scenarios
+            if thesis:
+                invalidation = thesis.get("invalidation_triggers", [])
+                if invalidation:
+                    scenarios.append(f"Thesis invalidated: {invalidation[0]}")
+
+            # Market scenarios
+            scenarios.append("Macro shock (Fed hawkish pivot, geopolitical event) triggers broad selloff")
+            scenarios.append("Position hits stop loss during overnight gap down")
+
+            # Concentration scenarios
+            concentration = self._calculate_concentration_impact(symbol, context.get("size_pct", 5) if context else 5)
+            if concentration.get("thesis_weight", 0) > 25:
+                scenarios.append(f"Thesis ({concentration.get('thesis_name')}) proves wrong, concentrated loss compounds")
+
+        else:  # SELL
+            scenarios.append(f"{symbol} announces buyout at 30% premium")
+            scenarios.append("Short squeeze as shorts cover on positive catalyst")
+            scenarios.append("Position rallies 20% after sale on unexpected positive news")
+
+        return scenarios[0] if scenarios else "Unknown scenario"
 
     def challenge(
         self,
@@ -236,16 +437,21 @@ class AdversarialAgent:
             proposed_action=proposed_action,
         )
 
-        # 1. Market structure concerns
+        # 1. Market structure concerns (with real portfolio context)
         analysis.market_structure_concerns = self._generate_market_structure_concerns(
-            proposed_action, context
+            proposed_action, context, symbol
         )
 
         # 2. Timing concerns
         analysis.timing_concerns = self._generate_timing_concerns(context)
 
-        # 3. Thesis weaknesses
+        # 3. Thesis weaknesses (combining static analysis + real thesis health)
         analysis.thesis_weaknesses = self._analyze_thesis_weaknesses(reasoning)
+
+        # Add real thesis health concerns
+        thesis_health = self._check_thesis_health(symbol)
+        if thesis_health.get("has_thesis"):
+            analysis.thesis_weaknesses.extend(thesis_health.get("concerns", []))
 
         # 4. Historical failures
         if setup_type:
@@ -256,10 +462,21 @@ class AdversarialAgent:
             if inferred_type:
                 analysis.historical_failures = self._get_historical_failures(inferred_type)
 
-        # 5. Risk scenarios
-        analysis.worst_case = self._generate_worst_case(symbol, proposed_action, context)
+        # 5. Risk scenarios (using real portfolio context for pre-mortem)
+        analysis.worst_case = self._generate_pre_mortem(symbol, proposed_action, context)
         analysis.probability_of_ruin = self._assess_ruin_probability(confidence, context)
         analysis.max_loss_scenario = self._estimate_max_loss(symbol, proposed_action, context)
+
+        # Add concentration-aware risk assessment
+        if proposed_action.upper() == "BUY":
+            size_pct = context.get("size_pct", 5) if context else 5
+            concentration = self._calculate_concentration_impact(symbol, size_pct)
+            if any([
+                concentration.get("position_limit_breach"),
+                concentration.get("thesis_limit_breach"),
+                concentration.get("sector_limit_breach"),
+            ]):
+                analysis.probability_of_ruin = "high"
 
         # 6. Overall assessment
         analysis.overall_concern_level = self._assess_concern_level(analysis)
@@ -276,8 +493,9 @@ class AdversarialAgent:
         self,
         action: str,
         context: Optional[dict],
+        symbol: str = None,
     ) -> list[str]:
-        """Generate market structure concerns."""
+        """Generate market structure concerns with real portfolio context."""
         concerns = []
 
         # Base concerns from templates
@@ -300,6 +518,35 @@ class AdversarialAgent:
             # Options flow
             if context.get("put_call_ratio", 1.0) > 1.5:
                 concerns.append("Elevated put/call ratio - are puts being accumulated?")
+
+        # Real portfolio concentration concerns
+        if symbol and action_key == "BUY":
+            size_pct = context.get("size_pct", 5) if context else 5
+            concentration = self._calculate_concentration_impact(symbol, size_pct)
+
+            if concentration.get("position_limit_breach"):
+                concerns.append(
+                    f"LIMIT BREACH: Position would be {concentration['projected_position_weight']:.1f}% "
+                    f"(limit: {concentration['position_limit']}%)"
+                )
+
+            if concentration.get("thesis_limit_breach"):
+                concerns.append(
+                    f"LIMIT BREACH: Thesis '{concentration['thesis_name']}' would be "
+                    f"{concentration['thesis_weight']:.1f}% (limit: {concentration['thesis_limit']}%)"
+                )
+
+            if concentration.get("sector_limit_breach"):
+                concerns.append(
+                    f"LIMIT BREACH: Sector '{concentration['sector']}' would be "
+                    f"{concentration['sector_weight']:.1f}% (limit: {concentration['sector_limit']}%)"
+                )
+
+            # Warning level (approaching limits)
+            if concentration.get("thesis_weight", 0) > 25 and not concentration.get("thesis_limit_breach"):
+                concerns.append(
+                    f"WARNING: Thesis concentration at {concentration['thesis_weight']:.1f}% - approaching 35% limit"
+                )
 
         return concerns
 
@@ -465,9 +712,19 @@ class AdversarialAgent:
 
     def _should_proceed(self, analysis: AdversarialAnalysis, confidence: float) -> bool:
         """Determine if trade should proceed."""
+        # Always reject if there are limit breaches
+        limit_breach_concerns = [
+            c for c in analysis.market_structure_concerns
+            if "LIMIT BREACH" in c
+        ]
+        if limit_breach_concerns:
+            return False
+
         if analysis.overall_concern_level == "critical":
             return False
         if analysis.overall_concern_level == "high" and confidence < 0.7:
+            return False
+        if analysis.probability_of_ruin == "high":
             return False
         return True
 

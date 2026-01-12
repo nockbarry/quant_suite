@@ -70,8 +70,11 @@ def compute_features_for_universe(
                     logger.warning(f"No data for {symbol}")
                     continue
 
+                # Normalize column names (yfinance uses capitalized, FeatureEngine expects lowercase)
+                hist.columns = hist.columns.str.lower()
+
                 # Compute features
-                features = FeatureEngine.compute_all_features(hist)
+                features = FeatureEngine.add_all_features(hist)
 
                 # Get latest values
                 if not features.empty:
@@ -93,7 +96,7 @@ def compute_features_for_universe(
 
 def run_all_strategies(symbols: list[str]) -> dict[str, dict]:
     """
-    Run all strategies on symbols.
+    Run all strategies on symbols using the SignalAggregator.
 
     Args:
         symbols: List of symbols
@@ -103,22 +106,42 @@ def run_all_strategies(symbols: list[str]) -> dict[str, dict]:
     """
     results = {}
 
-    # Try to import strategy modules
     try:
-        # Placeholder - would integrate with actual strategies
-        # from src.strategies.swing.bollinger_reversal import BollingerReversalStrategy
+        from src.synthesis.signals import SignalAggregator
 
+        logger.info("  Using SignalAggregator for comprehensive signals...")
+        aggregator = SignalAggregator(watchlist=symbols)
+
+        # Aggregate all signals
+        signals = aggregator.aggregate(
+            symbols=symbols,
+            include_alt_data=True,
+            include_technicals=True,
+        )
+
+        for symbol, signal in signals.items():
+            results[symbol] = signal.to_dict()
+            logger.info(f"    {symbol}: composite={signal.composite_score:.2f}, "
+                       f"signals={len(signal.signals_available)}")
+
+    except ImportError as e:
+        logger.warning(f"SignalAggregator not available: {e}")
+        # Fallback to basic signals
         for symbol in symbols:
             results[symbol] = {
                 "timestamp": datetime.now().isoformat(),
-                "swing_signal": 0.0,  # -1 to 1
+                "swing_signal": 0.0,
                 "intraday_signal": 0.0,
                 "ml_signal": 0.0,
-                "notes": "Strategy signals not yet implemented",
+                "notes": "SignalAggregator not available",
             }
-
-    except ImportError as e:
-        logger.warning(f"Strategy modules not available: {e}")
+    except Exception as e:
+        logger.error(f"Error in SignalAggregator: {e}")
+        for symbol in symbols:
+            results[symbol] = {
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e),
+            }
 
     return results
 

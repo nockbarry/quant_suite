@@ -494,3 +494,124 @@ class AlertManager:
                 lines.append(f"  {alert.format_console()}")
 
         return "\n".join(lines)
+
+    async def check_concentration(self) -> list[Alert]:
+        """
+        Check portfolio concentration against limits.
+
+        Limits (from CLAUDE.md trading rules):
+        - Position: 15% max
+        - Thesis: 35% max
+        - Sector: 40% max
+
+        Returns:
+            List of triggered concentration alerts
+        """
+        triggered = []
+
+        # Load unified state
+        state_path = Path.home() / "quant_results" / "live" / "state.json"
+        if not state_path.exists():
+            logger.warning("Unified state not found for concentration check")
+            return triggered
+
+        try:
+            with open(state_path) as f:
+                state = json.load(f)
+
+            portfolio = state.get("portfolio", {})
+            total_equity = portfolio.get("equity", 100000)
+            positions = state.get("positions", [])
+            theses = state.get("theses", [])
+
+            if not positions or total_equity <= 0:
+                return triggered
+
+            # Define concentration limits
+            POSITION_LIMIT = 15.0
+            THESIS_LIMIT = 35.0
+            SECTOR_LIMIT = 40.0
+
+            # Check position concentration
+            for pos in positions:
+                symbol = pos.get("symbol", "")
+                market_value = abs(pos.get("market_value", 0))
+                weight = (market_value / total_equity) * 100
+
+                if weight > POSITION_LIMIT:
+                    alert = Alert.create(
+                        alert_type=AlertType.CONCENTRATION_HIGH,
+                        priority=AlertPriority.CRITICAL if weight > 20 else AlertPriority.HIGH,
+                        symbol=symbol,
+                        message=f"{symbol} concentration {weight:.1f}% exceeds {POSITION_LIMIT}% limit",
+                        current_value=weight,
+                        threshold=POSITION_LIMIT,
+                        action_suggested=f"Reduce {symbol} position to under {POSITION_LIMIT}%",
+                        metadata={"type": "position", "market_value": market_value},
+                    )
+                    triggered.append(alert)
+                    self.alerts.append(alert)
+                    await self._send_alert(alert)
+
+            # Check sector concentration
+            sector_weights = {}
+            for pos in positions:
+                sector = pos.get("sector", "Unknown")
+                market_value = abs(pos.get("market_value", 0))
+                sector_weights[sector] = sector_weights.get(sector, 0) + market_value
+
+            for sector, value in sector_weights.items():
+                weight = (value / total_equity) * 100
+                if weight > SECTOR_LIMIT:
+                    alert = Alert.create(
+                        alert_type=AlertType.CONCENTRATION_HIGH,
+                        priority=AlertPriority.HIGH,
+                        symbol=sector,
+                        message=f"{sector} sector concentration {weight:.1f}% exceeds {SECTOR_LIMIT}% limit",
+                        current_value=weight,
+                        threshold=SECTOR_LIMIT,
+                        action_suggested=f"Reduce {sector} sector exposure to under {SECTOR_LIMIT}%",
+                        metadata={"type": "sector", "sector_value": value},
+                    )
+                    triggered.append(alert)
+                    self.alerts.append(alert)
+                    await self._send_alert(alert)
+
+            # Check thesis concentration
+            thesis_weights = {}
+            for thesis in theses:
+                if thesis.get("status") != "active":
+                    continue
+                thesis_name = thesis.get("name", "Unknown")
+                thesis_positions = thesis.get("positions", [])
+                thesis_value = 0
+                for pos in positions:
+                    if pos.get("symbol") in thesis_positions:
+                        thesis_value += abs(pos.get("market_value", 0))
+                thesis_weights[thesis_name] = thesis_value
+
+            for thesis_name, value in thesis_weights.items():
+                weight = (value / total_equity) * 100
+                if weight > THESIS_LIMIT:
+                    alert = Alert.create(
+                        alert_type=AlertType.CONCENTRATION_HIGH,
+                        priority=AlertPriority.HIGH,
+                        symbol=thesis_name,
+                        message=f"Thesis '{thesis_name}' concentration {weight:.1f}% exceeds {THESIS_LIMIT}% limit",
+                        current_value=weight,
+                        threshold=THESIS_LIMIT,
+                        action_suggested=f"Reduce thesis exposure to under {THESIS_LIMIT}%",
+                        metadata={"type": "thesis", "thesis_value": value},
+                    )
+                    triggered.append(alert)
+                    self.alerts.append(alert)
+                    await self._send_alert(alert)
+
+            if triggered:
+                logger.warning(f"Found {len(triggered)} concentration limit breaches")
+
+            return triggered
+
+        except Exception as e:
+            logger.error(f"Error checking concentration: {e}")
+            return triggered
