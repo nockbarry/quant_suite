@@ -39,6 +39,12 @@ from .thesis_performance import (
     PositionPerformance,
     get_thesis_performance_summary,
 )
+from .paper_positions import (
+    PaperPosition,
+    PaperPositionSummary,
+    PaperPositionTracker,
+    track_thesis_paper,
+)
 
 __all__ = [
     # Thesis
@@ -51,6 +57,11 @@ __all__ = [
     "ThesisPerformanceTracker",
     "PositionPerformance",
     "get_thesis_performance_summary",
+    # Paper Positions
+    "PaperPosition",
+    "PaperPositionSummary",
+    "PaperPositionTracker",
+    "track_thesis_paper",
     # Learnings
     "Learning",
     "LearningLog",

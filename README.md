@@ -211,8 +211,16 @@ claude /eod-review
 |-----------|---------|
 | `ThesisTracker` | Investment theses with signposts |
 | `ThesisPerformanceTracker` | P&L attribution by thesis |
+| `PaperPositionTracker` | Track thesis performance without investing |
 | `LearningLog` | Extracted trade learnings |
 | `KnowledgeBase` | Company/sector understanding |
+
+### Execution Layer
+| Component | Purpose |
+|-----------|---------|
+| `AccountManager` | Multi-account support (live/paper/tracking) |
+| `AlpacaBroker` | Broker integration for paper and live trading |
+| `PDTManager` | Pattern day trading compliance |
 
 ### Decision Layer
 | Component | Purpose |

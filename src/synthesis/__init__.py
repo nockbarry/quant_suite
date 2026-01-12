@@ -29,6 +29,12 @@ from .state import (
 )
 from .signals import AggregatedSignal, SignalAggregator
 from .daemon import LiveDaemon
+from .ml_signals import (
+    MLSignal,
+    MLSignalGenerator,
+    add_ml_signals_to_aggregated,
+    compute_ml_composite_signal,
+)
 
 __all__ = [
     # State
@@ -48,4 +54,9 @@ __all__ = [
     "SignalAggregator",
     # Daemon
     "LiveDaemon",
+    # ML Signals
+    "MLSignal",
+    "MLSignalGenerator",
+    "add_ml_signals_to_aggregated",
+    "compute_ml_composite_signal",
 ]

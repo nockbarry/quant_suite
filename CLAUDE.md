@@ -93,6 +93,65 @@ See `docs/WORKFLOW.md` for detailed automation guide.
 
 ---
 
+## Token Efficiency Rules
+
+**Use existing tools and quick commands instead of writing boilerplate code.**
+
+### Quick Trade Commands
+```bash
+# Quick trades - NO boilerplate code needed
+PYTHONPATH=. python3 scripts/quick_trade.py buy MU 10
+PYTHONPATH=. python3 scripts/quick_trade.py sell SLB 50
+PYTHONPATH=. python3 scripts/quick_trade.py quote MU FCX LEN
+PYTHONPATH=. python3 scripts/quick_trade.py positions --thesis "Venezuela"
+PYTHONPATH=. python3 scripts/quick_trade.py close GLD260206C00409000
+```
+
+### Available Skills
+```bash
+/morning-briefing    # Pre-market research
+/trade-decision      # Generate trade decisions
+/execute-trades      # Execute with approval
+/monitor             # Check portfolio status
+/thesis              # Manage theses
+```
+
+### Quick Reference: Common Patterns
+
+**Broker connection (when truly needed):**
+```python
+# Use this helper instead of writing boilerplate
+from scripts.quick_trade import get_broker
+broker = get_broker()
+await broker.connect()
+```
+
+**Key method signatures:**
+```python
+# AlpacaBroker - correct parameter names
+AlpacaBroker(api_key=..., secret_key=..., paper=True)
+
+# Position attributes
+position.quantity  # NOT .qty
+position.market_value
+position.unrealized_pnl
+position.unrealized_pnl_pct
+
+# Order execution
+await broker.market_buy(symbol, Decimal(qty))
+await broker.market_sell(symbol, Decimal(qty))
+await broker.close_position(symbol)
+```
+
+**Credentials location:**
+```
+/home/nock/projects/quant_suite/config/credentials.yaml
+  alpaca.api_key
+  alpaca.secret_key
+```
+
+---
+
 ## Core Architecture
 
 ### Synthesis Layer (NEW)
