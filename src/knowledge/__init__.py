@@ -33,6 +33,12 @@ Usage:
 from .thesis import Thesis, Signpost, ThesisTracker, ThesisSummary
 from .learnings import Learning, LearningLog, LearningSummary
 from .base import CompanyBrief, SectorContext, KnowledgeBase
+from .thesis_performance import (
+    ThesisPerformanceMetrics,
+    ThesisPerformanceTracker,
+    PositionPerformance,
+    get_thesis_performance_summary,
+)
 
 __all__ = [
     # Thesis
@@ -40,6 +46,11 @@ __all__ = [
     "Signpost",
     "ThesisTracker",
     "ThesisSummary",
+    # Thesis Performance
+    "ThesisPerformanceMetrics",
+    "ThesisPerformanceTracker",
+    "PositionPerformance",
+    "get_thesis_performance_summary",
     # Learnings
     "Learning",
     "LearningLog",

@@ -368,6 +368,28 @@ class ThesisTracker:
                     self._cache[thesis.id] = thesis
         return theses
 
+    def get_theses_for_symbol(self, symbol: str) -> list[Thesis]:
+        """Get all active theses that include this symbol in positions.
+
+        Args:
+            symbol: Stock symbol to search for
+
+        Returns:
+            List of active theses that have this symbol in positions
+        """
+        return [t for t in self.get_active_theses() if symbol in t.positions]
+
+    def get_all_theses_for_symbol(self, symbol: str) -> list[Thesis]:
+        """Get all theses (any status) that include this symbol.
+
+        Args:
+            symbol: Stock symbol to search for
+
+        Returns:
+            List of all theses that have this symbol in positions
+        """
+        return [t for t in self.get_all_theses() if symbol in t.positions]
+
     def update_thesis(self, thesis_id: str, updates: dict) -> bool:
         """
         Update a thesis.

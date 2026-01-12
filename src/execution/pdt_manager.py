@@ -27,6 +27,75 @@ import json
 logger = logging.getLogger(__name__)
 
 
+# US Market Holidays (NYSE/NASDAQ)
+# Reference: https://www.nyse.com/markets/hours-calendars
+US_MARKET_HOLIDAYS = {
+    # 2024
+    "2024-01-01",  # New Year's Day
+    "2024-01-15",  # MLK Day
+    "2024-02-19",  # Presidents Day
+    "2024-03-29",  # Good Friday
+    "2024-05-27",  # Memorial Day
+    "2024-06-19",  # Juneteenth
+    "2024-07-04",  # Independence Day
+    "2024-09-02",  # Labor Day
+    "2024-11-28",  # Thanksgiving
+    "2024-12-25",  # Christmas
+
+    # 2025
+    "2025-01-01",  # New Year's Day
+    "2025-01-20",  # MLK Day
+    "2025-02-17",  # Presidents Day
+    "2025-04-18",  # Good Friday
+    "2025-05-26",  # Memorial Day
+    "2025-06-19",  # Juneteenth
+    "2025-07-04",  # Independence Day
+    "2025-09-01",  # Labor Day
+    "2025-11-27",  # Thanksgiving
+    "2025-12-25",  # Christmas
+
+    # 2026
+    "2026-01-01",  # New Year's Day
+    "2026-01-19",  # MLK Day
+    "2026-02-16",  # Presidents Day
+    "2026-04-03",  # Good Friday
+    "2026-05-25",  # Memorial Day
+    "2026-06-19",  # Juneteenth
+    "2026-07-03",  # Independence Day (observed)
+    "2026-09-07",  # Labor Day
+    "2026-11-26",  # Thanksgiving
+    "2026-12-25",  # Christmas
+
+    # 2027
+    "2027-01-01",  # New Year's Day
+    "2027-01-18",  # MLK Day
+    "2027-02-15",  # Presidents Day
+    "2027-03-26",  # Good Friday
+    "2027-05-31",  # Memorial Day
+    "2027-06-18",  # Juneteenth (observed)
+    "2027-07-05",  # Independence Day (observed)
+    "2027-09-06",  # Labor Day
+    "2027-11-25",  # Thanksgiving
+    "2027-12-24",  # Christmas (observed)
+}
+
+
+def is_market_holiday(check_date: date) -> bool:
+    """Check if a date is a US market holiday."""
+    return check_date.isoformat() in US_MARKET_HOLIDAYS
+
+
+def is_business_day(check_date: date) -> bool:
+    """Check if a date is a business day (not weekend, not holiday)."""
+    # Weekend check (0=Monday, 6=Sunday)
+    if check_date.weekday() >= 5:
+        return False
+    # Holiday check
+    if is_market_holiday(check_date):
+        return False
+    return True
+
+
 class TradeType(str, Enum):
     """Type of trade for PDT tracking."""
     DAY_TRADE = "day_trade"  # Same-day round trip
@@ -137,28 +206,27 @@ class OpenPosition:
 
 
 def get_business_days_ago(n: int, from_date: date | None = None) -> date:
-    """Get the date n business days ago."""
+    """Get the date n business days ago (excluding weekends and holidays)."""
     from_date = from_date or date.today()
     count = 0
     current = from_date
 
     while count < n:
         current -= timedelta(days=1)
-        # Skip weekends (0=Monday, 6=Sunday)
-        if current.weekday() < 5:
+        if is_business_day(current):
             count += 1
 
     return current
 
 
 def add_business_days(start: date, n: int) -> date:
-    """Add n business days to a date."""
+    """Add n business days to a date (excluding weekends and holidays)."""
     current = start
     count = 0
 
     while count < n:
         current += timedelta(days=1)
-        if current.weekday() < 5:
+        if is_business_day(current):
             count += 1
 
     return current

@@ -53,6 +53,13 @@ from .orchestrator import (
     TradingOrchestrator,
     run_paper_trading,
 )
+from .promotion import (
+    PromotionCandidate,
+    PromotionGates,
+    PromotionPipeline,
+    PromotionStage,
+    get_promotion_summary,
+)
 
 __all__ = [
     # Broker
@@ -103,4 +110,10 @@ __all__ = [
     "ScheduleConfig",
     "DailyReport",
     "run_paper_trading",
+    # Promotion Pipeline
+    "PromotionStage",
+    "PromotionCandidate",
+    "PromotionPipeline",
+    "PromotionGates",
+    "get_promotion_summary",
 ]

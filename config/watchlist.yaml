@@ -1,0 +1,57 @@
+# Watchlist Configuration
+# This file defines the symbols tracked by the LiveDaemon and SignalAggregator
+
+# Core symbols always tracked
+symbols:
+  # Broad Market ETFs
+  - SPY    # S&P 500
+  - QQQ    # NASDAQ 100
+  - IWM    # Russell 2000
+  - DIA    # Dow Jones
+
+  # Sector ETFs
+  - XLE    # Energy
+  - XLF    # Financials
+  - XLK    # Technology
+  - XLU    # Utilities
+  - XLI    # Industrials
+  - XLV    # Healthcare
+  - XLC    # Communication Services
+  - XLY    # Consumer Discretionary
+  - XLP    # Consumer Staples
+  - XLB    # Materials
+  - XLRE   # Real Estate
+
+  # Mega Cap Tech
+  - AAPL   # Apple
+  - MSFT   # Microsoft
+  - NVDA   # NVIDIA
+  - GOOGL  # Alphabet
+  - META   # Meta
+  - AMZN   # Amazon
+  - TSLA   # Tesla
+
+  # Energy (thesis aligned)
+  - SLB    # Schlumberger
+  - HAL    # Halliburton
+  - OXY    # Occidental
+
+  # Semiconductors
+  - AMD    # AMD
+  - QCOM   # Qualcomm
+  - MU     # Micron
+  - MRVL   # Marvell
+
+  # Nuclear/AI Power (thesis aligned)
+  - CEG    # Constellation Energy
+  - VST    # Vistra
+  - CCJ    # Cameco
+
+  # Fixed Income
+  - TLT    # Long Treasury
+
+  # Volatility
+  - VXX    # VIX Short-term Futures
+
+# Additional symbols can be added dynamically by theses
+# The daemon will union these with any thesis-linked positions

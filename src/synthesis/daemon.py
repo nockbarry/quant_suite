@@ -96,15 +96,36 @@ class LiveDaemon:
 
         Args:
             watchlist: Symbols to track signals for.
+                      If None, loads from config/watchlist.yaml or uses DEFAULT_WATCHLIST.
             output_path: Where to write state.json.
                         Defaults to paths.live_state.
         """
-        self.watchlist = watchlist or self.DEFAULT_WATCHLIST
+        self.watchlist = watchlist or self._load_watchlist()
         self.output_path = output_path or paths.live_state
         self.signal_aggregator = SignalAggregator(watchlist=self.watchlist)
 
         self._running = False
         self._task: Optional[asyncio.Task] = None
+        self._sector_cache: dict[str, str] = {}  # Cache for yfinance sector lookups
+
+    def _load_watchlist(self) -> list[str]:
+        """Load watchlist from config file or use defaults.
+
+        Loads from config/watchlist.yaml if it exists, otherwise uses DEFAULT_WATCHLIST.
+        """
+        config_path = paths.base / "config" / "watchlist.yaml"
+        if config_path.exists():
+            try:
+                import yaml
+                with open(config_path) as f:
+                    config = yaml.safe_load(f)
+                symbols = config.get("symbols", [])
+                if symbols:
+                    logger.info(f"Loaded {len(symbols)} symbols from watchlist config")
+                    return symbols
+            except Exception as e:
+                logger.warning(f"Could not load watchlist config: {e}")
+        return self.DEFAULT_WATCHLIST
 
     async def start(self, interval_minutes: int = 5) -> None:
         """Start continuous state updates.
@@ -540,8 +561,15 @@ class LiveDaemon:
         """Get aggregated signals for watchlist."""
         try:
             return self.signal_aggregator.aggregate(self.watchlist)
+        except ImportError as e:
+            logger.warning(f"Signal aggregator module not available: {e}")
+            return {}
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(f"Signal computation error: {e}")
+            return {}
         except Exception as e:
-            logger.warning(f"Signal aggregation failed: {e}")
+            # Catch-all for external API failures (yfinance, etc.)
+            logger.warning(f"Signal aggregation failed (external): {e}")
             return {}
 
     async def _get_theses(self) -> list[ThesisSummary]:
@@ -564,8 +592,10 @@ class LiveDaemon:
                     next_signpost=t.signposts[0].description if t.signposts else None,
                     days_active=(datetime.now() - t.created).days,
                 ))
-        except Exception as e:
-            logger.debug(f"Thesis tracker not available: {e}")
+        except ImportError as e:
+            logger.debug(f"Thesis tracker module not available: {e}")
+        except (FileNotFoundError, json.JSONDecodeError, KeyError, AttributeError) as e:
+            logger.warning(f"Failed to load theses: {e}")
 
         return theses
 
@@ -721,29 +751,83 @@ class LiveDaemon:
             available=available,
         )
 
+    # Static sector mapping for common symbols
+    SECTOR_MAP = {
+        # Energy
+        "SLB": "Energy", "HAL": "Energy", "OXY": "Energy", "XOM": "Energy", "CVX": "Energy",
+        "XLE": "Energy", "VLO": "Energy", "MPC": "Energy", "PSX": "Energy", "OIH": "Energy",
+        "FRO": "Energy", "STNG": "Energy", "DHT": "Energy", "INSW": "Energy", "COP": "Energy",
+        "EOG": "Energy", "PXD": "Energy", "DVN": "Energy", "HES": "Energy",
+        # Technology
+        "AAPL": "Technology", "MSFT": "Technology", "GOOGL": "Technology", "GOOG": "Technology",
+        "META": "Technology", "NVDA": "Technology", "AMD": "Technology", "XLK": "Technology",
+        "INTC": "Technology", "AVGO": "Technology", "QCOM": "Technology", "MU": "Technology",
+        "MRVL": "Technology", "TSM": "Technology", "ASML": "Technology", "AMAT": "Technology",
+        # Financials
+        "JPM": "Financials", "BAC": "Financials", "GS": "Financials", "XLF": "Financials",
+        "WFC": "Financials", "C": "Financials", "MS": "Financials", "BLK": "Financials",
+        # Utilities / Power
+        "CEG": "Utilities", "NEE": "Utilities", "VST": "Utilities", "ETR": "Utilities",
+        "CCJ": "Utilities", "OKLO": "Utilities", "XLU": "Utilities", "SO": "Utilities",
+        "DUK": "Utilities", "AEP": "Utilities",
+        # Industrials / Defense
+        "GD": "Industrials", "NOC": "Industrials", "LMT": "Industrials", "LHX": "Industrials",
+        "RTX": "Industrials", "BA": "Industrials", "CAT": "Industrials", "HON": "Industrials",
+        "UPS": "Industrials", "XLI": "Industrials",
+        # Consumer Discretionary
+        "AMZN": "Consumer Discretionary", "TSLA": "Consumer Discretionary", "HD": "Consumer Discretionary",
+        "NKE": "Consumer Discretionary", "SBUX": "Consumer Discretionary", "XLY": "Consumer Discretionary",
+        # Consumer Staples
+        "WMT": "Consumer Staples", "PG": "Consumer Staples", "KO": "Consumer Staples",
+        "PEP": "Consumer Staples", "COST": "Consumer Staples", "XLP": "Consumer Staples",
+        # Healthcare
+        "JNJ": "Healthcare", "UNH": "Healthcare", "PFE": "Healthcare", "ABBV": "Healthcare",
+        "MRK": "Healthcare", "LLY": "Healthcare", "XLV": "Healthcare",
+        # Communication Services
+        "NFLX": "Communication Services", "DIS": "Communication Services", "VZ": "Communication Services",
+        "T": "Communication Services", "CMCSA": "Communication Services", "XLC": "Communication Services",
+        # Materials
+        "LIN": "Materials", "APD": "Materials", "SHW": "Materials", "FCX": "Materials",
+        "NEM": "Materials", "XLB": "Materials",
+        # Real Estate
+        "AMT": "Real Estate", "PLD": "Real Estate", "CCI": "Real Estate", "XLRE": "Real Estate",
+        # Broad Market ETFs
+        "SPY": "Broad Market", "QQQ": "Broad Market", "IWM": "Broad Market", "DIA": "Broad Market",
+        "VTI": "Broad Market", "VOO": "Broad Market",
+        # Commodities
+        "GLD": "Commodities", "SLV": "Commodities", "USO": "Commodities", "UNG": "Commodities",
+        # Fixed Income
+        "TLT": "Fixed Income", "IEF": "Fixed Income", "BND": "Fixed Income",
+        # Volatility
+        "VXX": "Volatility", "UVXY": "Volatility", "SVXY": "Volatility",
+    }
+
     def _get_sector(self, symbol: str) -> str:
-        """Get sector for a symbol."""
-        # Extended sector mapping
-        sector_map = {
-            # Energy
-            "SLB": "Energy", "HAL": "Energy", "OXY": "Energy", "XOM": "Energy", "CVX": "Energy",
-            "XLE": "Energy", "VLO": "Energy", "MPC": "Energy", "PSX": "Energy", "OIH": "Energy",
-            "FRO": "Energy", "STNG": "Energy", "DHT": "Energy", "INSW": "Energy",
-            # Technology
-            "AAPL": "Technology", "MSFT": "Technology", "GOOGL": "Technology", "META": "Technology",
-            "NVDA": "Technology", "AMD": "Technology", "XLK": "Technology",
-            # Financials
-            "JPM": "Financials", "BAC": "Financials", "GS": "Financials", "XLF": "Financials",
-            # Utilities / Power
-            "CEG": "Utilities", "NEE": "Utilities", "VST": "Utilities", "ETR": "Utilities",
-            "CCJ": "Utilities", "OKLO": "Utilities",
-            # Defense
-            "GD": "Industrials", "NOC": "Industrials", "LMT": "Industrials", "LHX": "Industrials",
-            "RTX": "Industrials",
-            # Other
-            "GLD": "Commodities", "SLV": "Commodities",
-        }
-        return sector_map.get(symbol, "Unknown")
+        """Get sector for a symbol with yfinance fallback.
+
+        First checks static mapping, then cache, then fetches from yfinance.
+        """
+        # Check static mapping first
+        if symbol in self.SECTOR_MAP:
+            return self.SECTOR_MAP[symbol]
+
+        # Check cache
+        if symbol in self._sector_cache:
+            return self._sector_cache[symbol]
+
+        # Fetch from yfinance and cache
+        try:
+            import yfinance as yf
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
+            sector = info.get("sector", "Unknown")
+            if sector and sector != "Unknown":
+                self._sector_cache[symbol] = sector
+                return sector
+        except Exception as e:
+            logger.debug(f"Could not fetch sector for {symbol}: {e}")
+
+        return "Unknown"
 
     # =========================================================================
     # NEW: Pre-computed data computation methods
@@ -985,10 +1069,8 @@ class LiveDaemon:
         portfolio: PortfolioSnapshot,
         market: MarketSnapshot,
     ) -> Optional[PeriodPerformance]:
-        """Compute period performance vs benchmarks."""
+        """Compute period performance vs benchmarks using actual portfolio history."""
         try:
-            # Get historical portfolio values from Alpaca
-            from alpaca.trading.client import TradingClient
             from alpaca.data.historical import StockHistoricalDataClient
             from alpaca.data.requests import StockBarsRequest
             from alpaca.data.timeframe import TimeFrame
@@ -1005,7 +1087,6 @@ class LiveDaemon:
 
             # Get SPY data for comparison
             end = datetime.now()
-            week_ago = end - timedelta(days=7)
             month_ago = end - timedelta(days=30)
 
             request = StockBarsRequest(
@@ -1031,16 +1112,13 @@ class LiveDaemon:
             spy_week_pct = ((spy_today - spy_week_start) / spy_week_start) * 100
             spy_month_pct = ((spy_today - spy_month_start) / spy_month_start) * 100
 
-            # Estimate portfolio week/month returns (would need portfolio history for accurate)
-            # For now, use day P&L and estimates
+            # Get actual portfolio P&L from portfolio history
             today_pnl = portfolio.day_pnl
             today_pnl_pct = portfolio.day_pnl_pct
 
-            # These are estimates - ideally would track portfolio history
-            week_pnl = today_pnl * 3  # Rough estimate
-            week_pnl_pct = today_pnl_pct * 3
-            month_pnl = today_pnl * 10  # Rough estimate
-            month_pnl_pct = today_pnl_pct * 10
+            # Load portfolio history for accurate week/month returns
+            week_pnl, week_pnl_pct = self._calculate_period_pnl_from_history(5, portfolio.equity)
+            month_pnl, month_pnl_pct = self._calculate_period_pnl_from_history(20, portfolio.equity)
 
             return PeriodPerformance(
                 today_pnl=today_pnl,
@@ -1059,6 +1137,50 @@ class LiveDaemon:
         except Exception as e:
             logger.warning(f"Could not compute period performance: {e}")
             return None
+
+    def _calculate_period_pnl_from_history(
+        self, trading_days: int, current_equity: float
+    ) -> tuple[float, float]:
+        """Calculate actual P&L from portfolio history.
+
+        Args:
+            trading_days: Number of trading days to look back (5 for week, 20 for month)
+            current_equity: Current portfolio equity
+
+        Returns:
+            Tuple of (pnl_dollars, pnl_percent)
+        """
+        try:
+            history_path = paths.live / "portfolio_history.json"
+            if not history_path.exists():
+                logger.debug("Portfolio history not found, using zero for period P&L")
+                return 0.0, 0.0
+
+            with open(history_path) as f:
+                history_data = json.load(f)
+
+            snapshots = history_data.get("snapshots", [])
+            if len(snapshots) < trading_days:
+                # Not enough history, compute from available data
+                if len(snapshots) < 2:
+                    return 0.0, 0.0
+                start_equity = snapshots[0].get("equity", current_equity)
+            else:
+                # Use data from trading_days ago
+                idx = len(snapshots) - trading_days
+                start_equity = snapshots[idx].get("equity", current_equity)
+
+            if start_equity <= 0:
+                return 0.0, 0.0
+
+            pnl = current_equity - start_equity
+            pnl_pct = (pnl / start_equity) * 100
+
+            return pnl, pnl_pct
+
+        except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+            logger.debug(f"Could not load portfolio history: {e}")
+            return 0.0, 0.0
 
     async def _compute_sold_tracking(self) -> Optional[SoldTracking]:
         """Track opportunity cost of sold positions."""

@@ -14,6 +14,8 @@ from typing import Optional, Any
 import json
 import logging
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -94,7 +96,7 @@ class SentimentSnapshot:
     put_call_signal: str  # bullish, bearish, neutral
     vix_term_structure: str  # contango, backwardation, flat
     overall_sentiment: str  # bullish, bearish, neutral
-    contrarian_signal: Optional[str]  # buy, sell, or None
+    contrarian_signal: Optional[str] = None  # buy, sell, or None
 
     # NEW: Enhanced VIX term structure
     vix_1m: Optional[float] = None
@@ -202,11 +204,11 @@ class PositionSnapshot:
     # Context
     sector: str
     days_held: int
-    thesis_id: Optional[str]  # Link to thesis if any
+    thesis_id: Optional[str] = None  # Link to thesis if any
 
     # Risk
-    distance_to_stop_pct: Optional[float]
-    distance_to_target_pct: Optional[float]
+    distance_to_stop_pct: Optional[float] = None
+    distance_to_target_pct: Optional[float] = None
 
     def to_dict(self) -> dict:
         return {
@@ -305,8 +307,8 @@ class RiskSnapshot:
     max_position_weight: float
     max_sector_weight: float
     correlation_risk: str  # low, medium, high
-    concentration_warning: Optional[str]
-    limit_breaches: list[str]
+    concentration_warning: Optional[str] = None
+    limit_breaches: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -339,12 +341,12 @@ class CalendarEvent:
     """Upcoming market event."""
 
     date: str  # YYYY-MM-DD
-    time: Optional[str]  # HH:MM ET
     event_type: str  # earnings, economic, fed, options_expiry
-    symbol: Optional[str]  # For earnings
     description: str
     importance: str  # high, medium, low
-    expected_impact: Optional[str]
+    time: Optional[str] = None  # HH:MM ET
+    symbol: Optional[str] = None  # For earnings
+    expected_impact: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -361,11 +363,11 @@ class CalendarEvent:
     def from_dict(cls, data: dict) -> "CalendarEvent":
         return cls(
             date=data["date"],
-            time=data.get("time"),
             event_type=data["event_type"],
-            symbol=data.get("symbol"),
             description=data["description"],
             importance=data["importance"],
+            time=data.get("time"),
+            symbol=data.get("symbol"),
             expected_impact=data.get("expected_impact"),
         )
 
@@ -412,8 +414,8 @@ class ThesisSummary:
     status: str  # active, at_risk, validated
     conviction: float
     positions: list[str]
-    next_signpost: Optional[str]
     days_active: int
+    next_signpost: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -434,8 +436,8 @@ class ThesisSummary:
             status=data["status"],
             conviction=data["conviction"],
             positions=data["positions"],
-            next_signpost=data.get("next_signpost"),
             days_active=data["days_active"],
+            next_signpost=data.get("next_signpost"),
         )
 
 
@@ -448,11 +450,11 @@ class PendingDecision:
     action: str
     timestamp: str
     confidence: float
-    entry_price: Optional[float]
     current_price: float
     unrealized_pnl_pct: float
-    thesis_id: Optional[str]
     days_held: int
+    entry_price: Optional[float] = None
+    thesis_id: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -476,11 +478,11 @@ class PendingDecision:
             action=data["action"],
             timestamp=data["timestamp"],
             confidence=data["confidence"],
-            entry_price=data.get("entry_price"),
             current_price=data["current_price"],
             unrealized_pnl_pct=data["unrealized_pnl_pct"],
-            thesis_id=data.get("thesis_id"),
             days_held=data["days_held"],
+            entry_price=data.get("entry_price"),
+            thesis_id=data.get("thesis_id"),
         )
 
 
@@ -821,8 +823,8 @@ class ProfitTierStatus:
     tier_15_triggered: bool
     tier_20_triggered: bool
     shares_remaining_pct: float  # What % of original position remains
-    recommended_action: Optional[str]  # e.g., "Take 25% profit at tier 10"
-    next_tier_pct: Optional[float]  # Next profit tier to watch
+    recommended_action: Optional[str] = None  # e.g., "Take 25% profit at tier 10"
+    next_tier_pct: Optional[float] = None  # Next profit tier to watch
 
     def to_dict(self) -> dict:
         return {
@@ -1299,7 +1301,6 @@ class UnifiedState:
     def load(cls, path: Optional[Path] = None) -> Optional["UnifiedState"]:
         """Load state from JSON file."""
         if path is None:
-            from src.core.paths import paths
             path = paths.live_state
 
         if not path.exists():
@@ -1310,8 +1311,14 @@ class UnifiedState:
             with open(path, "r") as f:
                 data = json.load(f)
             return cls.from_dict(data)
-        except Exception as e:
-            logger.error(f"Failed to load state: {e}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Malformed JSON in state file {path}: {e}")
+            return None
+        except (KeyError, TypeError, ValueError) as e:
+            logger.error(f"Invalid data structure in state file: {e}")
+            return None
+        except IOError as e:
+            logger.error(f"IO error reading state file: {e}")
             return None
 
     def get_summary(self) -> str:

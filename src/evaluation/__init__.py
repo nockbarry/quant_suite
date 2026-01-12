@@ -101,6 +101,11 @@ from .attribution import (
     FactorModel,
     RollingFactorAnalysis,
 )
+from .comparison import (
+    StrategyComparison,
+    StrategyDashboard,
+    get_strategy_leaderboard,
+)
 
 __all__ = [
     # Backtest
@@ -197,4 +202,8 @@ __all__ = [
     "AttributionResult",
     "BrinsonAttribution",
     "RollingFactorAnalysis",
+    # Comparison
+    "StrategyComparison",
+    "StrategyDashboard",
+    "get_strategy_leaderboard",
 ]

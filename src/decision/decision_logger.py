@@ -83,6 +83,9 @@ class TradingDecision:
     adversarial_notes: Optional[str] = None  # What the adversary said
     learning_extracted: bool = False  # Has learning been extracted from this?
 
+    # Strategy tracking
+    setup_type: str = ""  # e.g., "mean_reversion", "momentum", "breakout", "thesis_driven"
+
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -113,6 +116,7 @@ class TradingDecision:
             "pre_mortem": self.pre_mortem,
             "adversarial_notes": self.adversarial_notes,
             "learning_extracted": self.learning_extracted,
+            "setup_type": self.setup_type,
         }
 
     @classmethod
@@ -146,6 +150,7 @@ class TradingDecision:
             pre_mortem=data.get("pre_mortem"),
             adversarial_notes=data.get("adversarial_notes"),
             learning_extracted=data.get("learning_extracted", False),
+            setup_type=data.get("setup_type", ""),
         )
 
 
@@ -222,6 +227,62 @@ class DecisionLogger:
         """Get decisions that haven't been executed yet."""
         decisions = self.get_today_decisions()
         return [d for d in decisions if d.status == DecisionStatus.PENDING]
+
+    def get_decisions_by_thesis(self, thesis_id: str, days: int = 30) -> list[TradingDecision]:
+        """Get all decisions linked to a specific thesis.
+
+        Args:
+            thesis_id: Thesis ID to search for
+            days: Number of days to look back
+
+        Returns:
+            List of TradingDecisions linked to the thesis, sorted by date descending
+        """
+        decisions = []
+
+        for i in range(days):
+            date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            filepath = self.decisions_dir / f"decisions_{date}.json"
+
+            if filepath.exists():
+                try:
+                    with open(filepath, "r") as f:
+                        data = json.load(f)
+                    for d in data["decisions"]:
+                        if d.get("thesis_id") == thesis_id:
+                            decisions.append(TradingDecision.from_dict(d))
+                except (json.JSONDecodeError, KeyError):
+                    continue
+
+        return decisions
+
+    def get_decisions_by_symbol(self, symbol: str, days: int = 30) -> list[TradingDecision]:
+        """Get all decisions for a specific symbol.
+
+        Args:
+            symbol: Stock symbol to search for
+            days: Number of days to look back
+
+        Returns:
+            List of TradingDecisions for the symbol, sorted by date descending
+        """
+        decisions = []
+
+        for i in range(days):
+            date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            filepath = self.decisions_dir / f"decisions_{date}.json"
+
+            if filepath.exists():
+                try:
+                    with open(filepath, "r") as f:
+                        data = json.load(f)
+                    for d in data["decisions"]:
+                        if d.get("symbol") == symbol:
+                            decisions.append(TradingDecision.from_dict(d))
+                except (json.JSONDecodeError, KeyError):
+                    continue
+
+        return decisions
 
     def get_decision(self, decision_id: str) -> Optional[TradingDecision]:
         """Get a specific decision by ID."""
@@ -338,6 +399,52 @@ class DecisionLogger:
 
         return by_action
 
+    def get_performance_by_setup_type(self, days: int = 30) -> dict:
+        """
+        Get performance breakdown by setup type.
+
+        Returns:
+            Dict with setup type -> {count, wins, win_rate, total_pnl, avg_pnl}
+        """
+        all_decisions = []
+
+        for i in range(days):
+            date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            filepath = self.decisions_dir / f"decisions_{date}.json"
+
+            if filepath.exists():
+                try:
+                    with open(filepath, "r") as f:
+                        data = json.load(f)
+                        all_decisions.extend(data["decisions"])
+                except (json.JSONDecodeError, KeyError):
+                    continue
+
+        # Filter to closed decisions
+        closed = [d for d in all_decisions if d.get("status") == "closed"]
+
+        by_setup = {}
+        for d in closed:
+            setup = d.get("setup_type", "unknown") or "unknown"
+            if setup not in by_setup:
+                by_setup[setup] = {"count": 0, "wins": 0, "total_pnl": 0.0, "pnl_list": []}
+
+            by_setup[setup]["count"] += 1
+            pnl = d.get("realized_pnl", 0) or 0
+            by_setup[setup]["total_pnl"] += pnl
+            by_setup[setup]["pnl_list"].append(pnl)
+
+            if d.get("realized_pnl_pct", 0) > 0:
+                by_setup[setup]["wins"] += 1
+
+        # Calculate derived metrics
+        for setup, stats in by_setup.items():
+            stats["win_rate"] = stats["wins"] / stats["count"] if stats["count"] > 0 else 0
+            stats["avg_pnl"] = stats["total_pnl"] / stats["count"] if stats["count"] > 0 else 0
+            del stats["pnl_list"]  # Remove internal tracking list
+
+        return by_setup
+
 
 def create_decision(
     symbol: str,
@@ -355,9 +462,14 @@ def create_decision(
     thesis_id: Optional[str] = None,
     pre_mortem: Optional[str] = None,
     adversarial_notes: Optional[str] = None,
+    setup_type: str = "",
 ) -> TradingDecision:
     """
     Factory function to create a new trading decision.
+
+    Args:
+        setup_type: Strategy/setup type, e.g., "mean_reversion", "momentum",
+                   "breakout", "thesis_driven", "earnings", "technical"
 
     Example:
         decision = create_decision(
@@ -369,6 +481,7 @@ def create_decision(
             key_factors=["Contract announcements", "Pre-market strength"],
             risks=["Geopolitical uncertainty", "Oil price volatility"],
             context={"briefing_date": "2026-01-06", "market_sentiment": "bullish"},
+            setup_type="thesis_driven",
         )
     """
     return TradingDecision(
@@ -389,4 +502,5 @@ def create_decision(
         thesis_id=thesis_id,
         pre_mortem=pre_mortem,
         adversarial_notes=adversarial_notes,
+        setup_type=setup_type,
     )
