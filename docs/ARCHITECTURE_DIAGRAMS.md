@@ -111,13 +111,14 @@ src/synthesis/
 └── daemon.py          ──► LiveDaemon - continuous state updates
 ```
 
-### Knowledge Layer (`src/knowledge/`) - NEW
+### Knowledge Layer (`src/knowledge/`)
 ```
 src/knowledge/
 ├── __init__.py
-├── thesis.py          ──► Thesis, ThesisTracker, Signpost
-├── learnings.py       ──► Learning, LearningLog
-└── base.py            ──► KnowledgeBase, CompanyBrief, SectorContext
+├── thesis.py              ──► Thesis, ThesisTracker, Signpost
+├── thesis_performance.py  ──► ThesisPerformanceTracker, ThesisPerformanceMetrics (Added 2026-01-11)
+├── learnings.py           ──► Learning, LearningLog
+└── base.py                ──► KnowledgeBase, CompanyBrief, SectorContext
 ```
 
 ### Decision Layer (`src/decision/`)
@@ -288,6 +289,9 @@ src/evaluation/
 │   ├── risk.py                ──► Risk metrics (VaR, max drawdown)
 │   └── statistical.py         ──► Statistical metrics
 │
+├── comparison/                ──► Strategy Comparison (Added 2026-01-11)
+│   └── dashboard.py           ──► StrategyDashboard, StrategyComparison
+│
 └── attribution/
     └── factor_model.py        ──► Performance attribution
 ```
@@ -298,7 +302,7 @@ src/execution/
 ├── __init__.py
 ├── orchestrator.py    ──► Trading orchestrator
 ├── order_manager.py   ──► Order management
-├── pdt_manager.py     ──► PDT rule enforcement
+├── pdt_manager.py     ──► PDT rule enforcement + holiday calendar (Updated 2026-01-11)
 ├── approval.py        ──► Human approval workflow
 │
 ├── broker/
@@ -309,6 +313,9 @@ src/execution/
 ├── pipeline/
 │   ├── daily_signals.py       ──► Daily signal generation
 │   └── order_executor.py      ──► Order execution pipeline
+│
+├── promotion/                 ──► Strategy Promotion Pipeline (Added 2026-01-11)
+│   └── pipeline.py            ──► PromotionPipeline, PromotionCandidate, PromotionGates
 │
 └── monitoring/
     ├── dashboard.py           ──► Web dashboard
@@ -1090,6 +1097,158 @@ Based on the integration analysis, these modules may need better integration:
 
 ---
 
+## 12. Strategy Promotion Pipeline
+
+**Added**: 2026-01-11
+**Reason**: Automate the lifecycle of strategies from research through paper trading to live trading with quality gates at each stage.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                            STRATEGY PROMOTION PIPELINE                                   │
+│                         src/execution/promotion/pipeline.py                              │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────┐    ┌───────────────┐    ┌───────────────┐    ┌───────────────┐
+│   BACKTEST    │───►│    MCPT       │───►│    PAPER      │───►│    PAPER      │
+│               │    │  VALIDATION   │    │   TRADING     │    │   REVIEW      │
+└───────────────┘    └───────────────┘    └───────────────┘    └───────────────┘
+       │                    │                    │                    │
+       │                    │                    │                    │
+   GATE: Basic          GATE: p<0.05         GATE: 20+ days      GATE: Sharpe>0.5
+   backtest results     Sharpe>1.0           min 10 trades       max DD<15%
+       │                    │                    │                    │
+       ▼                    ▼                    ▼                    ▼
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                              PromotionCandidate                                        │
+│  {                                                                                     │
+│    strategy_name: "momentum_breakout",                                                 │
+│    symbol: "AAPL",                                                                     │
+│    current_stage: "paper_trading",                                                     │
+│    backtest_sharpe: 2.5,                                                               │
+│    mcpt_p_value: 0.02,                                                                 │
+│    paper_days: 15,                                                                     │
+│    paper_sharpe: 1.2,                                                                  │
+│    notes: ["[2026-01-05] Added to pipeline", "..."]                                    │
+│  }                                                                                     │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+       │
+       ▼
+┌───────────────┐    ┌───────────────┐
+│ LIVE_PENDING  │───►│    LIVE       │
+│               │    │   TRADING     │
+└───────────────┘    └───────────────┘
+       │                    │
+   GATE: Human          Status: Active
+   approval required    in production
+```
+
+### Pipeline Stages
+
+| Stage | Requirements to Advance | Automated? |
+|-------|------------------------|------------|
+| BACKTEST | Sharpe computed, 30+ trades | Yes |
+| MCPT_VALIDATION | p-value < 0.05, Sharpe > 1.0 | Yes |
+| PAPER_TRADING | 20+ trading days, 10+ trades | Yes |
+| PAPER_REVIEW | Paper Sharpe > 0.5, DD < 15% | Yes |
+| LIVE_PENDING | Await human approval | **No** |
+| LIVE_TRADING | - | Final |
+
+### Integration with Cron Jobs
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                              CRON JOB INTEGRATION                                        │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+cron_paper_trading_review.py (Daily 5:30 PM ET)
+    │
+    ├─► Load PromotionPipeline
+    │
+    ├─► For each PAPER_TRADING candidate:
+    │   ├─► Update metrics from paper broker
+    │   └─► Try to advance to PAPER_REVIEW
+    │
+    ├─► For each PAPER_REVIEW candidate:
+    │   └─► Try to advance to LIVE_PENDING
+    │
+    └─► Alert if candidates ready for approval
+
+cron_thesis_signpost_check.py (Hourly 6 AM - 5 PM ET)
+    │
+    ├─► Check active theses for signpost triggers
+    │
+    ├─► Calculate trigger likelihood from:
+    │   ├─► Target date proximity
+    │   ├─► News relevance
+    │   └─► Price action
+    │
+    └─► Save alerts to ~/quant_results/alerts/
+```
+
+---
+
+## 13. Thesis Performance Attribution
+
+**Added**: 2026-01-11
+**Reason**: Answer "Which theses are profitable?" by tracking P&L and performance metrics per investment thesis.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                          THESIS PERFORMANCE ATTRIBUTION                                  │
+│                        src/knowledge/thesis_performance.py                               │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────┐     ┌───────────────────────┐     ┌───────────────────────┐
+│    ThesisTracker      │     │    DecisionLogger     │     │     LearningLog       │
+│                       │     │                       │     │                       │
+│ • Thesis definitions  │     │ • Trading decisions   │     │ • Extracted learnings │
+│ • Signpost tracking   │     │ • thesis_id links     │     │ • Patterns identified │
+│ • Conviction history  │     │ • Realized P&L        │     │                       │
+└───────────┬───────────┘     └───────────┬───────────┘     └───────────┬───────────┘
+            │                             │                             │
+            └─────────────────────────────┼─────────────────────────────┘
+                                          │
+                                          ▼
+                        ┌─────────────────────────────────────┐
+                        │     ThesisPerformanceTracker        │
+                        │                                     │
+                        │  get_performance(thesis_id)         │
+                        │  get_all_performance()              │
+                        │  get_thesis_leaderboard()           │
+                        │  compare_theses([id1, id2])         │
+                        └─────────────────────────────────────┘
+                                          │
+                                          ▼
+                        ┌─────────────────────────────────────┐
+                        │     ThesisPerformanceMetrics        │
+                        │                                     │
+                        │  thesis_id: "venezuela123"          │
+                        │  thesis_name: "Venezuela Energy"    │
+                        │  total_realized_pnl: $2,340.00      │
+                        │  num_trades: 15                     │
+                        │  wins: 10, losses: 4, scratches: 1  │
+                        │  win_rate: 71%                      │
+                        │  avg_hold_days: 5.2                 │
+                        │  position_performance: {...}        │
+                        │  key_patterns: ["insider_confluence"]│
+                        └─────────────────────────────────────┘
+
+USAGE:
+    from src.knowledge.thesis_performance import ThesisPerformanceTracker
+
+    tracker = ThesisPerformanceTracker()
+    print(tracker.get_thesis_leaderboard())
+
+    # Output:
+    # | Rank | Thesis            | P&L     | Win Rate | Trades |
+    # |------|-------------------|---------|----------|--------|
+    # | 1    | Venezuela Energy  | +$2,340 | 71%      | 15     |
+    # | 2    | AI Infrastructure | +$1,120 | 65%      | 8      |
+```
+
+---
+
 *Generated: 2026-01-07*
 *Updated: 2026-01-10 - Added Data Collection Daemon and 20+ free data sources*
+*Updated: 2026-01-11 - Added Promotion Pipeline, Thesis Performance, Strategy Dashboard, Holiday Calendar*
 *This document should be updated when major architectural changes are made.*

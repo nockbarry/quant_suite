@@ -1,11 +1,21 @@
 """Classical Machine Learning Strategies.
 
+PRIORITY: P3 - DEFERRED
+STATUS: Placeholder - models not trained, requires ML pipeline
+TODO: Train models with proper walk-forward validation before use
+
 Implements tree-based and kernel-based ML strategies for trading:
 - XGBoost (gradient boosted trees)
 - Random Forest (bagged decision trees)
 - Support Vector Machine (kernel-based classifier)
 
 Based on "Advances in Financial Machine Learning" by de Prado.
+
+Requirements before production use:
+1. Train models on historical data with purged cross-validation
+2. Run MCPT validation (p < 0.05)
+3. Paper trade for 20+ days
+4. Human approval via promotion pipeline
 """
 
 from abc import ABC

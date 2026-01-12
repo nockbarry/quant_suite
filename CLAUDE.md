@@ -111,11 +111,12 @@ daemon = LiveDaemon()
 state = await daemon.update_now()
 ```
 
-### Knowledge Layer (NEW)
+### Knowledge Layer
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | **ThesisTracker** | `src/knowledge/thesis.py` | Investment theses with signposts |
+| **ThesisPerformanceTracker** | `src/knowledge/thesis_performance.py` | P&L attribution by thesis |
 | **LearningLog** | `src/knowledge/learnings.py` | Extracted trade learnings |
 | **KnowledgeBase** | `src/knowledge/base.py` | Company/sector understanding |
 
@@ -132,6 +133,13 @@ thesis = tracker.create_thesis(
     signposts=[{"description": "Chevron license extended", ...}],
     positions=["SLB", "HAL"],
 )
+
+# Get thesis performance
+from src.knowledge.thesis_performance import ThesisPerformanceTracker
+perf_tracker = ThesisPerformanceTracker()
+metrics = perf_tracker.get_performance("thesis_id")
+print(f"Total P&L: ${metrics.total_pnl:.2f}, Win Rate: {metrics.win_rate:.0%}")
+print(perf_tracker.get_thesis_leaderboard())
 ```
 
 ### Decision Layer (ENHANCED)
@@ -158,6 +166,64 @@ analysis = adversary.challenge(
 print(f"Concern Level: {analysis.overall_concern_level}")
 print(f"Proceed: {analysis.proceed_recommendation}")
 ```
+
+### Evaluation Layer
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **StrategyDashboard** | `src/evaluation/comparison/dashboard.py` | Compare validated strategies |
+| **MCPTAnalyzer** | `src/evaluation/validation/mcpt.py` | Monte Carlo permutation testing |
+| **WalkForwardOptimizer** | `src/evaluation/validation/walk_forward.py` | Walk-forward validation |
+
+```python
+# Compare strategies
+from src.evaluation.comparison import StrategyDashboard, get_strategy_leaderboard
+
+dashboard = StrategyDashboard()
+top_strategies = dashboard.get_top_performers(n=10, validated_only=True)
+print(dashboard.generate_report())
+
+# Quick leaderboard
+print(get_strategy_leaderboard(top_n=5))
+```
+
+### Promotion Pipeline
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **PromotionPipeline** | `src/execution/promotion/pipeline.py` | Backtest → Paper → Live lifecycle |
+| **PromotionCandidate** | `src/execution/promotion/pipeline.py` | Strategy being promoted |
+| **PromotionGates** | `src/execution/promotion/pipeline.py` | Requirements for advancement |
+
+```python
+# Manage strategy promotion
+from src.execution.promotion import PromotionPipeline, PromotionStage
+
+pipeline = PromotionPipeline()
+
+# Add candidate from backtest
+candidate = pipeline.add_candidate("momentum_breakout", "AAPL", backtest_metrics={
+    "sharpe": 2.5, "max_drawdown": 12.0, "num_trades": 50
+})
+
+# Update after MCPT validation
+pipeline.update_mcpt_results("momentum_breakout", "AAPL", p_value=0.02)
+
+# Try to advance to paper trading
+success, reason = pipeline.advance_stage("momentum_breakout", "AAPL")
+
+# Check what's ready for live
+ready = pipeline.get_ready_for_live()
+print(pipeline.generate_report())
+```
+
+**Pipeline Stages:**
+1. `BACKTEST` → Initial development
+2. `MCPT_VALIDATION` → Statistical validation (p < 0.05)
+3. `PAPER_TRADING` → Live paper trading (20+ days)
+4. `PAPER_REVIEW` → Evaluate paper results (Sharpe > 0.5)
+5. `LIVE_PENDING` → Awaiting human approval
+6. `LIVE_TRADING` → Active in production
 
 ---
 
@@ -297,8 +363,10 @@ See: `~/quant_results/knowledge/position_sizing.yaml`
 | Stop loss | 5-15% based on conviction |
 
 ### PDT Compliance (<$25k)
-- Max 3 day trades per 5 rolling days
+- Max 3 day trades per 5 rolling business days
 - 2-day minimum hold for swing trades
+- Holiday calendar included (2024-2027) for accurate day counting
+- Use `PDTManager` from `src/execution/pdt_manager.py`
 
 ---
 
@@ -451,6 +519,26 @@ aaii_sentiment: weekly, newsletter_sentiment: weekly, cot_report: weekly, patent
 
 # Periodic
 job_postings: 3 days
+```
+
+### Cron Jobs
+
+| Script | Schedule | Purpose |
+|--------|----------|---------|
+| `cron_thesis_signpost_check.py` | Hourly 6am-5pm ET | Check thesis signposts for triggers |
+| `cron_paper_trading_review.py` | Daily 5:30pm ET | Review paper trading, advance pipeline |
+| `cron_congressional_collect.py` | Daily | Collect congressional trades |
+| `cron_news_collect.py` | Hourly | Collect market news |
+| `cron_insider_collect.py` | Daily | Collect insider trading |
+| `cron_concentration_check.py` | Hourly | Monitor portfolio concentration |
+
+```bash
+# Install cron jobs
+./scripts/setup_cron.sh install
+
+# Or add manually:
+# 0 6-17 * * 1-5 cd /path/to/quant_suite && PYTHONPATH=. python scripts/cron_thesis_signpost_check.py
+# 30 17 * * 1-5 cd /path/to/quant_suite && PYTHONPATH=. python scripts/cron_paper_trading_review.py
 ```
 
 ---

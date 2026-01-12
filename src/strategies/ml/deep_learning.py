@@ -1,11 +1,23 @@
 """Deep Learning Trading Strategies.
 
+PRIORITY: P3 - DEFERRED
+STATUS: Placeholder - models not trained, requires GPU and PyTorch
+TODO: Implement proper deep learning pipeline when prioritized
+
 Implements neural network-based strategies:
 - LSTM: Long Short-Term Memory networks for sequence modeling
 - Transformer: Attention-based architecture for long-range dependencies
 - CNN: Convolutional networks for pattern recognition
 
 Requires PyTorch: pip install torch
+
+Requirements before production use:
+1. GPU resources for training
+2. Large historical dataset (5+ years)
+3. Proper train/validation/test splits with purging
+4. MCPT validation (p < 0.05)
+5. Paper trade for 20+ days
+6. Human approval via promotion pipeline
 """
 
 from abc import ABC, abstractmethod

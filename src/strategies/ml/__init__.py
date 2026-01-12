@@ -1,5 +1,15 @@
 """Machine Learning Strategies.
 
+PRIORITY: P3 - DEFERRED
+STATUS: Placeholder implementations - models not trained
+TODO: Implement proper ML pipeline when prioritized
+
+These strategies require:
+1. Trained models (not included)
+2. Feature engineering pipeline
+3. MCPT validation before production use
+4. Walk-forward optimization
+
 Provides ML-based trading strategies:
 
 Classical ML:

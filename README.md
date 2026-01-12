@@ -210,15 +210,31 @@ claude /eod-review
 | Component | Purpose |
 |-----------|---------|
 | `ThesisTracker` | Investment theses with signposts |
+| `ThesisPerformanceTracker` | P&L attribution by thesis |
 | `LearningLog` | Extracted trade learnings |
 | `KnowledgeBase` | Company/sector understanding |
 
 ### Decision Layer
 | Component | Purpose |
 |-----------|---------|
-| `DecisionLogger` | Full decision records |
+| `DecisionLogger` | Full decision records with setup type tracking |
 | `AdversarialAgent` | Challenge every trade |
 | `MorningBriefing` | Pre-market context |
+
+### Evaluation Layer
+| Component | Purpose |
+|-----------|---------|
+| `StrategyDashboard` | Compare validated strategies by Sharpe, p-value |
+| `MCPTAnalyzer` | Monte Carlo permutation testing |
+| `WalkForwardOptimizer` | Walk-forward validation |
+
+### Promotion Pipeline
+| Component | Purpose |
+|-----------|---------|
+| `PromotionPipeline` | Manage backtest → paper → live lifecycle |
+| `PromotionGates` | Automated quality gates for advancement |
+
+**Pipeline Stages**: BACKTEST → MCPT_VALIDATION → PAPER_TRADING → PAPER_REVIEW → LIVE_PENDING → LIVE_TRADING
 
 ---
 
@@ -292,12 +308,15 @@ Before production:
 
 | Rule | Value |
 |------|-------|
-| Max single position | 25% |
+| Max single position | **15%** (reduced from 25%) |
+| Max thesis total | 35% |
 | Max sector exposure | 40% |
 | Max daily loss | 5% |
 | Stop loss | 5-15% (based on conviction) |
-| PDT day trades | 3 per 5 days (<$25k) |
-| Min swing hold | 2 days |
+| PDT day trades | 3 per 5 business days (<$25k) |
+| Min swing hold | 2 business days |
+
+**Key Learning**: High conviction ≠ high concentration. Start equal weight across thesis vehicles.
 
 ---
 
