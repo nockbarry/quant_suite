@@ -654,7 +654,20 @@ crontab -l | grep QUANT_SUITE_CRON
 
 ---
 
-## Detailed Documentation
+## Documentation Guide
+
+### Start Here (By Task)
+
+| If You Need To... | Read This |
+|-------------------|-----------|
+| **Trade daily** | `docs/WORKFLOW.md` - Daily trading workflow |
+| **Create a thesis** | `docs/TRADING_PATTERNS.md` - Meta-learnings & vehicle enumeration |
+| **Understand the system** | `docs/ARCHITECTURE_DIAGRAMS.md` - Full system architecture |
+| **Find data sources** | `docs/FREE_DATA_SOURCES.md` - 20+ implemented sources |
+| **Identify opportunities** | `docs/ALTERNATIVE_DATA_OPPORTUNITIES.md` - Missed opportunities analysis |
+| **Audit system health** | `docs/SYSTEM_COHESION_AUDIT.md` - Component coherence review |
+
+### Reference Documentation
 
 | Document | Purpose |
 |----------|---------|
@@ -662,7 +675,11 @@ crontab -l | grep QUANT_SUITE_CRON
 | `docs/ALPHA_DISCOVERY.md` | Alternative data, market scanning |
 | `docs/TEXT_RESEARCH.md` | Text research, embeddings |
 | `docs/TRADING_GUIDE.md` | End-user trading guide |
-| `docs/FREE_DATA_SOURCES.md` | Free data sources (20+) implementation guide |
-| `docs/ARCHITECTURE_DIAGRAMS.md` | Complete system architecture |
-| `DEVLOG.md` | Development progress |
-| `RESEARCH_LOG.md` | Research findings |
+| `docs/REALTIME_DATA_SPEC.md` | Real-time infrastructure |
+
+### Development History
+
+| Document | Purpose |
+|----------|---------|
+| `DEVLOG.md` | Development progress log |
+| `RESEARCH_LOG.md` | Research findings and experiments |
