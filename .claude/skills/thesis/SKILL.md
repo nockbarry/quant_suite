@@ -193,6 +193,20 @@ else:
 EOF
 ```
 
+## CRITICAL: Load Trading Patterns First
+
+Before creating or reviewing any thesis, read the accumulated trading wisdom:
+
+```bash
+cat /home/nock/projects/quant_suite/docs/TRADING_PATTERNS.md
+```
+
+Key patterns to apply:
+- **Pattern 1**: Vehicle Enumeration - enumerate ALL beneficiaries
+- **Pattern 2**: Converging Signals - need 3+ signals aligned
+- **Pattern 3**: Data Source Check - what alt-data supports this?
+- **Pattern 8**: Derivative Plays - are there better vehicles?
+
 ## Workflow
 
 ### Creating a New Thesis
@@ -200,8 +214,17 @@ EOF
 1. **Identify the belief**: What do you believe that consensus doesn't?
 2. **Define signposts**: What events will prove/disprove the thesis?
 3. **Set invalidation triggers**: What would force you to abandon it?
-4. **Link positions**: What symbols are you trading based on this?
-5. **Set conviction**: How confident are you? (0-100%)
+4. **ENUMERATE ALL VEHICLES** (Pattern 1 - CRITICAL):
+   - Direct beneficiaries
+   - Suppliers
+   - Customers
+   - ETFs
+   - Adjacent sectors
+   - Options plays
+   - International exposure
+   - Short candidates (losers)
+5. **Check for signal convergence** (Pattern 2)
+6. **Set conviction**: How confident are you? (0-100%)
 
 ### Reviewing a Thesis
 

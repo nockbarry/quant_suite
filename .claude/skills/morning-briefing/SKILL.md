@@ -155,9 +155,30 @@ else:
 EOF
 ```
 
+## CRITICAL: Load Trading Patterns First
+
+Before generating briefing, review accumulated trading wisdom:
+
+```bash
+cat /home/nock/projects/quant_suite/docs/TRADING_PATTERNS.md
+```
+
+Key patterns to check every morning:
+- **Pattern 2**: Converging Signals - look for 3+ signals aligned
+- **Pattern 3**: Data Source Check - check ALL alt-data sources
+- **Pattern 5**: Binary Events - review upcoming catalysts
+- **Pattern 6**: Weather → Commodities - check HDD/CDD anomalies
+- **Pattern 9**: Social Spikes - check for mention surges
+
 ## Research Process
 
 When this skill runs, Claude should:
+
+### Step 0: Load Trading Patterns
+```bash
+# Read the patterns file to ensure all checks are performed
+cat /home/nock/projects/quant_suite/docs/TRADING_PATTERNS.md | head -200
+```
 
 ### Step 1: Check Unified State
 ```python

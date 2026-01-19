@@ -109,11 +109,21 @@ PYTHONPATH=. python3 scripts/quick_trade.py close GLD260206C00409000
 
 ### Available Skills
 ```bash
-/morning-briefing    # Pre-market research
-/trade-decision      # Generate trade decisions
-/execute-trades      # Execute with approval
-/monitor             # Check portfolio status
-/thesis              # Manage theses
+# Daily Trading Workflow
+/morning-briefing    # Pre-market research and briefing
+/trade-decision      # Generate trade decisions with adversarial check
+/execute-trades      # Execute with human approval
+/eod-review          # End-of-day learning extraction
+/monitor             # Check portfolio and position status
+/thesis              # Create/review/update investment theses
+
+# Research & Validation
+/research            # Run research cycles
+/brainstorm          # Generate feature and strategy ideas
+/critic              # Safety validation for strategies
+/validate            # Full validation suite (MCPT, walk-forward)
+/promote             # Move strategy to production
+/report              # Generate documentation and reports
 ```
 
 ### Quick Reference: Common Patterns
@@ -427,6 +437,21 @@ See: `~/quant_results/knowledge/position_sizing.yaml`
 - Holiday calendar included (2024-2027) for accurate day counting
 - Use `PDTManager` from `src/execution/pdt_manager.py`
 
+### Trading Patterns Reference
+
+**IMPORTANT**: When creating theses or making decisions, review accumulated wisdom:
+
+```bash
+cat docs/TRADING_PATTERNS.md
+```
+
+Key patterns (see file for full details):
+- **Vehicle Enumeration**: Enumerate ALL thesis beneficiaries, not just obvious plays
+- **Converging Signals**: Require 3+ independent signals aligned before high-conviction trades
+- **Use Existing Data**: Check the 32+ alt-data sources we already have
+- **Squeeze Mechanics**: High short interest + social spike = potential squeeze
+- **Binary Events**: Position BEFORE known catalysts (FDA, earnings)
+
 ---
 
 ## Claude Code Skills (12)
@@ -463,6 +488,7 @@ See: `~/quant_results/knowledge/position_sizing.yaml`
 | alpha-discovery-agent | Market inefficiency scanning |
 | hypothesis-generator-agent | Insight to strategy |
 | brainstorm-agent | Feature ideation |
+| text-research-agent | Text analysis and embeddings research |
 
 ### Market Intelligence
 | Agent | Purpose |
@@ -584,20 +610,23 @@ job_postings: 3 days
 
 | Script | Schedule | Purpose |
 |--------|----------|---------|
-| `cron_thesis_signpost_check.py` | Hourly 6am-5pm ET | Check thesis signposts for triggers |
-| `cron_paper_trading_review.py` | Daily 5:30pm ET | Review paper trading, advance pipeline |
-| `cron_congressional_collect.py` | Daily | Collect congressional trades |
-| `cron_news_collect.py` | Hourly | Collect market news |
-| `cron_insider_collect.py` | Daily | Collect insider trading |
-| `cron_concentration_check.py` | Hourly | Monitor portfolio concentration |
+| `research_prep.py` | 6:00 AM Mon-Fri | Pre-market research preparation |
+| `cron_news_collect.py` | Every 4 hours | Collect market news and events |
+| `cron_congressional_collect.py` | 6:30 AM daily | Collect congressional trades |
+| `cron_insider_collect.py` | 7:00 AM daily | Collect insider trading (Form 4) |
+| `LiveDaemon.update_now()` | Every 5 min Mon-Fri | Update unified state.json |
+| `eod_snapshot.py` | 5:00 PM Mon-Fri | End-of-day data snapshot |
+| `cron_thesis_signpost_check.py` | Hourly 6am-5pm Mon-Fri | Check thesis signposts for triggers |
+| `cron_paper_trading_review.py` | 5:30 PM Mon-Fri | Review paper trading, advance pipeline |
+| `cron_concentration_check.py` | Every 2 hours Mon-Fri | Monitor portfolio concentration |
+| `cron_trade_wrapper.sh` | 9:31 AM Mon-Fri | Execute scheduled trades at market open |
 
 ```bash
 # Install cron jobs
 ./scripts/setup_cron.sh install
 
-# Or add manually:
-# 0 6-17 * * 1-5 cd /path/to/quant_suite && PYTHONPATH=. python scripts/cron_thesis_signpost_check.py
-# 30 17 * * 1-5 cd /path/to/quant_suite && PYTHONPATH=. python scripts/cron_paper_trading_review.py
+# Check installed jobs
+crontab -l | grep QUANT_SUITE_CRON
 ```
 
 ---
