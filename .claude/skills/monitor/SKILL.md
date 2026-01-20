@@ -1,17 +1,39 @@
 ---
 name: monitor
-description: Monitor live and paper trading performance. Use when checking portfolio status, reviewing trades, analyzing P&L, detecting anomalies, or evaluating strategy performance in production. Provides real-time dashboards and alerts.
+description: Monitor the automated trading firm - agents, data feeds, research, signals, portfolio, and risk. Use when checking system status, reviewing portfolio, analyzing agent performance, or detecting anomalies.
 allowed-tools: Read, Bash(PYTHONPATH=*), Bash(curl:*), Glob, Grep, Write
 ---
 
 # Trading Monitor Skill
 
-Real-time monitoring of paper and live trading performance.
+Mission control for the automated trading firm. Monitors EVERYTHING:
+- Agent activity (Claude Code sessions, subagents)
+- Data pipeline health & quality
+- Research cycles
+- Signal health
+- Portfolio & positions
+- Risk limits
 
-## Quick Start
+## Quick Start - Unified Dashboard
 
 ```bash
-# Launch CLI dashboard (uses mock data if no broker connection)
+# UNIFIED DASHBOARD - See everything at once
+PYTHONPATH=. python -m src.monitoring.unified_dashboard
+
+# Watch mode (auto-refresh every 30s)
+PYTHONPATH=. python -m src.monitoring.unified_dashboard --watch
+
+# JSON output (for programmatic use)
+PYTHONPATH=. python -m src.monitoring.unified_dashboard --json
+```
+
+## Component Dashboards
+
+```bash
+# Operations Dashboard (data feeds, cron jobs, signals)
+PYTHONPATH=. python -m src.monitoring.ops_dashboard
+
+# Portfolio CLI Dashboard
 PYTHONPATH=. python -m src.execution.monitoring.cli_dashboard --summary
 
 # Quick portfolio check (async - use this pattern)
@@ -288,6 +310,131 @@ print(f'Can day trade: {account.daytrade_count < 3}')
 | Trade logs | `/home/nock/quant_results/daily_runs/trades_*.json` |
 | Performance reports | `/home/nock/quant_results/performance/` |
 | Alerts | `/home/nock/quant_results/alerts/` |
+
+## New Monitoring Components
+
+### 1. Agent Activity Monitor
+
+Track Claude Code sessions and subagent activity:
+
+```python
+from src.monitoring import get_agent_monitor, log_agent_start, log_agent_complete
+
+# Get session summary
+monitor = get_agent_monitor()
+summary = monitor.get_session_summary()
+print(f"Session duration: {summary['duration_minutes']:.0f}m")
+print(f"Agents running: {summary['agents']['running']}")
+print(f"Decisions made: {summary['decisions_made']}")
+print(f"Tokens used: {summary['total_tokens']:,}")
+
+# Agent efficiency metrics
+efficiency = monitor.get_agent_efficiency()
+for agent_type, stats in efficiency.items():
+    print(f"{agent_type}: {stats['count']} runs, {stats['avg_duration_seconds']:.0f}s avg")
+```
+
+### 2. Data Quality Monitor
+
+Check data quality, not just freshness:
+
+```python
+from src.monitoring import check_data_quality
+
+# Quick quality check
+quality = await check_data_quality()
+print(f"Overall score: {quality['overall_score']:.0f}%")
+print(f"Critical issues: {len(quality['critical_issues'])}")
+for issue in quality['critical_issues']:
+    print(f"  - {issue['source']}: {issue['issues']}")
+```
+
+### 3. Portfolio Correlation Monitor
+
+Detect hidden concentration risk:
+
+```python
+from src.monitoring import check_portfolio_correlation
+
+positions = [
+    {"symbol": "SLB", "market_value": 5000},
+    {"symbol": "HAL", "market_value": 4000},
+    {"symbol": "XLE", "market_value": 3000},
+]
+
+correlation = await check_portfolio_correlation(positions)
+print(f"Effective N: {correlation['effective_n']:.1f} (vs {len(positions)} actual)")
+print(f"Diversification ratio: {correlation['diversification_ratio']:.2f}")
+print(f"Concentration risk: {correlation['concentration_risk']:.2f}")
+
+for issue in correlation['issues']:
+    print(f"  WARNING: {issue}")
+```
+
+### 4. ML Model Health
+
+Track model performance and drift:
+
+```python
+from src.monitoring import check_model_health
+
+health = await check_model_health()
+print(f"Overall status: {health['overall_status']}")
+for model in health['models']:
+    print(f"  {model['model_name']}: {model['status']}")
+    if model['accuracy_30d']:
+        print(f"    Accuracy: {model['accuracy_30d']:.1%}")
+    if model['drift_type'] != 'none':
+        print(f"    DRIFT: {model['drift_type']} ({model['drift_score']:.2f})")
+```
+
+### 5. Unified Status (Everything At Once)
+
+```python
+from src.monitoring import check_all
+
+status = await check_all()
+
+# Agent layer
+print(f"Session: {status['agent_layer']['session_duration_minutes']:.0f}m")
+print(f"Agents: {status['agent_layer']['agents_running']} running")
+
+# Data layer
+print(f"Data quality: {status['data_layer']['quality_score']:.0f}%")
+print(f"Feeds: {status['data_layer']['feeds_healthy']} ok, {status['data_layer']['feeds_critical']} critical")
+
+# Portfolio layer
+print(f"Value: ${status['portfolio_layer']['value']:,.2f}")
+print(f"Daily P&L: {status['portfolio_layer']['daily_pnl_pct']:.2%}")
+
+# Risk layer
+print(f"Risk: {status['risk_layer']['status']}")
+print(f"Drawdown: {status['risk_layer']['drawdown']:.2%}")
+```
+
+## Quick Reference
+
+| What | Command |
+|------|---------|
+| Full unified view | `python -m src.monitoring.unified_dashboard` |
+| Watch mode | `python -m src.monitoring.unified_dashboard --watch` |
+| Ops health only | `python -m src.monitoring.ops_dashboard` |
+| Portfolio only | `python -m src.execution.monitoring.cli_dashboard` |
+| Data quality | `python -c "import asyncio; from src.monitoring import check_data_quality; print(asyncio.run(check_data_quality()))"` |
+
+## Alert Thresholds
+
+| Metric | Warning | Critical | Action |
+|--------|---------|----------|--------|
+| Drawdown | >5% | >10% | Reduce position size |
+| Day Trades | 2/3 used | 3/3 used | Stop day trading |
+| Win Rate (7d) | <40% | <30% | Review strategy |
+| Daily Loss | >2% | >5% | Halt trading |
+| Sharpe (30d) | <0.5 | <0 | Consider removing |
+| Data Quality | <85% | <70% | Check data feeds |
+| Signal IC | <0.02 | <0.01 | Investigate signal |
+| Model Drift | >0.1 | >0.2 | Retrain model |
+| Correlation | >0.7 pair | >0.8 pair | Reduce concentration |
 
 ## Alpaca API Reference
 

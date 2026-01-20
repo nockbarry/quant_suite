@@ -11,8 +11,8 @@ This document maps all modules, functions, data flows, and integrations in the q
 │                                    CLAUDE INTERFACE                                     │
 │                                                                                         │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐        │
-│  │  /morning-  │ │   /trade-   │ │  /execute-  │ │   /eod-     │ │  /thesis    │        │
-│  │  briefing   │ │  decision   │ │   trades    │ │   review    │ │             │        │
+│  │  /morning-  │ │ /operator-  │ │  /trade-    │ │  /execute-  │ │   /eod-     │        │
+│  │  briefing   │ │  session    │ │  decision   │ │   trades    │ │   review    │        │
 │  └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘        │
 │         │               │               │               │               │               │
 │  ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐        │
@@ -415,6 +415,18 @@ src/knowledge/
 src/synthesis/
 ├── sector_rotation.py     ──► Sector leadership & cycle tracking (Added 2026-01-20)
 └── ... (existing files)
+```
+
+### Monitoring Layer (`src/monitoring/`) - NEW (Added 2026-01-20)
+```
+src/monitoring/
+├── __init__.py
+├── unified_dashboard.py       ──► Full system status + signals + convergences
+├── operator_loop.py           ──► Persistent monitoring check cycles
+├── data_freshness_tracker.py  ──► Track data source status WITH content summaries
+├── signal_summary.py          ──► Aggregate all signals into actionable items
+├── improvement_tracker.py     ──► Auto-generated improvement suggestions
+└── signal_quality_tracker.py  ──► Track signal hit rates over time
 ```
 
 ---
@@ -1438,8 +1450,210 @@ USAGE:
 
 ---
 
+## 15. Monitoring & Operator Layer (Added 2026-01-20)
+
+**Reason**: Transform Claude Code into a persistent trading operator with continuous monitoring, improvement tracking, and signal convergence detection.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                           MONITORING & OPERATOR LAYER                                    │
+│                               src/monitoring/                                            │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                              UNIFIED DASHBOARD                                         │
+│                           unified_dashboard.py                                         │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  get_unified_status() returns:                                                         │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  UnifiedSystemStatus:                                                            │  │
+│  │    • timestamp, market_open, market_hours                                        │  │
+│  │    • market_regime: "risk_on" | "risk_off" | "neutral" | "volatile"              │  │
+│  │    • regime_signals: [VIX, put/call, breadth indicators]                         │  │
+│  │    • data_sources: {source: {fresh, last_update, top_signal, signal_count}}      │  │
+│  │    • top_signals: [Signal(type, symbol, strength, direction, detail)]            │  │
+│  │    • convergences: [ConvergenceSignal(symbol, 3+ aligned signals)]               │  │
+│  │    • thesis_exposure: {thesis_name: {value, pct, day_pnl, positions}}            │  │
+│  │    • upcoming_catalysts: [Catalyst(date, type, symbol, detail)]                  │  │
+│  │    • portfolio, risk, agents, alerts, research                                   │  │
+│  └─────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                              OPERATOR SESSION                                          │
+│                           operator_loop.py + /operator-session skill                   │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  Claude enters persistent monitoring loop:                                             │
+│                                                                                        │
+│  /operator-session              # Default: 3 min checks                               │
+│  /operator-session --passive    # 5 min checks (quiet days)                           │
+│  /operator-session --active     # 1 min checks (volatile)                             │
+│                                                                                        │
+│  Each check cycle:                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  1. Read state.json                                                              │  │
+│  │  2. Check for triggered alerts                                                   │  │
+│  │  3. Check signpost triggers                                                      │  │
+│  │  4. Review agent completions (from agent_activity.jsonl)                         │  │
+│  │  5. Check data freshness (stale sources)                                         │  │
+│  │  6. Detect signal convergence (3+ signals aligned)                               │  │
+│  │  7. Generate action items                                                        │  │
+│  │  8. Log observation → ~/quant_results/logs/operator_log.jsonl                    │  │
+│  │  9. Wait configured interval                                                     │  │
+│  │  10. Repeat until exit or market close                                           │  │
+│  └─────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                        │
+│  OperatorObservation:                                                                  │
+│    alerts: [Alert(level, type, symbol, message, timestamp)]                           │
+│    signposts: [SignpostTrigger(thesis_id, description, likelihood)]                   │
+│    agent_completions: [AgentCompletion(agent_type, task_id, result_summary)]          │
+│    stale_sources: [str]  # Sources needing refresh                                    │
+│    convergences: [ConvergenceSignal]  # 3+ aligned signals                            │
+│    action_items: [ActionItem(priority, action, symbol, detail)]                       │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                              DATA FRESHNESS TRACKER                                    │
+│                           data_freshness_tracker.py                                    │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  Tracks WHAT each source returned, not just WHEN:                                      │
+│                                                                                        │
+│  ┌─────────────────┬────────────────────────────────────────────────────────────────┐ │
+│  │ Source          │ Content Tracked                                                │ │
+│  ├─────────────────┼────────────────────────────────────────────────────────────────┤ │
+│  │ congressional   │ Top cluster signals, recent politician trades                  │ │
+│  │ insider         │ Recent Form 4 buys > $100k                                     │ │
+│  │ vix_structure   │ Contango/backwardation state, slope                            │ │
+│  │ put_call        │ Extreme readings, contrarian signals                           │ │
+│  │ aaii_sentiment  │ Bull/bear readings, extreme flags                              │ │
+│  │ earnings_cal    │ This week's earnings for portfolio holdings                    │ │
+│  │ economic_cal    │ Upcoming FOMC, CPI, jobs reports                               │ │
+│  │ fda_calendar    │ PDUFA dates in next 30 days                                    │ │
+│  │ finviz_screens  │ Oversold bounces, new highs, volume leaders                    │ │
+│  │ geopolitical    │ Regional risk scores, recent events                            │ │
+│  │ market_breadth  │ Advance/decline, new highs/lows                                │ │
+│  └─────────────────┴────────────────────────────────────────────────────────────────┘ │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                              SIGNAL AGGREGATION                                        │
+│                           signal_summary.py                                            │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  Aggregates ALL collected data sources into actionable signals:                        │
+│                                                                                        │
+│  Signal(type, symbol, strength, direction, timestamp, source, detail, confidence)      │
+│                                                                                        │
+│  Convergence Detection:                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  For each symbol in watchlist:                                                   │  │
+│  │    1. Check insider buying (Form 4)                                              │  │
+│  │    2. Check congressional activity                                               │  │
+│  │    3. Check technical signals (RSI, MACD)                                        │  │
+│  │    4. Check options flow (unusual activity)                                      │  │
+│  │    5. Check social sentiment                                                     │  │
+│  │                                                                                   │  │
+│  │    If 3+ aligned → ConvergenceSignal                                             │  │
+│  │    Strength = average of component signal strengths                              │  │
+│  └─────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                        │
+│  Market Regime Detection:                                                              │
+│    • risk_on: Low VIX + bullish breadth + contrarian sentiment                        │
+│    • risk_off: High VIX + bearish breadth + fear indicators                           │
+│    • volatile: VIX > 25 or extreme readings                                           │
+│    • neutral: Mixed signals                                                           │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                              IMPROVEMENT TRACKER                                       │
+│                           improvement_tracker.py + signal_quality_tracker.py           │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  ImprovementSuggestion:                                                                │
+│    id, category, priority, title, description, evidence, suggested_action, status      │
+│                                                                                        │
+│  Categories: "agent", "signal", "thesis", "sizing", "process"                          │
+│  Priorities: "high", "medium", "low"                                                   │
+│  Status: "pending", "in_progress", "completed", "rejected"                             │
+│                                                                                        │
+│  SignalQuality:                                                                        │
+│    signal_type, total_signals, acted_on, profitable, hit_rate, avg_pnl, ic, trend      │
+│                                                                                        │
+│  Weekly Review (Sunday 6 PM):                                                          │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐  │
+│  │  1. Analyze agent performance (completion rate, token efficiency)                │  │
+│  │  2. Calculate signal quality (hit rate, IC, trends)                              │  │
+│  │  3. Compare to 30-day baseline                                                   │  │
+│  │  4. Generate improvement suggestions                                             │  │
+│  │  5. Save to ~/quant_results/improvements/                                        │  │
+│  └─────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Module Summary Table
+
+| Module | Lines | Location | Purpose |
+|--------|-------|----------|---------|
+| `unified_dashboard.py` | ~400 | `src/monitoring/` | Full system status with all data |
+| `operator_loop.py` | ~500 | `src/monitoring/` | Persistent monitoring check cycles |
+| `data_freshness_tracker.py` | ~800 | `src/monitoring/` | Track data status + content |
+| `signal_summary.py` | ~650 | `src/monitoring/` | Signal aggregation + convergence |
+| `improvement_tracker.py` | ~450 | `src/monitoring/` | Auto-generated improvements |
+| `signal_quality_tracker.py` | ~360 | `src/monitoring/` | Signal hit rate tracking |
+
+**Total**: ~3,100+ lines of monitoring infrastructure
+
+### Daily Workflow with Operator Session
+
+```
+6:30 AM ─── /morning-briefing ───────────────────────────────────────────────────
+              │
+              ▼
+         Check improvements, convergences, data freshness
+
+9:30 AM ─── /operator-session ───────────────────────────────────────────────────
+              │
+              ▼
+         ┌────────────────────────────────────────────────────────────────────┐
+         │  PERSISTENT MONITORING LOOP                                        │
+         │                                                                    │
+         │  Every 3 min (configurable):                                       │
+         │    • Check alerts, signposts, agent completions                    │
+         │    • Detect signal convergences                                    │
+         │    • Surface action items                                          │
+         │    • Spawn research agents if needed                               │
+         │                                                                    │
+         │  Can spawn:                                                        │
+         │    • macro-research-agent (on geopolitical events)                 │
+         │    • research-agent (on signal convergence)                        │
+         │    • critic-agent (before trade decisions)                         │
+         └────────────────────────────────────────────────────────────────────┘
+              │
+              ▼
+4:00 PM ─── Market Close ─── /eod-review ────────────────────────────────────────
+              │
+              ▼
+         Log signal outcomes, update quality metrics
+
+Sunday ──── cron_weekly_improvement_review.py ───────────────────────────────────
+              │
+              ▼
+         Generate improvement suggestions for next week
+```
+
+---
+
 *Generated: 2026-01-07*
 *Updated: 2026-01-10 - Added Data Collection Daemon and 20+ free data sources*
 *Updated: 2026-01-11 - Added Promotion Pipeline, Thesis Performance, Strategy Dashboard, Holiday Calendar*
 *Updated: 2026-01-20 - Added Hedge Fund Expansion (15 modules, 5,700 lines)*
+*Updated: 2026-01-20 - Added Monitoring & Operator Layer (6 modules, 3,100+ lines)*
 *This document should be updated when major architectural changes are made.*

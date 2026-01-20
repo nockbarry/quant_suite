@@ -286,6 +286,79 @@ PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py predic
 - **OpEx/Witching** - Pin risk, gamma exposure
 - **Political events** - Election effects, policy deadlines
 
+### Step 1.7: Check Improvement Suggestions (NEW - Added 2026-01-20)
+
+Review pending improvements from the continuous improvement loop:
+
+```python
+from src.monitoring.improvement_tracker import get_improvement_tracker
+
+tracker = get_improvement_tracker()
+
+# Get high-priority pending improvements
+pending = tracker.get_pending()
+high_priority = [s for s in pending if s.priority == "high"]
+
+if high_priority:
+    print("=== HIGH PRIORITY IMPROVEMENTS ===")
+    for suggestion in high_priority:
+        print(f"  [{suggestion.category}] {suggestion.title}")
+        print(f"    Action: {suggestion.suggested_action}")
+
+# Get summary
+summary = tracker.get_summary()
+print(f"\nTotal pending: {summary['by_status'].get('pending', 0)}")
+print(f"High priority: {summary['pending_high_priority']}")
+```
+
+### Step 1.8: Check Signal Convergences (NEW - Added 2026-01-20)
+
+Look for symbols with 3+ aligned signals:
+
+```python
+from src.monitoring.signal_summary import get_signal_summary
+
+summary = get_signal_summary()
+
+print(f"=== MARKET REGIME: {summary.regime.upper()} ===")
+for sig in summary.regime_signals:
+    print(f"  - {sig}")
+
+if summary.convergences:
+    print("\n=== SIGNAL CONVERGENCES ===")
+    for conv in summary.convergences:
+        direction_emoji = "📈" if conv.direction == "bullish" else "📉"
+        print(f"  {direction_emoji} {conv.symbol}: {len(conv.signals)} signals ({conv.convergence_score:.0%} strength)")
+        print(f"    Types: {', '.join(set(s.type for s in conv.signals))}")
+
+print("\n=== TOP SIGNALS ===")
+for sig in summary.top_signals[:5]:
+    print(f"  [{sig.type}] {sig.symbol or 'MARKET'}: {sig.description[:50]}")
+```
+
+### Step 1.9: Check Data Freshness (NEW - Added 2026-01-20)
+
+Verify all data sources are fresh:
+
+```python
+from src.monitoring.data_freshness_tracker import get_data_freshness
+
+freshness = get_data_freshness()
+
+print(f"=== DATA SOURCES ({freshness.healthy_sources}/{freshness.total_sources} healthy) ===")
+
+# Show stale sources first
+stale = [name for name, s in freshness.sources.items() if s.status == "stale"]
+if stale:
+    print(f"  ⚠️ STALE: {', '.join(stale)}")
+
+# Show top signals from each source
+print("\nTop signals by source:")
+for name, status in freshness.sources.items():
+    if status.top_signal and status.signal_count > 0:
+        print(f"  [{status.status[:3]}] {name}: {status.top_signal[:50]}")
+```
+
 ### Step 2: Web Search for Overnight News
 ```
 Search: "stock market news today [current date]"

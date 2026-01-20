@@ -66,6 +66,10 @@ install_cron() {
         echo "$CRON_MARKER - Legal/Geopolitical Monitor"
         echo "# Check legal and geopolitical events every 2 hours"
         echo "0 6,8,10,12,14,16 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 -c 'from src.data.sources.alternative.legal_tracker import LegalTracker; from src.data.sources.alternative.geopolitical import GeopoliticalMonitor; import asyncio; asyncio.run(LegalTracker().collect_all()); asyncio.run(GeopoliticalMonitor().collect_all())' >> ~/quant_results/logs/legal_geo.log 2>&1"
+        echo ""
+        echo "$CRON_MARKER - Weekly Improvement Review"
+        echo "# Weekly improvement review on Sundays at 6 PM ET"
+        echo "0 18 * * 0 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_weekly_improvement_review.py >> ~/quant_results/logs/weekly_review.log 2>&1"
     } | crontab -
 
     echo "Cron jobs installed. Current schedule:"

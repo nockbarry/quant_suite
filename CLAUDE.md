@@ -69,7 +69,8 @@ This runs automatically:
 | Time (ET) | Command | What Happens |
 |-----------|---------|--------------|
 | 6:30 AM | `claude "/morning-briefing"` | Read state, search news, review theses |
-| 9:30 AM+ | `claude "/trade-decision"` | Adversarial analysis, make decisions |
+| 9:30 AM+ | `claude "/operator-session"` | Enter persistent monitoring mode |
+| When ready | `claude "/trade-decision"` | Adversarial analysis, make decisions |
 | When ready | `claude "/execute-trades"` | Execute with your approval |
 | 4:30 PM | `claude "/eod-review"` | Extract learnings, update conviction |
 
@@ -78,6 +79,13 @@ This runs automatically:
 ```bash
 # Morning - full briefing
 claude "/morning-briefing"
+
+# Enter operator mode (monitors every 3 min)
+claude "/operator-session"
+
+# Operator mode variants
+claude "/operator-session --passive"   # 5 min checks
+claude "/operator-session --active"    # 1 min checks
 
 # Quick check during day
 claude "check positions"
@@ -319,6 +327,48 @@ print(pipeline.generate_report())
 5. `LIVE_PENDING` → Awaiting human approval
 6. `LIVE_TRADING` → Active in production
 
+### Monitoring Layer (NEW)
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **UnifiedDashboard** | `src/monitoring/unified_dashboard.py` | Full system status + signals |
+| **OperatorLoop** | `src/monitoring/operator_loop.py` | Persistent monitoring checks |
+| **DataFreshnessTracker** | `src/monitoring/data_freshness_tracker.py` | Track data source status + content |
+| **SignalAggregator** | `src/monitoring/signal_summary.py` | Aggregate all signals into actionable items |
+| **ImprovementTracker** | `src/monitoring/improvement_tracker.py` | Auto-generated improvement suggestions |
+| **SignalQualityTracker** | `src/monitoring/signal_quality_tracker.py` | Track signal hit rates over time |
+
+```python
+# Get unified system status with all data sources
+from src.monitoring.unified_dashboard import UnifiedDashboard
+
+dashboard = UnifiedDashboard()
+status = await dashboard.get_unified_status()
+print(f"Market Regime: {status.market_regime}")
+print(f"Top Signals: {len(status.top_signals)}")
+print(f"Convergences: {len(status.convergences)}")
+
+# Run operator check cycle
+from src.monitoring.operator_loop import OperatorLoop
+
+loop = OperatorLoop()
+observation = loop.operator_check(check_num=1)
+print(loop.format_observation(observation))
+
+# Track signal quality
+from src.monitoring.signal_quality_tracker import log_signal_outcome
+
+log_signal_outcome(
+    signal_type="congressional",
+    symbol="NVDA",
+    direction="bullish",
+    signal_strength=0.85,
+    acted_on=True,
+    pnl=250.0,
+    pnl_pct=2.5,
+)
+```
+
 ---
 
 ## Quick Commands
@@ -479,16 +529,17 @@ Key patterns (see file for full details):
 
 ---
 
-## Claude Code Skills (12)
+## Claude Code Skills (13)
 
 ### Daily Trading
 | Skill | Purpose |
 |-------|---------|
 | `/morning-briefing` | Read unified state, research overnight news |
+| `/operator-session` | **NEW** - Persistent monitoring with configurable intervals |
 | `/trade-decision` | Synthesize + adversarial + thesis linking |
 | `/execute-trades` | Execute with human approval |
 | `/eod-review` | Extract learnings, update thesis |
-| `/thesis` | **NEW** - Create/review/update theses |
+| `/thesis` | Create/review/update theses |
 
 ### Research & Validation
 | Skill | Purpose |
@@ -541,11 +592,15 @@ Key patterns (see file for full details):
 | **Theses** | `~/quant_results/theses/` |
 | **Learnings** | `~/quant_results/learnings/` |
 | **Knowledge** | `~/quant_results/knowledge/` |
+| **Improvements** | `~/quant_results/improvements/` |
+| **Signal Quality** | `~/quant_results/signal_quality/` |
+| **Operator Logs** | `~/quant_results/logs/operator_log.jsonl` |
 | **Skills** | `.claude/skills/*/SKILL.md` |
 | **Agents** | `.claude/agents/*.md` |
 | **Synthesis Layer** | `src/synthesis/` |
 | **Knowledge Layer** | `src/knowledge/` |
 | **Decision Engine** | `src/decision/` |
+| **Monitoring Layer** | `src/monitoring/` |
 | **Strategies** | `src/strategies/` |
 | **Alternative Data** | `src/data/sources/alternative/` |
 
@@ -566,6 +621,9 @@ All outputs in configurable results directory (default: `~/quant_results`):
 | `decisions/` | Trading decisions with reasoning |
 | `briefings/` | Morning briefings |
 | `eod_reviews/` | End-of-day reviews |
+| `improvements/` | Auto-generated improvement suggestions |
+| `signal_quality/` | Signal quality metrics and outcomes |
+| `logs/operator_log.jsonl` | Operator session observations |
 
 ---
 
@@ -669,6 +727,7 @@ job_postings: 3 days
 | `cron_paper_trading_review.py` | 5:30 PM Mon-Fri | Review paper trading, advance pipeline |
 | `cron_concentration_check.py` | Every 2 hours Mon-Fri | Monitor portfolio concentration |
 | `cron_trade_wrapper.sh` | 9:31 AM Mon-Fri | Execute scheduled trades at market open |
+| `cron_weekly_improvement_review.py` | Sunday 6 PM | Weekly improvement analysis |
 
 ```bash
 # Install cron jobs

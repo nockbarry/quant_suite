@@ -121,22 +121,28 @@ This forces identification of failure modes before entering.
            │
 6:30 AM  ─── /morning-briefing ───────────► Read unified state + web search
            │                                 Review active theses
-           │                                 Check pending signposts
+           │                                 Check signal convergences (3+ aligned)
+           │                                 Check improvement suggestions
            │
 7:00 AM  ─── /trade-decision ─────────────► Synthesize signals + thesis alignment
            │                                 Run adversarial analysis
            │                                 Write pre-mortem
            │                                 Log decision with thesis link
            │
-9:30 AM  ─── /execute-trades ─────────────► Human approval required
-           │                                 Execute via Alpaca
+9:30 AM  ─── /operator-session ───────────► Enter persistent monitoring mode
+           │                                 Check every 3 min (configurable)
+           │                                 Surface alerts, convergences, catalysts
+           │                                 Spawn research agents when needed
            │
 Intraday ─── LiveDaemon ──────────────────► Update state.json every 5 min
            │
+4:00 PM  ─── Exit operator session ───────► Market close
+           │
 4:30 PM  ─── /eod-review ─────────────────► Analyze outcomes vs predictions
-                                            Extract learnings
-                                            Update thesis conviction
-                                            Prepare tomorrow's focus
+           │                                 Extract learnings, log signal outcomes
+           │                                 Update thesis conviction
+           │
+Sunday   ─── cron_weekly_improvement_review ► Generate improvement suggestions
 ```
 
 ---
@@ -188,6 +194,16 @@ claude /eod-review
 │   │   └── SLB.yaml
 │   └── sectors/
 │       └── energy.yaml
+│
+├── improvements/               # Auto-generated improvement suggestions
+│   └── suggestions.json
+│
+├── signal_quality/             # Signal quality metrics
+│   ├── quality.json
+│   └── outcomes.jsonl
+│
+├── logs/                       # Operator and system logs
+│   └── operator_log.jsonl
 │
 ├── decisions/                  # Trading decisions with reasoning
 ├── briefings/                  # Morning briefings
@@ -244,18 +260,29 @@ claude /eod-review
 
 **Pipeline Stages**: BACKTEST → MCPT_VALIDATION → PAPER_TRADING → PAPER_REVIEW → LIVE_PENDING → LIVE_TRADING
 
+### Monitoring Layer
+| Component | Purpose |
+|-----------|---------|
+| `UnifiedDashboard` | Full system status with all data sources |
+| `OperatorLoop` | Persistent monitoring check cycles |
+| `DataFreshnessTracker` | Track data source status + content summaries |
+| `SignalAggregator` | Aggregate signals + detect convergences |
+| `ImprovementTracker` | Auto-generated improvement suggestions |
+| `SignalQualityTracker` | Track signal hit rates over time |
+
 ---
 
-## Claude Code Skills (12)
+## Claude Code Skills (13)
 
 ### Daily Trading
 | Skill | Purpose |
 |-------|---------|
 | `/morning-briefing` | Read unified state, research overnight news |
+| `/operator-session` | Persistent monitoring mode with configurable intervals |
 | `/trade-decision` | Synthesize + adversarial analysis + thesis linking |
 | `/execute-trades` | Execute with human approval |
 | `/eod-review` | Extract learnings, update thesis conviction |
-| `/thesis` | **NEW** - Create/review/update investment theses |
+| `/thesis` | Create/review/update investment theses |
 
 ### Research & Validation
 | Skill | Purpose |
