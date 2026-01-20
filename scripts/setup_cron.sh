@@ -54,6 +54,18 @@ install_cron() {
         echo "$CRON_MARKER - Scheduled Trades"
         echo "# Execute scheduled trades at 9:31 AM ET (1 min after open for prices to settle)"
         echo "31 9 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_trade_wrapper.sh >> ~/quant_results/logs/scheduled_trades.log 2>&1"
+        echo ""
+        echo "$CRON_MARKER - Master Data Collection"
+        echo "# Collect from all 35+ data sources every 30 min during market hours"
+        echo "*/30 6-17 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/collect_all_data.py --quick >> ~/quant_results/logs/collection.log 2>&1"
+        echo ""
+        echo "$CRON_MARKER - Sector Rotation Analysis"
+        echo "# Analyze sector rotation hourly during market hours"
+        echo "0 7-16 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 -c 'from src.synthesis.sector_rotation import SectorRotationDetector; import asyncio; asyncio.run(SectorRotationDetector().analyze_sectors())' >> ~/quant_results/logs/sector_rotation.log 2>&1"
+        echo ""
+        echo "$CRON_MARKER - Legal/Geopolitical Monitor"
+        echo "# Check legal and geopolitical events every 2 hours"
+        echo "0 6,8,10,12,14,16 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 -c 'from src.data.sources.alternative.legal_tracker import LegalTracker; from src.data.sources.alternative.geopolitical import GeopoliticalMonitor; import asyncio; asyncio.run(LegalTracker().collect_all()); asyncio.run(GeopoliticalMonitor().collect_all())' >> ~/quant_results/logs/legal_geo.log 2>&1"
     } | crontab -
 
     echo "Cron jobs installed. Current schedule:"
