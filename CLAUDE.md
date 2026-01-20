@@ -576,26 +576,48 @@ All outputs in configurable results directory (default: `~/quant_results`):
 - **ML Models**: XGBoost, LightGBM (require MCPT validation)
 - **Regime**: Volatility regime, trend detection
 
-### Alternative Data (Core)
-| Source | File | Signal Type |
-|--------|------|-------------|
-| **Congressional Trades** | `congressional_trades.py` | Cluster buying |
-| **Prediction Markets** | `prediction_markets.py` | Fed policy, macro |
-| **Expert Sentiment** | `expert_sentiment.py` | Inverse Cramer |
-| **Insider Trading** | `insider.py` | Form 4 clusters |
-| **Options Flow** | `options_flow.py` | Unusual activity |
-| **Social Sentiment** | `social_sentiment.py` | Reddit/Twitter |
+### Alternative Data (40+ Sources)
 
-### Free Data Sources (20+)
-| Category | Sources | Files |
-|----------|---------|-------|
-| **Market Regime** | VIX term structure, Put/call ratios, Finviz screens | `vix_structure.py`, `put_call.py`, `finviz_screens.py` |
-| **Sentiment** | AAII survey, Newsletter sentiment, COT report | `aaii_sentiment.py`, `newsletter_sentiment.py`, `cot_report.py` |
-| **Economic** | Earnings calendar, Economic releases, Fed futures, Treasury auctions | `earnings_calendar.py`, `economic_calendar.py`, `fed_futures.py`, `treasury_calendar.py` |
-| **Events** | IPO calendar, FDA calendar | `ipo_calendar.py`, `fda_calendar.py` |
-| **Innovation** | USPTO patents, Job postings, App rankings, GitHub activity | `patent_filings.py`, `job_postings.py`, `app_rankings.py`, `github_activity.py` |
+| Category | Key Sources |
+|----------|-------------|
+| **Core** | Congressional trades, Insider trading, Options flow, Social sentiment |
+| **Market Regime** | VIX structure, Put/call ratios, Finviz screens, Breadth |
+| **Sentiment** | AAII survey, Newsletter sentiment, COT report, Expert sentiment |
+| **Economic** | Earnings calendar, Economic releases, Fed futures, Treasury |
+| **Events** | IPO calendar, FDA calendar (PDUFA dates) |
+| **Innovation** | Patents, Job postings, App rankings, GitHub activity |
+| **News** | 20+ RSS feeds (WSJ, CNBC, FT, Fed, SEC, sector-specific) |
+| **Geopolitical** | 5-region tracking (Greenland, Venezuela, China, ME, Russia) |
+| **Legal** | SCOTUS cases, SEC enforcement, FTC, DOJ tracking |
 
 All sources in `src/data/sources/alternative/`
+
+---
+
+## Hedge Fund Capabilities
+
+### Alerting & Execution
+| Module | Purpose |
+|--------|---------|
+| `smart_alerter.py` | Signal convergence detection across sources |
+| `mobile_bot.py` | Telegram/Discord alerts with rate limiting |
+| `rules_engine.py` | Auto-execution rules (AUTO/QUEUE/NOTIFY) |
+| `drawdown_protection.py` | 5-level protection (5%→15% triggers) |
+
+### Analysis & Optimization
+| Module | Purpose |
+|--------|---------|
+| `portfolio_optimizer.py` | Risk parity, mean-variance, Kelly criterion |
+| `sector_rotation.py` | Sector leadership tracking & cycle phases |
+| `performance_attribution.py` | P&L attribution by thesis/signal |
+| `earnings_predictor.py` | 7-signal earnings surprise prediction |
+
+### Real-Time & Tax
+| Module | Purpose |
+|--------|---------|
+| `websocket_feed.py` | Alpaca/Finnhub WebSocket + polling fallback |
+| `tax_loss_harvester.py` | Wash sale tracking, substitute securities |
+| `trade_journal.py` | Full trade tracking with context/learnings |
 
 ---
 
@@ -605,9 +627,11 @@ All sources in `src/data/sources/alternative/`
 |-----------|--------|-----------------|
 | **LiveDaemon** | `src/synthesis/daemon.py` | 5 min |
 | **DataCollectionDaemon** | `src/data/sources/collection_daemon.py` | Variable |
+| **WebSocket Feed** | `src/data/realtime/websocket_feed.py` | Real-time |
 | **News Daemon** | `src/data/sources/realtime/news_daemon.py` | 30 min |
 | **Market Breadth** | `src/data/pipeline/market_breadth.py` | 5 min |
 | **Sentiment** | `src/data/pipeline/sentiment.py` | 1 hour |
+| **Smart Alerter** | `src/alerts/smart_alerter.py` | On signal |
 | **Alert Manager** | `src/alerts/alert_manager.py` | 1 min |
 | **Position Risk** | `src/risk/position_monitor.py` | 15 min |
 
@@ -688,9 +712,9 @@ crontab -l | grep QUANT_SUITE_CRON
 | **Trade daily** | `docs/WORKFLOW.md` - Daily trading workflow |
 | **Create a thesis** | `docs/TRADING_PATTERNS.md` - Meta-learnings & vehicle enumeration |
 | **Understand the system** | `docs/ARCHITECTURE_DIAGRAMS.md` - Full system architecture |
-| **Find data sources** | `docs/FREE_DATA_SOURCES.md` - 20+ implemented sources |
+| **Find data sources** | `docs/FREE_DATA_SOURCES.md` - 40+ implemented sources |
+| **See hedge fund features** | `docs/ARCHITECTURE_DIAGRAMS.md` Section 14 - HF expansion modules |
 | **Identify opportunities** | `docs/ALTERNATIVE_DATA_OPPORTUNITIES.md` - Missed opportunities analysis |
-| **Audit system health** | `docs/SYSTEM_COHESION_AUDIT.md` - Component coherence review |
 
 ### Reference Documentation
 
@@ -701,6 +725,7 @@ crontab -l | grep QUANT_SUITE_CRON
 | `docs/TEXT_RESEARCH.md` | Text research, embeddings |
 | `docs/TRADING_GUIDE.md` | End-user trading guide |
 | `docs/REALTIME_DATA_SPEC.md` | Real-time infrastructure |
+| `docs/API_QUICK_REF.md` | API method signatures |
 
 ### Development History
 
@@ -708,3 +733,4 @@ crontab -l | grep QUANT_SUITE_CRON
 |----------|---------|
 | `DEVLOG.md` | Development progress log |
 | `RESEARCH_LOG.md` | Research findings and experiments |
+| `docs/HEDGE_FUND_EXPANSION_PLAN.md` | Completed expansion roadmap (archive) |

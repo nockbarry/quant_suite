@@ -173,7 +173,14 @@ src/data/
 │   │   ├── patent_filings.py        ──► USPTO patent activity
 │   │   ├── job_postings.py          ──► Job posting growth signals
 │   │   ├── app_rankings.py          ──► App Store/Play rankings
-│   │   └── github_activity.py       ──► GitHub org metrics
+│   │   ├── github_activity.py       ──► GitHub org metrics
+│   │   │
+│   │   │  # Hedge Fund Expansion (Added 2026-01-20)
+│   │   │  # Reason: Comprehensive market intelligence and event monitoring
+│   │   ├── expanded_news.py         ──► 20+ RSS feeds (WSJ, CNBC, FT, Fed, SEC)
+│   │   ├── legal_tracker.py         ──► SCOTUS, SEC, FTC, DOJ tracking
+│   │   ├── geopolitical.py          ──► Regional event monitoring (5 regions)
+│   │   └── news_sentiment.py        ──► Keyword sentiment scoring
 │   │
 │   ├── collection_daemon.py         ──► Orchestrates all free data sources (Added 2026-01-10)
 │   │
@@ -351,7 +358,63 @@ src/text_research/
 src/alerts/
 ├── __init__.py
 ├── alert_manager.py   ──► Alert monitoring and notification
-└── alert_types.py     ──► Alert type definitions
+├── alert_types.py     ──► Alert type definitions
+├── smart_alerter.py   ──► Signal convergence detection (Added 2026-01-20)
+└── mobile_bot.py      ──► Telegram/Discord mobile alerts (Added 2026-01-20)
+```
+
+### Real-Time Data Layer (`src/data/realtime/`)
+```
+src/data/realtime/
+├── __init__.py
+├── websocket_feed.py  ──► WebSocket price feeds: Alpaca, Finnhub, polling (Added 2026-01-20)
+└── news_daemon.py     ──► Continuous news monitoring
+```
+
+### Risk Layer (`src/risk/`)
+```
+src/risk/
+├── __init__.py
+├── position_monitor.py   ──► Real-time position monitoring, VaR
+├── position_sizing.py    ──► Kelly criterion, volatility-adjusted sizing
+├── limits.py             ──► Risk limits enforcement
+└── portfolio_optimizer.py ──► Risk parity, mean-variance, Kelly (Added 2026-01-20)
+```
+
+### Execution Layer Extended (`src/execution/`)
+```
+src/execution/
+├── rules_engine.py        ──► Automated execution rules (Added 2026-01-20)
+└── drawdown_protection.py ──► 5-level drawdown protection (Added 2026-01-20)
+```
+
+### Tax Layer (`src/tax/`)
+```
+src/tax/
+├── __init__.py
+└── tax_loss_harvester.py  ──► Tax-loss harvesting, wash sale tracking (Added 2026-01-20)
+```
+
+### Analysis Layer (`src/analysis/`)
+```
+src/analysis/
+├── __init__.py
+└── earnings_predictor.py  ──► 7-signal earnings surprise predictor (Added 2026-01-20)
+```
+
+### Knowledge Layer Extended (`src/knowledge/`)
+```
+src/knowledge/
+├── trade_journal.py           ──► Automated trade journal with context (Added 2026-01-20)
+├── performance_attribution.py ──► Performance attribution by thesis/signal (Added 2026-01-20)
+└── ... (existing files)
+```
+
+### Synthesis Layer Extended (`src/synthesis/`)
+```
+src/synthesis/
+├── sector_rotation.py     ──► Sector leadership & cycle tracking (Added 2026-01-20)
+└── ... (existing files)
 ```
 
 ---
@@ -1248,7 +1311,135 @@ USAGE:
 
 ---
 
+---
+
+## 14. Hedge Fund Expansion Architecture (Added 2026-01-20)
+
+**Reason**: Transform Project Athena into a comprehensive Claude-managed hedge fund with real-time capabilities.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                           HEDGE FUND EXPANSION MODULES                                   │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                              DATA & INTELLIGENCE                                       │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │
+│  │ expanded_news   │  │ legal_tracker   │  │ geopolitical    │  │ news_sentiment  │   │
+│  │                 │  │                 │  │                 │  │                 │   │
+│  │ • 20+ RSS feeds │  │ • SCOTUS cases  │  │ • 5 regions     │  │ • Keyword scoring│  │
+│  │ • WSJ, CNBC, FT │  │ • SEC enforce   │  │ • Greenland     │  │ • Sector mapping │  │
+│  │ • Fed, SEC feeds│  │ • FTC, DOJ      │  │ • Venezuela     │  │ • Bull/bear terms│  │
+│  │ • Sector news   │  │ • IEEPA tariffs │  │ • China/Taiwan  │  │ • Confidence calc│  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘   │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                              ALERTING & EXECUTION                                      │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │
+│  │ smart_alerter   │  │ mobile_bot      │  │ rules_engine    │  │ drawdown_protect│   │
+│  │                 │  │                 │  │                 │  │                 │   │
+│  │ • Signal converg│  │ • Telegram      │  │ • AUTO/QUEUE/   │  │ • 5 levels      │   │
+│  │ • Multi-source  │  │ • Discord       │  │   NOTIFY        │  │ • normal→emerge │   │
+│  │ • Alert levels  │  │ • Rate limiting │  │ • Pre-defined   │  │ • 5-15% triggers│   │
+│  │ • Callbacks     │  │ • Quiet hours   │  │   rules         │  │ • Auto reduce   │   │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘   │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                              ANALYSIS & OPTIMIZATION                                   │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │
+│  │portfolio_optim  │  │ sector_rotation │  │ perform_attrib  │  │earnings_predictor│  │
+│  │                 │  │                 │  │                 │  │                 │   │
+│  │ • Risk parity   │  │ • Sector leader │  │ • P&L by thesis │  │ • 7 signals     │   │
+│  │ • Mean-variance │  │ • Cycle phases  │  │ • P&L by signal │  │ • Momentum      │   │
+│  │ • Kelly criterion│ │ • Transition    │  │ • Attribution   │  │ • Analyst revs  │   │
+│  │ • Rebalance calc│  │   detection     │  │   analysis      │  │ • Options skew  │   │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘   │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                              REAL-TIME & TAX                                           │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                        │
+│  │ websocket_feed  │  │ tax_loss_harvest│  │ trade_journal   │                        │
+│  │                 │  │                 │  │                 │                        │
+│  │ • Alpaca WS     │  │ • Wash sale     │  │ • Full context  │                        │
+│  │ • Finnhub WS    │  │   tracking      │  │ • Market state  │                        │
+│  │ • Polling backup│  │ • Substitute    │  │ • Thesis link   │                        │
+│  │ • Price alerts  │  │   securities    │  │ • Learnings     │                        │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘                        │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Module Summary Table
+
+| Module | Lines | Location | Purpose |
+|--------|-------|----------|---------|
+| `expanded_news.py` | 331 | `src/data/sources/alternative/` | 20+ RSS feeds aggregation |
+| `legal_tracker.py` | 325 | `src/data/sources/alternative/` | Legal case monitoring |
+| `geopolitical.py` | 300 | `src/data/sources/alternative/` | Regional event tracking |
+| `news_sentiment.py` | 273 | `src/data/sources/alternative/` | Keyword sentiment scoring |
+| `smart_alerter.py` | 369 | `src/alerts/` | Signal convergence detection |
+| `mobile_bot.py` | 373 | `src/alerts/` | Telegram/Discord integration |
+| `rules_engine.py` | 536 | `src/execution/` | Automated execution rules |
+| `drawdown_protection.py` | 301 | `src/execution/` | 5-level portfolio protection |
+| `portfolio_optimizer.py` | 411 | `src/risk/` | Risk parity, MPT, Kelly |
+| `sector_rotation.py` | 369 | `src/synthesis/` | Sector cycle tracking |
+| `performance_attribution.py` | 309 | `src/knowledge/` | P&L attribution analysis |
+| `earnings_predictor.py` | 609 | `src/analysis/` | 7-signal earnings prediction |
+| `websocket_feed.py` | 348 | `src/data/realtime/` | Real-time price feeds |
+| `tax_loss_harvester.py` | 446 | `src/tax/` | Tax optimization |
+| `trade_journal.py` | 629 | `src/knowledge/` | Automated trade journal |
+
+**Total**: ~5,700 lines of production code
+
+### Integration Points
+
+```
+                            ┌─────────────────────┐
+                            │   UnifiedState      │
+                            │   (state.json)      │
+                            └─────────┬───────────┘
+                                      │
+        ┌─────────────────────────────┼─────────────────────────────┐
+        │                             │                             │
+        ▼                             ▼                             ▼
+┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+│  DATA SOURCES     │     │   ALERTING        │     │   ANALYSIS        │
+│                   │     │                   │     │                   │
+│ • expanded_news   │────►│ • smart_alerter   │────►│ • earnings_predict│
+│ • legal_tracker   │     │ • mobile_bot      │     │ • portfolio_optim │
+│ • geopolitical    │     │                   │     │ • sector_rotation │
+│ • news_sentiment  │     │                   │     │ • perform_attrib  │
+└───────────────────┘     └───────────────────┘     └───────────────────┘
+        │                             │                             │
+        │                             │                             │
+        ▼                             ▼                             ▼
+┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+│  SignalAggregator │     │   ExecutionEngine │     │   TradeJournal    │
+│  (signals.py)     │     │                   │     │                   │
+│                   │     │ • rules_engine    │     │ • Full context    │
+│ • Sentiment scores│     │ • drawdown_protect│     │ • Thesis linking  │
+│ • Convergence     │     │                   │     │ • Tax tracking    │
+└───────────────────┘     └───────────────────┘     └───────────────────┘
+```
+
+---
+
 *Generated: 2026-01-07*
 *Updated: 2026-01-10 - Added Data Collection Daemon and 20+ free data sources*
 *Updated: 2026-01-11 - Added Promotion Pipeline, Thesis Performance, Strategy Dashboard, Holiday Calendar*
+*Updated: 2026-01-20 - Added Hedge Fund Expansion (15 modules, 5,700 lines)*
 *This document should be updated when major architectural changes are made.*
