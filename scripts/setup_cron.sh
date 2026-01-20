@@ -21,23 +21,31 @@ install_cron() {
     echo "Installing trading automation cron jobs..."
 
     # Get existing crontab (without our entries)
-    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | grep -v "trading_day.sh")
+    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | grep -v "trading_day.sh" | grep -v "cron_squeeze_scan" | grep -v "cron_news_collect")
 
     # Create new crontab
     {
         echo "$EXISTING"
         echo ""
-        echo "$CRON_MARKER"
+        echo "$CRON_MARKER - Trading Day Start"
         echo "# Pre-market prep at 6:00 AM ET (Mon-Fri)"
         echo "0 6 * * 1-5 $SCRIPT_DIR/trading_day.sh start >> ~/quant_results/logs/cron.log 2>&1"
         echo ""
-        echo "$CRON_MARKER"
+        echo "$CRON_MARKER - State Updates"
         echo "# Update state every 5 min during market hours (Mon-Fri, 6 AM - 5 PM ET)"
         echo "*/5 6-16 * * 1-5 $SCRIPT_DIR/trading_day.sh update >> ~/quant_results/logs/cron.log 2>&1"
         echo ""
-        echo "$CRON_MARKER"
+        echo "$CRON_MARKER - Trading Day End"
         echo "# Stop daemons after market close at 5:00 PM ET (Mon-Fri)"
         echo "0 17 * * 1-5 $SCRIPT_DIR/trading_day.sh stop >> ~/quant_results/logs/cron.log 2>&1"
+        echo ""
+        echo "$CRON_MARKER - Squeeze Scanner"
+        echo "# Daily squeeze scan at 6:30 AM ET (Mon-Fri)"
+        echo "30 6 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_squeeze_scan.py >> ~/quant_results/logs/squeeze_scan.log 2>&1"
+        echo ""
+        echo "$CRON_MARKER - Fast News Collection"
+        echo "# Fast news collection every 30 min during market hours (Mon-Fri, 6 AM - 5 PM ET)"
+        echo "*/30 6-17 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_news_collect_fast.py >> ~/quant_results/logs/news_fast.log 2>&1"
     } | crontab -
 
     echo "Cron jobs installed. Current schedule:"

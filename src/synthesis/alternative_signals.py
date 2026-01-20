@@ -150,6 +150,12 @@ class AlternativeSignals:
     squeeze_candidates: list[SqueezeCandidate] = field(default_factory=list)
     research_insights: Optional[ResearchInsightSummary] = None
 
+    # NEW: Added 2026-01-20
+    credit_spreads: Optional[dict] = None  # From FRED
+    sector_rotation: Optional[dict] = None  # Lead-lag signals
+    lead_lag_signals: list[dict] = field(default_factory=list)
+    analyst_signals: list[dict] = field(default_factory=list)
+
     def to_dict(self) -> dict:
         return {
             "timestamp": self.timestamp.isoformat(),
@@ -157,6 +163,10 @@ class AlternativeSignals:
             "fda_signals": [s.to_dict() for s in self.fda_signals],
             "squeeze_candidates": [s.to_dict() for s in self.squeeze_candidates],
             "research_insights": self.research_insights.to_dict() if self.research_insights else None,
+            "credit_spreads": self.credit_spreads,
+            "sector_rotation": self.sector_rotation,
+            "lead_lag_signals": self.lead_lag_signals,
+            "analyst_signals": self.analyst_signals,
         }
 
 
@@ -603,22 +613,89 @@ class AlternativeSignalGenerator:
         # Research insights (sync)
         research_summary = self.research.load_summary()
 
+        # NEW: Credit spreads from FRED
+        credit_spreads = await self._get_credit_spreads()
+
+        # NEW: Sector lead-lag signals
+        sector_data = await self._get_sector_signals()
+        sector_rotation = sector_data.get("rotation_signal") if sector_data else None
+        lead_lag_signals = sector_data.get("lead_lag_signals", []) if sector_data else []
+
+        # NEW: Analyst momentum (only for watchlist to limit API calls)
+        analyst_signals = await self._get_analyst_signals()
+
         signals = AlternativeSignals(
             timestamp=datetime.now(),
             weather_signals=weather_signals,
             fda_signals=fda_signals,
             squeeze_candidates=squeeze_candidates,
             research_insights=research_summary,
+            credit_spreads=credit_spreads,
+            sector_rotation=sector_rotation,
+            lead_lag_signals=lead_lag_signals,
+            analyst_signals=analyst_signals,
         )
 
         logger.info(
             f"Generated {len(weather_signals)} weather signals, "
             f"{len(fda_signals)} FDA signals, "
             f"{len(squeeze_candidates)} squeeze candidates, "
+            f"{len(lead_lag_signals)} lead-lag signals, "
             f"{research_summary.actionable_unimplemented} actionable insights"
         )
 
         return signals
+
+    async def _get_credit_spreads(self) -> Optional[dict]:
+        """Fetch credit spreads from FRED."""
+        try:
+            from src.data.sources.alternative.credit_spreads import FREDCreditSpreads
+
+            source = FREDCreditSpreads()
+            data = await source.get_current_spreads()
+            await source.close()
+
+            if data:
+                return data.to_dict()
+        except ImportError:
+            logger.debug("Credit spreads module not available")
+        except Exception as e:
+            logger.warning(f"Failed to get credit spreads: {e}")
+
+        return None
+
+    async def _get_sector_signals(self) -> Optional[dict]:
+        """Get sector lead-lag and rotation signals."""
+        try:
+            from src.data.sources.alternative.sector_lead_lag import SectorLeadLagAnalyzer
+
+            analyzer = SectorLeadLagAnalyzer()
+            return await analyzer.get_all_signals()
+        except ImportError:
+            logger.debug("Sector lead-lag module not available")
+        except Exception as e:
+            logger.warning(f"Failed to get sector signals: {e}")
+
+        return None
+
+    async def _get_analyst_signals(self) -> list[dict]:
+        """Get analyst momentum signals for key symbols."""
+        try:
+            from src.data.sources.alternative.analyst_momentum import AnalystMomentumScanner
+
+            # Limited list to reduce API calls
+            key_symbols = ["AAPL", "NVDA", "MSFT", "GOOGL", "AMZN", "META", "TSLA"]
+
+            scanner = AnalystMomentumScanner()
+            signals = await scanner.scan_universe(key_symbols, min_signal_strength=0.2)
+
+            return [s.to_dict() for s in signals]
+        except ImportError:
+            logger.debug("Analyst momentum module not available")
+        except Exception as e:
+            logger.warning(f"Failed to get analyst signals: {e}")
+
+        return []
 
     def save_to_state(self, signals: AlternativeSignals, output_path: Optional[Path] = None) -> None:
         """Save signals to a file for the daemon to pick up."""
