@@ -1189,6 +1189,10 @@ class UnifiedState:
     conviction_decay: list[ConvictionDecayResult] = field(default_factory=list)
     portfolio_history: Optional[PortfolioHistory] = None
 
+    # NEW: Alternative signals from disconnected data sources (Added 2026-01-19)
+    # Includes: weather→energy, FDA calendar, squeeze scanner, research insights
+    alternative_signals: Optional[dict] = None
+
     def to_dict(self) -> dict:
         """Serialize to dictionary for JSON."""
         result = {
@@ -1222,6 +1226,8 @@ class UnifiedState:
             "news_urgency_alerts": [a.to_dict() for a in self.news_urgency_alerts],
             "conviction_decay": [d.to_dict() for d in self.conviction_decay],
             "portfolio_history": self.portfolio_history.to_dict() if self.portfolio_history else None,
+            # NEW: Alternative signals
+            "alternative_signals": self.alternative_signals,
         }
         return result
 
@@ -1288,6 +1294,8 @@ class UnifiedState:
             news_urgency_alerts=[NewsUrgencyAlert.from_dict(a) for a in data.get("news_urgency_alerts", [])],
             conviction_decay=[ConvictionDecayResult.from_dict(d) for d in data.get("conviction_decay", [])],
             portfolio_history=PortfolioHistory.from_dict(data["portfolio_history"]) if data.get("portfolio_history") else None,
+            # NEW: Alternative signals
+            alternative_signals=data.get("alternative_signals"),
         )
 
     def to_file(self, path: Path) -> None:

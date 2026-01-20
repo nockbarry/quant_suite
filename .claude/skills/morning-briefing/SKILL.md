@@ -90,6 +90,7 @@ When you read `~/quant_results/live/state.json`, you get:
 | `alerts` | Active alerts |
 | `upcoming_events` | Earnings, Fed, etc. |
 | `research_available` | Paths to pre-computed research files |
+| `alternative_signals` | **NEW**: Weather→energy, FDA calendar, squeeze candidates, research insights |
 
 ## Research Files Available
 
@@ -195,6 +196,95 @@ else:
     daemon = LiveDaemon()
     state = await daemon.update_now()
 ```
+
+### Step 1.5: Check Alternative Signals (NEW - Added 2026-01-19)
+
+The unified state now includes `alternative_signals` from previously disconnected data sources:
+
+```python
+# Alternative signals are in state.alternative_signals
+if state.alternative_signals:
+    alt = state.alternative_signals
+
+    # Weather → Energy signals
+    if alt.get("weather_signals"):
+        print("=== WEATHER ALERTS ===")
+        for sig in alt["weather_signals"]:
+            print(f"  {sig['signal_type']}: {sig['description']}")
+            print(f"  Affected: {', '.join(sig['affected_symbols'])}")
+
+    # FDA Binary Events (upcoming PDUFA dates, AdCom meetings)
+    if alt.get("fda_signals"):
+        print("=== FDA CALENDAR ===")
+        for sig in alt["fda_signals"]:
+            print(f"  {sig['symbol']}: {sig['drug_name']} {sig['event_type']}")
+            print(f"  {sig['days_until']} days until event")
+            print(f"  Est. approval: {sig['approval_probability']:.0%}")
+
+    # Squeeze Candidates (high short interest + social mentions)
+    if alt.get("squeeze_candidates"):
+        print("=== SQUEEZE WATCH ===")
+        for c in alt["squeeze_candidates"][:5]:
+            print(f"  {c['symbol']}: Score {c['squeeze_score']:.2f}")
+            print(f"    Short: {c['short_percent_of_float']:.1%}, Days to cover: {c['days_to_cover']:.1f}")
+
+    # Research Insights (unimplemented strategies, patterns)
+    if alt.get("research_insights"):
+        ri = alt["research_insights"]
+        if ri["actionable_unimplemented"] > 0:
+            print(f"=== RESEARCH INSIGHTS ({ri['actionable_unimplemented']} actionable) ===")
+            for insight in ri["top_insights"][:3]:
+                print(f"  [{insight['category']}] {insight['title']}")
+                print(f"    Confidence: {insight['confidence']:.0%}")
+```
+
+Or generate fresh alternative signals:
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 -m src.synthesis.alternative_signals --all
+```
+
+### Step 1.6: Check Market Calendar (NEW - Added 2026-01-20)
+
+Review upcoming events and predictions:
+
+```python
+from src.knowledge.market_calendar import MarketCalendar
+from datetime import date, timedelta
+
+calendar = MarketCalendar()
+
+# Get upcoming week events
+print("=== UPCOMING EVENTS (7 days) ===")
+for event in calendar.get_upcoming_events(days=7, min_impact=EventImpact.MEDIUM):
+    impact_emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡"}.get(event.impact.value, "⚪")
+    print(f"{impact_emoji} {event.date}: {event.title}")
+    print(f"   {event.description[:80]}...")
+    if event.symbols_affected:
+        print(f"   Symbols: {', '.join(event.symbols_affected[:5])}")
+
+# Get predictions due for review
+print("\n=== PREDICTIONS DUE FOR REVIEW ===")
+for pred in calendar.get_predictions_due_for_review():
+    print(f"📊 {pred.title} ({pred.source})")
+    print(f"   {pred.prediction[:80]}...")
+    print(f"   ID: {pred.id}")
+```
+
+Or use CLI:
+```bash
+# View this week's events
+PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py events --week
+
+# View predictions due for review
+PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py predictions --due
+```
+
+**Key Calendar Items to Check:**
+- **Fed/FOMC dates** - Position before, vol crush after
+- **CPI/Jobs days** - Major volatility expected
+- **Earnings** - Binary events for portfolio holdings
+- **OpEx/Witching** - Pin risk, gamma exposure
+- **Political events** - Election effects, policy deadlines
 
 ### Step 2: Web Search for Overnight News
 ```
@@ -399,3 +489,64 @@ state = UnifiedState.load(paths.live_state)
 | `~/quant_results/briefings/` | Saved briefings |
 | `~/quant_results/theses/` | Investment theses |
 | `~/quant_results/decisions/` | Trading decisions |
+| `~/quant_results/knowledge/calendar/` | Market calendar, predictions, learnings |
+
+## Adding Learnings from Briefing
+
+When you discover something important during the briefing, add it to the calendar:
+
+```bash
+# Add a learning linked to an upcoming event
+PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py learn \
+    "Fed more hawkish than expected, markets priced in 2 cuts but only 1 likely" \
+    --source briefing \
+    --event fomc_2026_01 \
+    --tags fed,rates,hawkish
+
+# Add a learning about a prediction
+PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py learn \
+    "Goldman's rate cut prediction looking less likely given strong jobs data" \
+    --source briefing \
+    --prediction pred_fed_cuts_2026_gs \
+    --tags fed,prediction
+
+# Add a general market learning
+PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py learn \
+    "Tech earnings beat but sold off - market rotating to value" \
+    --source briefing \
+    --symbol MSFT \
+    --tags earnings,rotation,tech
+```
+
+Or in Python:
+```python
+from src.knowledge.market_calendar import MarketCalendar
+
+calendar = MarketCalendar()
+calendar.add_learning(
+    content="CPI came in hot, Fed likely to delay cuts",
+    source="briefing",
+    event_id="cpi_2026-01-14",
+    tags=["cpi", "inflation", "fed"],
+)
+```
+
+## Resolving Predictions
+
+When a prediction's target date arrives, resolve it:
+
+```bash
+# Mark a prediction as correct
+PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py resolve \
+    claude_midterm_pattern_2026 \
+    --status correct \
+    --outcome "SPY rallied 10% from October low to year-end as predicted" \
+    --accuracy 0.85
+
+# Mark a prediction as incorrect
+PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py resolve \
+    pred_fed_cuts_2026_gs \
+    --status incorrect \
+    --outcome "Fed only cut once, not twice as predicted" \
+    --notes "Inflation stickier than expected"
+```

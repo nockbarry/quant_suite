@@ -249,6 +249,9 @@ class LiveDaemon:
         conviction_decay = await self._compute_conviction_decay(theses)
         portfolio_history = await self._compute_portfolio_history(portfolio)
 
+        # NEW: Alternative signals from disconnected data sources (Added 2026-01-19)
+        alternative_signals = await self._get_alternative_signals()
+
         # Build state
         state = UnifiedState(
             timestamp=now,
@@ -279,6 +282,8 @@ class LiveDaemon:
             news_urgency_alerts=news_urgency_alerts,
             conviction_decay=conviction_decay,
             portfolio_history=portfolio_history,
+            # NEW: Alternative signals (Added 2026-01-19)
+            alternative_signals=alternative_signals,
         )
 
         # Generate summaries
@@ -1912,6 +1917,31 @@ class LiveDaemon:
 
         except Exception as e:
             logger.warning(f"Could not compute portfolio history: {e}")
+            return None
+
+    async def _get_alternative_signals(self) -> Optional[dict]:
+        """Get alternative signals from disconnected data sources.
+
+        This connects the previously unused data sources to the unified state:
+        - Weather → Energy signals (HDD anomalies → nat gas)
+        - FDA Calendar → Binary event alerts
+        - Short Interest + Social → Squeeze candidates
+        - Research Insights → Actionable recommendations
+
+        Added: 2026-01-19 per SYSTEM_COHESION_AUDIT.md
+        """
+        try:
+            from src.synthesis.alternative_signals import AlternativeSignalGenerator
+
+            generator = AlternativeSignalGenerator()
+            signals = await generator.generate_all()
+            return signals.to_dict()
+
+        except ImportError as e:
+            logger.warning(f"Alternative signals module not available: {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Could not generate alternative signals: {e}")
             return None
 
 

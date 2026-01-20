@@ -99,6 +99,7 @@ class WeatherDataSource:
 
     name = "weather"
     BASE_URL = "https://api.open-meteo.com/v1"
+    ARCHIVE_URL = "https://archive-api.open-meteo.com/v1"  # Historical data endpoint
 
     def __init__(
         self,
@@ -246,7 +247,7 @@ class WeatherDataSource:
 
         try:
             response = await client.get(
-                f"{self.BASE_URL}/archive",
+                f"{self.ARCHIVE_URL}/archive",
                 params={
                     "latitude": lat,
                     "longitude": lon,
