@@ -97,6 +97,31 @@ See `docs/WORKFLOW.md` for detailed automation guide.
 
 **Use existing tools and quick commands instead of writing boilerplate code.**
 
+### CRITICAL: Read Before Writing Code
+
+Before writing ANY Python code, read the API reference:
+```bash
+cat docs/API_QUICK_REF.md
+```
+
+This prevents common errors like:
+- `state.is_fresh()` → doesn't exist
+- `calendar.get_events_by_date_range()` → wrong method name
+- `signpost.get('description')` → signposts are dataclasses, not dicts
+
+### Morning Setup (Use Scripts, Not Code)
+
+```bash
+# One command to set up for trading
+./scripts/morning_preflight.sh
+
+# Full context dump for Claude sessions
+PYTHONPATH=. python3 scripts/context_dump.py
+
+# Quick summary only
+PYTHONPATH=. python3 scripts/context_dump.py --brief
+```
+
 ### Quick Trade Commands
 ```bash
 # Quick trades - NO boilerplate code needed
