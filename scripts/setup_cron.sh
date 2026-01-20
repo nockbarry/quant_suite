@@ -46,6 +46,14 @@ install_cron() {
         echo "$CRON_MARKER - Fast News Collection"
         echo "# Fast news collection every 30 min during market hours (Mon-Fri, 6 AM - 5 PM ET)"
         echo "*/30 6-17 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_news_collect_fast.py >> ~/quant_results/logs/news_fast.log 2>&1"
+        echo ""
+        echo "$CRON_MARKER - Signpost Monitor"
+        echo "# Check price signposts every 10 min during market hours (Mon-Fri, 9:30 AM - 4 PM ET)"
+        echo "*/10 9-15 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/signpost_monitor.py --alerts >> ~/quant_results/logs/signpost.log 2>&1"
+        echo ""
+        echo "$CRON_MARKER - Scheduled Trades"
+        echo "# Execute scheduled trades at 9:31 AM ET (1 min after open for prices to settle)"
+        echo "31 9 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_trade_wrapper.sh >> ~/quant_results/logs/scheduled_trades.log 2>&1"
     } | crontab -
 
     echo "Cron jobs installed. Current schedule:"
@@ -55,7 +63,7 @@ install_cron() {
 remove_cron() {
     echo "Removing trading automation cron jobs..."
 
-    crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | grep -v "trading_day.sh" | crontab -
+    crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | grep -v "trading_day.sh" | grep -v "signpost_monitor" | grep -v "cron_trade_wrapper" | crontab -
 
     echo "Cron jobs removed."
 }
