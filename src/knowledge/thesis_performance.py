@@ -15,6 +15,7 @@ import logging
 from src.core.paths import paths
 from src.knowledge.thesis import ThesisTracker, Thesis
 from src.knowledge.learnings import LearningLog, Learning
+from src.knowledge.paper_positions import PaperPositionTracker, PaperPosition
 from src.decision.decision_logger import DecisionLogger, TradingDecision, DecisionStatus
 
 logger = logging.getLogger(__name__)
@@ -501,6 +502,183 @@ class ThesisPerformanceTracker:
                 unique_learnings.append(learning)
 
         return unique_learnings
+
+
+@dataclass
+class PaperPerformanceMetrics:
+    """Performance metrics for paper-tracked positions within a thesis."""
+
+    thesis_name: str
+    positions: list[dict] = field(default_factory=list)
+    total_entry_value: float = 0.0
+    total_current_value: float = 0.0
+    unrealized_pnl: float = 0.0
+    unrealized_pnl_pct: float = 0.0
+    num_positions: int = 0
+    avg_days_held: float = 0.0
+
+    def to_dict(self) -> dict:
+        return {
+            "thesis_name": self.thesis_name,
+            "positions": self.positions,
+            "total_entry_value": self.total_entry_value,
+            "total_current_value": self.total_current_value,
+            "unrealized_pnl": self.unrealized_pnl,
+            "unrealized_pnl_pct": self.unrealized_pnl_pct,
+            "num_positions": self.num_positions,
+            "avg_days_held": self.avg_days_held,
+        }
+
+
+class UnifiedThesisPerformanceTracker:
+    """
+    Unified performance tracker that combines real and paper positions.
+
+    Provides a single view of thesis performance across:
+    - Real executed trades (from DecisionLogger)
+    - Paper tracked positions (from PaperPositionTracker)
+    """
+
+    def __init__(self):
+        self.real_tracker = ThesisPerformanceTracker()
+        self.paper_tracker = PaperPositionTracker()
+        self.thesis_tracker = ThesisTracker(paths.theses)
+
+    def get_unified_performance(self, thesis_id: str, days: int = 90) -> dict:
+        """Get combined real + paper performance for a thesis.
+
+        Returns:
+            Dict with 'real', 'paper', and 'combined' sections
+        """
+        # Get real performance
+        real_metrics = self.real_tracker.get_performance(thesis_id, days=days)
+
+        # Get paper positions for this thesis
+        thesis = self.thesis_tracker.get_thesis(thesis_id)
+        paper_metrics = None
+
+        if thesis:
+            paper_positions = [
+                p for p in self.paper_tracker.get_positions()
+                if p.thesis_id == thesis_id or p.thesis_name == thesis.name
+            ]
+
+            if paper_positions:
+                total_entry = sum(p.entry_value for p in paper_positions)
+                total_current = sum(p.current_value or p.entry_value for p in paper_positions)
+                total_days = sum(p.days_held for p in paper_positions)
+
+                paper_metrics = PaperPerformanceMetrics(
+                    thesis_name=thesis.name,
+                    positions=[
+                        {
+                            "symbol": p.symbol,
+                            "quantity": p.quantity,
+                            "entry_price": p.entry_price,
+                            "current_price": p.current_price,
+                            "entry_value": p.entry_value,
+                            "current_value": p.current_value,
+                            "pnl": p.unrealized_pnl,
+                            "pnl_pct": p.unrealized_pnl_pct,
+                            "days_held": p.days_held,
+                        }
+                        for p in paper_positions
+                    ],
+                    total_entry_value=total_entry,
+                    total_current_value=total_current,
+                    unrealized_pnl=total_current - total_entry,
+                    unrealized_pnl_pct=((total_current - total_entry) / total_entry * 100) if total_entry > 0 else 0,
+                    num_positions=len(paper_positions),
+                    avg_days_held=total_days / len(paper_positions) if paper_positions else 0,
+                )
+
+        # Combine
+        real_pnl = real_metrics.total_pnl if real_metrics else 0
+        paper_pnl = paper_metrics.unrealized_pnl if paper_metrics else 0
+
+        return {
+            "thesis_id": thesis_id,
+            "thesis_name": thesis.name if thesis else "Unknown",
+            "real": real_metrics.to_dict() if real_metrics else None,
+            "paper": paper_metrics.to_dict() if paper_metrics else None,
+            "combined": {
+                "total_pnl": real_pnl + paper_pnl,
+                "real_pnl": real_pnl,
+                "paper_pnl": paper_pnl,
+                "has_real_positions": real_metrics is not None and real_metrics.num_trades > 0,
+                "has_paper_positions": paper_metrics is not None and paper_metrics.num_positions > 0,
+            },
+        }
+
+    def get_all_unified_performance(self, days: int = 90) -> list[dict]:
+        """Get unified performance for all theses."""
+        theses = self.thesis_tracker.get_active_theses()
+        results = []
+
+        for thesis in theses:
+            unified = self.get_unified_performance(thesis.id, days=days)
+            results.append(unified)
+
+        # Sort by combined P&L
+        results.sort(key=lambda x: x["combined"]["total_pnl"], reverse=True)
+        return results
+
+    def get_unified_leaderboard(self, days: int = 90) -> str:
+        """Generate unified leaderboard showing real + paper performance."""
+        all_unified = self.get_all_unified_performance(days=days)
+
+        if not all_unified:
+            return "No thesis performance data available."
+
+        lines = [
+            "# Unified Thesis Performance (Real + Paper)",
+            "",
+            f"Period: Last {days} days",
+            "",
+            "| Rank | Thesis | Real P&L | Paper P&L | Combined | Status |",
+            "|------|--------|----------|-----------|----------|--------|",
+        ]
+
+        for i, u in enumerate(all_unified, 1):
+            real_pnl = u["combined"]["real_pnl"]
+            paper_pnl = u["combined"]["paper_pnl"]
+            combined = u["combined"]["total_pnl"]
+
+            real_str = f"${real_pnl:+,.0f}" if abs(real_pnl) >= 1 else "-"
+            paper_str = f"${paper_pnl:+,.0f}" if abs(paper_pnl) >= 1 else "-"
+            combined_str = f"${combined:+,.0f}"
+
+            status_parts = []
+            if u["combined"]["has_real_positions"]:
+                status_parts.append("Real")
+            if u["combined"]["has_paper_positions"]:
+                status_parts.append("Paper")
+            status = "+".join(status_parts) or "None"
+
+            lines.append(
+                f"| {i} | {u['thesis_name'][:20]} | {real_str} | {paper_str} | {combined_str} | {status} |"
+            )
+
+        return "\n".join(lines)
+
+    def get_paper_only_theses(self) -> list[str]:
+        """Get thesis names that have only paper positions (no real trades)."""
+        paper_only = []
+
+        for thesis in self.thesis_tracker.get_active_theses():
+            real_metrics = self.real_tracker.get_performance(thesis.id)
+            paper_positions = [
+                p for p in self.paper_tracker.get_positions()
+                if p.thesis_id == thesis.id or p.thesis_name == thesis.name
+            ]
+
+            has_real = real_metrics and real_metrics.num_trades > 0
+            has_paper = len(paper_positions) > 0
+
+            if has_paper and not has_real:
+                paper_only.append(thesis.name)
+
+        return paper_only
 
 
 def get_thesis_performance_summary(days: int = 90) -> dict:
