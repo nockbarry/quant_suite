@@ -93,6 +93,54 @@ from .model_health import (
     check_model_health,
 )
 
+from .data_freshness_tracker import (
+    DataFreshnessTracker,
+    DataSourceStatus,
+    DataFreshnessSummary,
+    get_data_freshness_tracker,
+    get_data_freshness,
+)
+
+from .signal_summary import (
+    SignalAggregator,
+    Signal,
+    ConvergenceSignal,
+    Catalyst,
+    SignalSummary,
+    get_signal_aggregator,
+    get_signal_summary,
+    get_top_signals,
+    get_convergences,
+    get_upcoming_catalysts,
+)
+
+from .operator_loop import (
+    OperatorLoop,
+    OperatorObservation,
+    Alert,
+    SignpostTrigger,
+    AgentCompletion,
+    ActionItem,
+    get_operator_loop,
+    run_operator_check,
+)
+
+from .improvement_tracker import (
+    ImprovementTracker,
+    ImprovementSuggestion,
+    WeeklyReviewSummary,
+    get_improvement_tracker,
+    add_improvement,
+)
+
+from .signal_quality_tracker import (
+    SignalQualityTracker,
+    SignalQuality,
+    SignalOutcome,
+    get_signal_quality_tracker,
+    log_signal_outcome,
+)
+
 
 async def check_all() -> dict:
     """Quick check of all monitoring systems."""
@@ -159,4 +207,42 @@ __all__ = [
     "check_model_health",
     # Quick access
     "check_all",
+    # Data freshness
+    "DataFreshnessTracker",
+    "DataSourceStatus",
+    "DataFreshnessSummary",
+    "get_data_freshness_tracker",
+    "get_data_freshness",
+    # Signal summary
+    "SignalAggregator",
+    "Signal",
+    "ConvergenceSignal",
+    "Catalyst",
+    "SignalSummary",
+    "get_signal_aggregator",
+    "get_signal_summary",
+    "get_top_signals",
+    "get_convergences",
+    "get_upcoming_catalysts",
+    # Operator loop
+    "OperatorLoop",
+    "OperatorObservation",
+    "Alert",
+    "SignpostTrigger",
+    "AgentCompletion",
+    "ActionItem",
+    "get_operator_loop",
+    "run_operator_check",
+    # Improvement tracker
+    "ImprovementTracker",
+    "ImprovementSuggestion",
+    "WeeklyReviewSummary",
+    "get_improvement_tracker",
+    "add_improvement",
+    # Signal quality
+    "SignalQualityTracker",
+    "SignalQuality",
+    "SignalOutcome",
+    "get_signal_quality_tracker",
+    "log_signal_outcome",
 ]

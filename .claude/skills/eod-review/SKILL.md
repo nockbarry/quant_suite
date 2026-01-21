@@ -413,6 +413,89 @@ for l in hal_learnings:
 EOF
 ```
 
+## Signal Quality Tracking
+
+**IMPORTANT:** Log which signals influenced each decision for quality tracking.
+
+### Log Signal Outcomes
+
+```python
+from src.monitoring.signal_quality_tracker import log_signal_outcome
+
+# Log each signal that influenced a decision
+# When the decision closes, this lets us track signal quality
+
+# Example: Insider signal led to a winning trade
+log_signal_outcome(
+    signal_type="insider",
+    symbol="HAL",
+    direction="bullish",
+    signal_strength=0.75,
+    acted_on=True,
+    pnl=129.96,
+    pnl_pct=4.5,
+    hold_days=3,
+)
+
+# Example: Technical signal we didn't act on
+log_signal_outcome(
+    signal_type="technical",
+    symbol="AAPL",
+    direction="bullish",
+    signal_strength=0.5,
+    acted_on=False,  # Signal generated but not traded
+)
+```
+
+### Review Signal Quality
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.monitoring.signal_quality_tracker import get_signal_quality_tracker
+
+tracker = get_signal_quality_tracker()
+summary = tracker.get_summary()
+
+print("=== SIGNAL QUALITY SUMMARY ===")
+print(f"Signal types tracked: {summary['total_types']}")
+print(f"Average hit rate: {summary['avg_hit_rate']:.0%}")
+
+if summary.get('best_signal'):
+    print(f"Best: {summary['best_signal']} ({summary['best_hit_rate']:.0%})")
+if summary.get('worst_signal'):
+    print(f"Worst: {summary['worst_signal']} ({summary['worst_hit_rate']:.0%})")
+
+if summary.get('degrading'):
+    print(f"DEGRADING: {', '.join(summary['degrading'])}")
+if summary.get('improving'):
+    print(f"Improving: {', '.join(summary['improving'])}")
+EOF
+```
+
+### Generate Improvement Suggestions
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.monitoring.improvement_tracker import get_improvement_tracker
+
+tracker = get_improvement_tracker()
+
+# Get pending improvements
+pending = tracker.get_pending()
+if pending:
+    print("=== PENDING IMPROVEMENTS ===")
+    for imp in pending[:5]:
+        print(f"[{imp.priority.upper()}] {imp.title}")
+        print(f"  Action: {imp.suggested_action}")
+        print()
+
+# Get summary
+summary = tracker.get_summary()
+print(f"Total suggestions: {summary['total_suggestions']}")
+print(f"High priority pending: {summary['pending_high_priority']}")
+EOF
+```
+
 ## Key Files
 
 | File | Purpose |
@@ -422,5 +505,9 @@ EOF
 | `~/quant_results/theses/` | Investment theses |
 | `~/quant_results/knowledge/` | Company/sector knowledge |
 | `~/quant_results/eod_reviews/` | EOD review outputs |
+| `~/quant_results/signal_quality/` | Signal quality tracking |
+| `~/quant_results/improvements/` | Improvement suggestions |
 | `src/knowledge/learnings.py` | LearningLog class |
 | `src/knowledge/thesis.py` | ThesisTracker class |
+| `src/monitoring/signal_quality_tracker.py` | Signal quality tracking |
+| `src/monitoring/improvement_tracker.py` | Improvement tracking |

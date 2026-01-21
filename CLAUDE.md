@@ -523,49 +523,119 @@ decision = create_decision(
 
 ## Trading Rules
 
-### CRITICAL: Thesis Position Sizing (Learned 2026-01-07)
+### CRITICAL: Performance-Based Rules (Updated 2026-01-21)
 
-**HIGH CONVICTION ≠ HIGH CONCENTRATION**
+Based on analysis of 82 trades from Jan 5-21, 2026:
+
+| Category | # Trades | Avg Return | Verdict |
+|----------|----------|------------|---------|
+| Current stock holdings | 51 | **+7.75%** | ✅ Excellent |
+| Closed stocks | 7 | **-6.66%** | ❌ Exited too early |
+| Options | 24 | **-14.25%** | ❌ AVOID |
+
+**See**: `~/quant_results/reports/performance_analysis_20260121.md`
+
+---
+
+### Rule 1: NO OPTIONS TRADING
+
+**Options averaged -14.25% return. Do not trade options.**
+
+Exceptions (require explicit user approval):
+- Deep ITM calls as stock replacement (delta > 0.80)
+- Protective puts for existing large positions
+- Covered calls on positions we want to exit
+
+Evidence: 24 options trades, only 6 profitable, average loss -14.25%
+
+---
+
+### Rule 2: HOLD POSITIONS - Don't Exit Early
+
+**Closed stocks averaged -6.66%. Current holdings average +7.75%.**
+
+Our exits were consistently wrong:
+- VLO: Sold at $178, now $185 (left $534 on table)
+- JPM: Sold at $310, now $288 (saved $137)
+- CEG: Sold at $299, now $289 (saved $60)
+- Net: Lost money by exiting
+
+**Exit ONLY when:**
+1. Signpost invalidates thesis (bearish trigger)
+2. Position hits -15% stop loss
+3. Thesis conviction drops below 40%
+4. Concentration limits require rebalancing
+
+**Do NOT exit because:**
+- Position is slightly negative
+- "Taking profits" on small gains
+- Nervous about market conditions
+- Position "feels" wrong without data
+
+---
+
+### Rule 3: Equal Weight Within Theses
 
 When a thesis has multiple vehicles:
 
 1. **START EQUAL WEIGHT**: Allocate thesis capital equally across ALL vehicles
-   - Example: 6 Venezuela positions = ~6% each, not 22% SLB + 17% XLE
+   - Example: 25 Venezuela positions = ~2% each, not 14% SLB + 7% HAL
 
 2. **LET WINNERS PROVE THEMSELVES**: Only concentrate AFTER 10%+ outperformance
-   - The market knows timing better than you
-   - Winners naturally grow; don't force it
+   - Our top 3 positions (SLB, HAL, XLE) returned 7.6% average
+   - Our smaller positions returned 10.2% average
+   - Equal weight would have added ~$235 to returns
 
 3. **SEPARATE IMMEDIATE vs FUTURE BENEFICIARIES**:
-   - Immediate: Benefit NOW (tankers shipping oil)
-   - Future: Benefit LATER (services for reconstruction)
+   - Immediate: Tankers (FRO +24.6%, INSW +21.5%) moved first
+   - Future: Services (SLB +12.1%, HAL +5.7%) moved later
    - Equal weight captures the right timing
 
-**Evidence (Venezuela thesis, 2026-01-07):**
-- Concentrated allocation: +0.55% ROI
-- Equal weight allocation: +1.92% ROI
-- Difference: **~$1,000 left on the table**
-- Tankers (1-9% each): +10-13%
-- SLB+XLE (39% combined): -2 to -3%
+---
 
-See: `~/quant_results/knowledge/position_sizing.yaml`
+### Rule 4: Stock Picking Works - Keep Doing It
+
+Our stock selection is excellent:
+- 90% hit rate (44 of 49 positions profitable)
+- Venezuela thesis: +9.9% average across 25 stocks
+- Gold thesis: +13.2% average across 6 stocks
+- Current holdings: +7.75% average
+
+**Keep doing:**
+- Thesis-based investing with clear signposts
+- Diversifying across multiple vehicles per thesis
+- Holding winners and letting them compound
+
+---
 
 ### Position Sizing by Confidence
 | Confidence | Max Size |
 |------------|----------|
-| 90%+ | 15% (not 20%) |
-| 75-90% | 10% |
-| 60-75% | 7% |
-| <60% | 5% or HOLD |
+| 90%+ | 10% (reduced from 15%) |
+| 75-90% | 7% |
+| 60-75% | 5% |
+| <60% | 3% or HOLD |
 
 ### Risk Limits
 | Limit | Value |
 |-------|-------|
-| Single position | **15% max** (reduced from 25%) |
-| Single thesis total | **35% max** |
-| Sector exposure | 40% max |
+| Single position | **10% max** (reduced from 15%) |
+| Single thesis total | **40% max** |
+| Sector exposure | 45% max |
 | Daily loss | 5% max |
-| Stop loss | 5-15% based on conviction |
+| Stop loss | 15% (only exit trigger) |
+
+### Exit Checklist (ALL must be checked before selling)
+
+Before ANY sell order, answer:
+- [ ] Is a bearish signpost triggered?
+- [ ] Has thesis conviction dropped below 40%?
+- [ ] Is position at -15% stop loss?
+- [ ] Does concentration require rebalancing?
+
+If NONE checked → **DO NOT SELL**
+
+---
 
 ### PDT Compliance (<$25k)
 - Max 3 day trades per 5 rolling business days
@@ -587,6 +657,7 @@ Key patterns (see file for full details):
 - **Use Existing Data**: Check the 32+ alt-data sources we already have
 - **Squeeze Mechanics**: High short interest + social spike = potential squeeze
 - **Binary Events**: Position BEFORE known catalysts (FDA, earnings)
+- **NO OPTIONS**: Options lost -14.25% on average - avoid them
 
 ---
 
