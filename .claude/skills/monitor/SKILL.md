@@ -14,10 +14,27 @@ Mission control for the automated trading firm. Monitors EVERYTHING:
 - Portfolio & positions
 - Risk limits
 
-## Quick Start - Unified Dashboard
+## Quick Start - Comprehensive Dashboard (Recommended)
 
 ```bash
-# UNIFIED DASHBOARD - See everything at once
+# COMPREHENSIVE DASHBOARD - Full trading firm view
+# Shows: Market themes, cron jobs, portfolio detail, layer health
+PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard
+
+# Watch mode (auto-refresh every 60s)
+PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard --watch
+
+# JSON output (for programmatic use)
+PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard --json
+
+# Save to file
+PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard --save
+```
+
+## Alternative - Unified Dashboard (Simpler)
+
+```bash
+# UNIFIED DASHBOARD - Quick overview
 PYTHONPATH=. python -m src.monitoring.unified_dashboard
 
 # Watch mode (auto-refresh every 30s)
@@ -416,11 +433,41 @@ print(f"Drawdown: {status['risk_layer']['drawdown']:.2%}")
 
 | What | Command |
 |------|---------|
-| Full unified view | `python -m src.monitoring.unified_dashboard` |
-| Watch mode | `python -m src.monitoring.unified_dashboard --watch` |
+| **Comprehensive view** | `python -m src.monitoring.comprehensive_dashboard` |
+| Comprehensive watch | `python -m src.monitoring.comprehensive_dashboard --watch` |
+| Unified view (simpler) | `python -m src.monitoring.unified_dashboard` |
 | Ops health only | `python -m src.monitoring.ops_dashboard` |
 | Portfolio only | `python -m src.execution.monitoring.cli_dashboard` |
 | Data quality | `python -c "import asyncio; from src.monitoring import check_data_quality; print(asyncio.run(check_data_quality()))"` |
+
+### Comprehensive Dashboard Features
+
+The comprehensive dashboard shows:
+
+**Market Themes** - Primary/secondary themes with historical tracking
+- Risk on/off, sector rotation (tech/defensive/cyclical), volatility expansion/compression
+- Theme change summary (e.g., "Tech Leadership -> Defensive Rotation in last 6h")
+- Sector leaders and laggards
+
+**Operations** - Full cron job inventory
+- 13 scheduled jobs with human-readable schedules
+- Last run times, success/error status, runs today
+- Next scheduled job preview
+- Stale job detection (missed expected runs)
+
+**Portfolio Detail** - Position-by-position breakdown
+- Each position: weight %, day P&L, total P&L, thesis, sector
+- Thesis-level exposure with performance by thesis
+- Sector breakdown chart
+- Concentration warnings (>15% single position)
+
+**Layer Health** - System-wide health monitoring
+- Data Layer: state.json freshness, data source health
+- Signal Layer: active signals, convergences
+- Agent Layer: today's agent activity
+- Research Layer: experiments, insights, validations
+- Execution Layer: positions, PDT status
+- Risk Layer: concentration, daily P&L limits
 
 ## Alert Thresholds
 

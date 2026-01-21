@@ -70,6 +70,16 @@ install_cron() {
         echo "$CRON_MARKER - Weekly Improvement Review"
         echo "# Weekly improvement review on Sundays at 6 PM ET"
         echo "0 18 * * 0 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_weekly_improvement_review.py >> ~/quant_results/logs/weekly_review.log 2>&1"
+        echo ""
+        echo "$CRON_MARKER - Daily Signal Archive"
+        echo "# Archive all signals daily at 5:30 PM ET for future backtesting"
+        echo "30 17 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/archive_daily_signals.py >> ~/quant_results/logs/signal_archive.log 2>&1"
+        echo ""
+        echo "$CRON_MARKER - Day Trading Signal Scanner"
+        echo "# Scan for day trading signals every 5 min during market hours (9:30 AM - 4 PM ET)"
+        echo "*/5 9-15 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/run_day_trading_signals.py --scan --deploy-paper >> ~/quant_results/logs/day_trading_signals.log 2>&1"
+        echo "# Also run at 9:31 and 9:35 for opening range signals"
+        echo "31,35 9 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/run_day_trading_signals.py --scan --deploy-paper >> ~/quant_results/logs/day_trading_signals.log 2>&1"
     } | crontab -
 
     echo "Cron jobs installed. Current schedule:"

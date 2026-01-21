@@ -213,6 +213,60 @@ daemon = LiveDaemon()
 state = await daemon.update_now()
 ```
 
+### Live Signal Layer (NEW)
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **LiveSignalGenerator** | `src/signals/live_signal_generator.py` | Operationalized validated signals |
+| **CandlePatternRecognizer** | `src/data/intraday/candle_analysis.py` | 25+ candle patterns for agents/ML |
+| **IntradayFeatureEngine** | `src/data/intraday/feature_engine.py` | VWAP, ORB, volume profile |
+
+Validated signals with MCPT-confirmed metrics:
+- **Bollinger Bounce**: IC=0.31, Hit Rate=61.4% (BUY on lower band touch)
+- **RSI Extreme**: IC=0.20, Hit Rate=53.8% (BUY <30, SELL >70)
+- **Volume Spike FADE**: IC=0.69, CONTRARIAN (fade high volume moves)
+- **Channel Breakout FADE**: IC=0.37, CONTRARIAN (fade breakouts)
+
+```python
+from src.signals import LiveSignalGenerator, get_signal_summary
+
+# Generate signals for a symbol
+generator = LiveSignalGenerator()
+signals = await generator.generate_signals("AAPL", lookback_days=60)
+
+# Check for convergences (3+ aligned signals)
+convergences = generator.detect_convergence(signals)
+for conv in convergences:
+    print(f"{conv.symbol}: {conv.signal_count} {conv.direction} signals")
+```
+
+### Monitoring Layer (ENHANCED)
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **ComprehensiveDashboard** | `src/monitoring/comprehensive_dashboard.py` | Full system view with Claude activity |
+| **AgentActivityMonitor** | `src/monitoring/agent_monitor.py` | Track Claude sessions and agents |
+| **OperatorLoop** | `src/monitoring/operator_loop.py` | Check cycle logic for operator mode |
+| **DataFreshnessTracker** | `src/monitoring/data_freshness_tracker.py` | Data source health |
+
+```python
+# Comprehensive dashboard - shows Claude's activity + full system state
+from src.monitoring import ComprehensiveDashboard
+
+dashboard = ComprehensiveDashboard()
+status = await dashboard.get_comprehensive_status()
+
+# Claude's current activity
+print(f"Running agents: {status.claude_activity.agents_running}")
+print(f"Decisions today: {status.claude_activity.decisions_today}")
+
+# Market theme
+print(f"Theme: {status.current_theme.primary_theme}")
+
+# Or run from command line:
+# PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard --watch
+```
+
 ### Knowledge Layer
 
 | Component | Location | Purpose |
@@ -387,8 +441,15 @@ PYTHONPATH=. python scripts/full_research_cycle.py --quick # Quick test
 PYTHONPATH=. python scripts/validate_strategy.py --strategy bollinger_reversal --symbol QCOM --plots
 PYTHONPATH=. python scripts/critic_validate.py --strategy bollinger_reversal --symbol QCOM
 
-# Monitoring
-PYTHONPATH=. python -m src.execution.monitoring.cli_dashboard
+# Monitoring - COMPREHENSIVE DASHBOARD (recommended)
+PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard        # Full view with Claude activity
+PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard --watch # Auto-refresh every 60s
+PYTHONPATH=. python -m src.monitoring.unified_dashboard              # Simpler unified view
+PYTHONPATH=. python -m src.execution.monitoring.cli_dashboard        # Portfolio only
+
+# Day Trading Signals
+PYTHONPATH=. python scripts/run_day_trading_signals.py --scan        # Scan for signals
+PYTHONPATH=. python scripts/run_day_trading_signals.py --deploy-paper # Deploy to paper trading
 ```
 
 ---

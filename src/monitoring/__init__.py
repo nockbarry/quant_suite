@@ -62,6 +62,18 @@ from .unified_dashboard import (
     SystemMode,
 )
 
+from .comprehensive_dashboard import (
+    ComprehensiveDashboard,
+    ComprehensiveStatus,
+    MarketTheme,
+    MarketThemeSnapshot,
+    CronJobDetail,
+    PositionDetail,
+    ThesisExposure,
+    LayerStatus,
+    ClaudeActivity,
+)
+
 from .correlation_monitor import (
     CorrelationMonitor,
     CorrelationLevel,
@@ -120,6 +132,16 @@ __all__ = [
     "UnifiedDashboard",
     "UnifiedSystemStatus",
     "SystemMode",
+    # Comprehensive dashboard
+    "ComprehensiveDashboard",
+    "ComprehensiveStatus",
+    "MarketTheme",
+    "MarketThemeSnapshot",
+    "CronJobDetail",
+    "PositionDetail",
+    "ThesisExposure",
+    "LayerStatus",
+    "ClaudeActivity",
     # Correlation
     "CorrelationMonitor",
     "CorrelationLevel",

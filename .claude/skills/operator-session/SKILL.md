@@ -155,17 +155,31 @@ for conv in obs.convergences:
 - Market close (optional auto-exit at 4pm ET)
 - Session timeout (configurable, default 8 hours)
 
-## Unified Dashboard Integration
+## Comprehensive Dashboard Integration
 
-The operator session uses the same data as the unified dashboard:
+The operator session integrates with the comprehensive dashboard that shows EVERYTHING including Claude's own activity:
 
 ```bash
-# See everything the operator sees in a single view
-PYTHONPATH=. python -m src.monitoring.unified_dashboard
+# COMPREHENSIVE DASHBOARD - Shows Claude's activity + full system state
+PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard
 
-# Watch mode refreshes every 30s
-PYTHONPATH=. python -m src.monitoring.unified_dashboard --watch
+# Watch mode refreshes every 60s
+PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard --watch
+
+# The dashboard shows:
+# - CLAUDE ACTIVITY: Running agents, recent completions, decisions, action items
+# - MARKET THEME: Primary/secondary themes, sector rotation, VIX
+# - OPERATIONS: 13 cron jobs with schedules, status, last run times
+# - PORTFOLIO: Position-by-position breakdown, thesis exposure
+# - LAYER STATUS: Data, Signal, Agent, Research, Execution, Risk health
 ```
+
+When running as an operator, the comprehensive dashboard shows what YOU (Claude) are doing:
+- Currently running agents (research, monitor, etc.)
+- Recent agent completions with results
+- Decisions made today
+- Action items from operator checks
+- Research suggestions to explore
 
 ## Data Freshness Tracking
 
