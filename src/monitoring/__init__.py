@@ -139,6 +139,7 @@ from .signal_quality_tracker import (
     SignalOutcome,
     get_signal_quality_tracker,
     log_signal_outcome,
+    log_decision_signals,
 )
 
 
@@ -245,4 +246,5 @@ __all__ = [
     "SignalOutcome",
     "get_signal_quality_tracker",
     "log_signal_outcome",
+    "log_decision_signals",
 ]

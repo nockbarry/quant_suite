@@ -259,6 +259,114 @@ decision = create_decision(
 # 4. Log the decision
 logger = DecisionLogger()
 logger.log_decision(decision)
+
+# 5. Log signals that influenced this decision (for quality tracking)
+from src.monitoring.signal_quality_tracker import log_signal_outcome
+
+# Log each signal type that influenced the trade
+log_signal_outcome(
+    signal_type="technical",
+    symbol="SLB",
+    direction="bullish",
+    signal_strength=0.72,  # From swing_signal
+    acted_on=True,
+)
+
+log_signal_outcome(
+    signal_type="insider",
+    symbol="SLB",
+    direction="bullish",
+    signal_strength=0.65,
+    acted_on=True,
+)
+```
+
+## Signal Quality Tracking
+
+**IMPORTANT:** Log which signals influenced each decision to track signal quality over time.
+
+### When Making a Trade Decision
+
+```python
+from src.monitoring.signal_quality_tracker import log_signal_outcome
+
+# Log ALL signals that influenced the decision
+# This builds the dataset for measuring signal quality
+
+# Example: Technical signal led to BUY
+log_signal_outcome(
+    signal_type="technical",  # Options: technical, insider, congressional, options, squeeze, sentiment, social
+    symbol="HAL",
+    direction="bullish",      # or "bearish"
+    signal_strength=0.72,     # Signal confidence 0-1
+    acted_on=True,            # We traded on this signal
+)
+
+# Example: Congressional signal we noted but didn't act on
+log_signal_outcome(
+    signal_type="congressional",
+    symbol="NVDA",
+    direction="bullish",
+    signal_strength=0.60,
+    acted_on=False,           # Signal generated but we passed
+)
+```
+
+### When Closing a Position (in /eod-review)
+
+Update signal outcomes with actual P&L to measure quality:
+
+```python
+from src.monitoring.signal_quality_tracker import log_signal_outcome
+
+# When closing HAL position that was opened based on insider signal
+log_signal_outcome(
+    signal_type="insider",
+    symbol="HAL",
+    direction="bullish",
+    signal_strength=0.65,
+    acted_on=True,
+    pnl=129.96,              # Actual P&L in dollars
+    pnl_pct=4.5,             # Actual P&L percentage
+    hold_days=3,             # How long we held
+)
+```
+
+### Helper: Log All Signals for a Decision
+
+```python
+def log_decision_signals(symbol: str, direction: str, signals: dict, acted_on: bool = True):
+    """Log all signals that influenced a trading decision."""
+    from src.monitoring.signal_quality_tracker import log_signal_outcome
+
+    signal_type_map = {
+        'composite_score': 'technical',
+        'swing_signal': 'technical',
+        'insider_signal': 'insider',
+        'congressional_signal': 'congressional',
+        'options_flow': 'options',
+        'short_squeeze_score': 'squeeze',
+        'sentiment_score': 'sentiment',
+        'social_score': 'social',
+    }
+
+    for signal_name, strength in signals.items():
+        if signal_name in signal_type_map and strength > 0.3:
+            log_signal_outcome(
+                signal_type=signal_type_map[signal_name],
+                symbol=symbol,
+                direction=direction,
+                signal_strength=strength,
+                acted_on=acted_on,
+            )
+
+# Usage:
+signals = {
+    'composite_score': 0.65,
+    'swing_signal': 0.72,
+    'insider_signal': 0.65,
+}
+log_decision_signals("SLB", "bullish", signals, acted_on=True)
 ```
 
 ## Decision Rules

@@ -340,6 +340,54 @@ ARTIFACTS:
 4. **Data Unavailable**: Note in report, use cached if available
 5. **Track Failure**: Report partial results from successful track
 
+## Agent Activity Logging
+
+**IMPORTANT:** Log agent activity for monitoring and improvement tracking.
+
+### At Session Start
+```python
+from src.monitoring import log_agent_start, log_agent_complete
+
+# Log when orchestration starts
+orchestrator_id = log_agent_start("orchestrator", "Full research cycle: semiconductors + tech")
+```
+
+### When Spawning Subagents
+```python
+# Track spawned agents
+from src.monitoring import log_agent_start
+
+# Log each subagent spawn
+macro_id = log_agent_start("macro_research", "Macro factors for semiconductors")
+news_id = log_agent_start("news_analyst", "Recent semiconductor news")
+research_id = log_agent_start("research", "Strategy testing: NVDA, AMD")
+```
+
+### When Agents Complete
+```python
+from src.monitoring import log_agent_complete
+
+# Log agent completion with summary
+log_agent_complete(macro_id, summary="Found 3 macro factors: Fed policy, China tensions, capex cycle", success=True)
+log_agent_complete(news_id, summary="5 material news items: NVDA earnings beat, AMD guidance", success=True)
+log_agent_complete(research_id, summary="Tested 15 strategies, 2 significant (Sharpe > 1.5)", success=True)
+
+# Log orchestrator completion
+log_agent_complete(orchestrator_id, summary="3-track research complete, 2 strategies for review", success=True)
+```
+
+### Quick Logging Helper
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.monitoring import log_agent_start, log_agent_complete
+
+# One-liner for quick agent logging
+agent_id = log_agent_start("orchestrator", "Quick research: XLE thesis")
+# ... do work ...
+log_agent_complete(agent_id, summary="Found 3 opportunities", success=True)
+EOF
+```
+
 ## Key Principles
 
 1. **Parallel First**: Spawn independent agents in parallel
@@ -347,3 +395,4 @@ ARTIFACTS:
 3. **PDT Compliance**: Every strategy result includes holding period
 4. **Human Review**: Promotions require explicit approval
 5. **No Duplication**: Check knowledge base before testing
+6. **Log Activity**: Track all agent spawns and completions for monitoring

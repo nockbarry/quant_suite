@@ -95,3 +95,21 @@ NEXT LEADS:
 ARTIFACTS:
 - /path/to/report.json
 ```
+
+## Agent Activity Logging
+
+**IMPORTANT:** Log your activity for monitoring and tracking.
+
+### At Start
+```python
+from src.monitoring import log_agent_start
+agent_id = log_agent_start("research", "Strategy testing: NVDA, AMD bollinger_reversal")
+```
+
+### At Completion
+```python
+from src.monitoring import log_agent_complete
+log_agent_complete(agent_id,
+    summary="Tested 15 strategies, 2 significant (Sharpe > 1.5): bollinger_reversal/NVDA (2.93), momentum/AMD (1.78)",
+    success=True
+)

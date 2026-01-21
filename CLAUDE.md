@@ -713,6 +713,28 @@ Key patterns (see file for full details):
 | data-acquisition-agent | Free data acquisition |
 | orchestrator-agent | Multi-agent coordination |
 
+### Agent Activity Logging
+
+**Log agent activity for monitoring and improvement tracking:**
+
+```python
+from src.monitoring import log_agent_start, log_agent_complete
+
+# When starting agent work
+agent_id = log_agent_start("research", "Strategy testing: NVDA bollinger_reversal")
+
+# When completing
+log_agent_complete(agent_id,
+    summary="Tested 15 strategies, 2 significant (Sharpe > 1.5)",
+    success=True
+)
+```
+
+View logged activity:
+```bash
+tail -20 ~/quant_results/logs/agent_activity.jsonl
+```
+
 ---
 
 ## Key File Locations

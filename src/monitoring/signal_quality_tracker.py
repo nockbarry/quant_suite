@@ -358,3 +358,74 @@ def log_signal_outcome(
         acted_on=acted_on,
         **kwargs,
     )
+
+
+def log_decision_signals(
+    symbol: str,
+    direction: str,
+    signals: dict[str, float],
+    acted_on: bool = True,
+    threshold: float = 0.3,
+) -> list[SignalOutcome]:
+    """
+    Log all signals that influenced a trading decision.
+
+    Args:
+        symbol: Stock symbol
+        direction: "bullish" or "bearish"
+        signals: Dict mapping signal names to strengths (0-1)
+        acted_on: Whether we traded on these signals
+        threshold: Minimum strength to log (default 0.3)
+
+    Returns:
+        List of logged SignalOutcome objects
+
+    Example:
+        signals = {
+            'composite_score': 0.65,
+            'swing_signal': 0.72,
+            'insider_signal': 0.65,
+        }
+        log_decision_signals("SLB", "bullish", signals)
+    """
+    signal_type_map = {
+        'composite_score': 'technical',
+        'swing_signal': 'technical',
+        'momentum_signal': 'technical',
+        'mean_reversion_signal': 'technical',
+        'insider_signal': 'insider',
+        'insider_score': 'insider',
+        'congressional_signal': 'congressional',
+        'congressional_score': 'congressional',
+        'options_flow': 'options',
+        'options_signal': 'options',
+        'short_squeeze_score': 'squeeze',
+        'squeeze_signal': 'squeeze',
+        'sentiment_score': 'sentiment',
+        'sentiment_signal': 'sentiment',
+        'social_score': 'social',
+        'social_signal': 'social',
+        'technical_bias': 'technical',
+    }
+
+    outcomes = []
+    tracker = get_signal_quality_tracker()
+
+    for signal_name, strength in signals.items():
+        # Skip if below threshold or not a recognized signal
+        if signal_name not in signal_type_map:
+            continue
+        if not isinstance(strength, (int, float)) or strength < threshold:
+            continue
+
+        signal_type = signal_type_map[signal_name]
+        outcome = tracker.log_outcome(
+            signal_type=signal_type,
+            symbol=symbol,
+            direction=direction,
+            signal_strength=float(strength),
+            acted_on=acted_on,
+        )
+        outcomes.append(outcome)
+
+    return outcomes

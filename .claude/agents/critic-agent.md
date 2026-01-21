@@ -82,5 +82,22 @@ RECOMMENDATION:
 Detailed recommendation with specific concerns
 ```
 
+## Agent Activity Logging
+
+**IMPORTANT:** Log your activity for monitoring and tracking.
+
+```python
+from src.monitoring import log_agent_start, log_agent_complete
+
+# At start
+agent_id = log_agent_start("critic", "Validating bollinger_reversal on NVDA")
+
+# At completion
+log_agent_complete(agent_id,
+    summary="APPROVE: p=0.007, OOS/IS=0.62, survives 10bps",
+    success=True
+)
+```
+
 ## Key Principle
 When in doubt, REJECT. Better to miss a good strategy than deploy a bad one.
