@@ -45,6 +45,21 @@ from .paper_positions import (
     PaperPositionTracker,
     track_thesis_paper,
 )
+from .signal_provenance import (
+    SignalProvenance,
+    SignalProvenanceTracker,
+    SignalSource,
+    SignalOutcome,
+    ConfidenceUpdate,
+    get_provenance_tracker,
+    create_signal_provenance,
+    link_signal_to_thesis,
+)
+from .thesis_suggester import (
+    ThesisSuggestion,
+    ThesisSuggester,
+    get_thesis_suggester,
+)
 
 __all__ = [
     # Thesis
@@ -70,4 +85,17 @@ __all__ = [
     "CompanyBrief",
     "SectorContext",
     "KnowledgeBase",
+    # Signal Provenance
+    "SignalProvenance",
+    "SignalProvenanceTracker",
+    "SignalSource",
+    "SignalOutcome",
+    "ConfidenceUpdate",
+    "get_provenance_tracker",
+    "create_signal_provenance",
+    "link_signal_to_thesis",
+    # Thesis Suggester
+    "ThesisSuggestion",
+    "ThesisSuggester",
+    "get_thesis_suggester",
 ]

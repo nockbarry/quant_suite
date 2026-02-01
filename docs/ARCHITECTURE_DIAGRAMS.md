@@ -111,12 +111,14 @@ src/synthesis/
 └── daemon.py          ──► LiveDaemon - continuous state updates
 ```
 
-### Knowledge Layer (`src/knowledge/`)
+### Knowledge Layer (`src/knowledge/`) - Updated 2026-02-01
 ```
 src/knowledge/
 ├── __init__.py
 ├── thesis.py              ──► Thesis, ThesisTracker, Signpost
-├── thesis_performance.py  ──► ThesisPerformanceTracker, ThesisPerformanceMetrics (Added 2026-01-11)
+├── thesis_performance.py  ──► ThesisPerformanceTracker, ThesisPerformanceMetrics
+├── signal_provenance.py   ──► NEW: Track signals from discovery to outcome
+├── thesis_suggester.py    ──► NEW: Auto-suggest theses from converging signals
 ├── learnings.py           ──► Learning, LearningLog
 └── base.py                ──► KnowledgeBase, CompanyBrief, SectorContext
 ```
@@ -180,7 +182,13 @@ src/data/
 │   │   ├── expanded_news.py         ──► 20+ RSS feeds (WSJ, CNBC, FT, Fed, SEC)
 │   │   ├── legal_tracker.py         ──► SCOTUS, SEC, FTC, DOJ tracking
 │   │   ├── geopolitical.py          ──► Regional event monitoring (5 regions)
-│   │   └── news_sentiment.py        ──► Keyword sentiment scoring
+│   │   ├── news_sentiment.py        ──► Keyword sentiment scoring
+│   │   │
+│   │   │  # Social Signal Tracking (Added 2026-02-01)
+│   │   │  # Reason: Catch early alpha from social platforms, track signal provenance
+│   │   ├── wsb_tracker.py           ──► NEW: Reddit WSB scanning with signal vintage
+│   │   ├── stocktwits.py            ──► NEW: Stocktwits API integration
+│   │   └── social_timeseries.py     ──► NEW: SQLite time-series for social mentions
 │   │
 │   ├── collection_daemon.py         ──► Orchestrates all free data sources (Added 2026-01-10)
 │   │
@@ -417,11 +425,13 @@ src/synthesis/
 └── ... (existing files)
 ```
 
-### Monitoring Layer (`src/monitoring/`) - NEW (Added 2026-01-20)
+### Monitoring Layer (`src/monitoring/`) - Updated 2026-02-01
 ```
 src/monitoring/
 ├── __init__.py
 ├── unified_dashboard.py       ──► Full system status + signals + convergences
+├── swarm_monitor.py           ──► NEW: Track agent swarms, detect signal convergences
+├── swarm_visualizer.py        ──► NEW: Timeline + heatmap displays for swarm activity
 ├── operator_loop.py           ──► Persistent monitoring check cycles
 ├── data_freshness_tracker.py  ──► Track data source status WITH content summaries
 ├── signal_summary.py          ──► Aggregate all signals into actionable items

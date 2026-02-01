@@ -144,6 +144,9 @@ PYTHONPATH=. python3 scripts/quick_trade.py close GLD260206C00409000
 ```bash
 # Daily Trading Workflow
 /morning-briefing    # Pre-market research and briefing
+/operator-session    # Persistent monitoring with configurable intervals
+/swarm-operator      # Orchestrate multi-agent swarms
+/social-signals      # Check WSB, Stocktwits for early alpha signals
 /trade-decision      # Generate trade decisions with adversarial check
 /execute-trades      # Execute with human approval
 /eod-review          # End-of-day learning extraction
@@ -245,7 +248,8 @@ for conv in convergences:
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | **ComprehensiveDashboard** | `src/monitoring/comprehensive_dashboard.py` | Full system view with Claude activity |
-| **SwarmMonitor** | `src/monitoring/swarm_monitor.py` | **NEW** - Track agent swarms, detect signal convergences |
+| **SwarmMonitor** | `src/monitoring/swarm_monitor.py` | Track agent swarms, detect signal convergences |
+| **SwarmVisualizer** | `src/monitoring/swarm_visualizer.py` | **NEW** - Timeline + heatmap displays for swarm activity |
 | **AgentActivityMonitor** | `src/monitoring/agent_monitor.py` | Track Claude sessions and agents |
 | **OperatorLoop** | `src/monitoring/operator_loop.py` | Check cycle logic for operator mode |
 | **DataFreshnessTracker** | `src/monitoring/data_freshness_tracker.py` | Data source health |
@@ -274,6 +278,8 @@ print(f"Theme: {status.current_theme.primary_theme}")
 |-----------|----------|---------|
 | **ThesisTracker** | `src/knowledge/thesis.py` | Investment theses with signposts |
 | **ThesisPerformanceTracker** | `src/knowledge/thesis_performance.py` | P&L attribution by thesis |
+| **SignalProvenanceTracker** | `src/knowledge/signal_provenance.py` | **NEW** - Track signals from discovery to outcome |
+| **ThesisSuggester** | `src/knowledge/thesis_suggester.py` | **NEW** - Auto-suggest theses from converging signals |
 | **LearningLog** | `src/knowledge/learnings.py` | Extracted trade learnings |
 | **KnowledgeBase** | `src/knowledge/base.py` | Company/sector understanding |
 
@@ -662,14 +668,15 @@ Key patterns (see file for full details):
 
 ---
 
-## Claude Code Skills (14)
+## Claude Code Skills (15)
 
 ### Daily Trading
 | Skill | Purpose |
 |-------|---------|
 | `/morning-briefing` | Read unified state, research overnight news |
 | `/operator-session` | Persistent monitoring with configurable intervals |
-| `/swarm-operator` | **NEW** - Orchestrate multi-agent swarms (trading, research, modeling) |
+| `/swarm-operator` | Orchestrate multi-agent swarms (trading, research, modeling) |
+| `/social-signals` | **NEW** - Check WSB, Stocktwits for early alpha signals |
 | `/trade-decision` | Synthesize + adversarial + thesis linking |
 | `/execute-trades` | Execute with human approval |
 | `/eod-review` | Extract learnings, update thesis |
@@ -795,6 +802,7 @@ All outputs in configurable results directory (default: `~/quant_results`):
 | Category | Key Sources |
 |----------|-------------|
 | **Core** | Congressional trades, Insider trading, Options flow, Social sentiment |
+| **Social (NEW)** | WSB Tracker (Reddit), Stocktwits, Social Time-Series DB |
 | **Market Regime** | VIX structure, Put/call ratios, Finviz screens, Breadth |
 | **Sentiment** | AAII survey, Newsletter sentiment, COT report, Expert sentiment |
 | **Economic** | Earnings calendar, Economic releases, Fed futures, Treasury |
@@ -805,6 +813,33 @@ All outputs in configurable results directory (default: `~/quant_results`):
 | **Legal** | SCOTUS cases, SEC enforcement, FTC, DOJ tracking |
 
 All sources in `src/data/sources/alternative/`
+
+### Social Signal Tracking (NEW)
+
+```python
+# Scan WSB for early signals
+from src.data.sources.alternative.wsb_tracker import get_wsb_tracker
+import asyncio
+
+tracker = get_wsb_tracker()
+mentions = asyncio.run(tracker.scan_recent_posts())
+early_signals = tracker.get_early_signals()  # < 7 days, growing momentum
+
+# Track signal provenance
+from src.knowledge.signal_provenance import create_signal_provenance
+signal = create_signal_provenance(
+    source="wsb",
+    symbol="WDC",
+    confidence=0.7,
+    direction="bullish",
+    description="SanDisk spin-off DD gaining traction",
+)
+
+# Auto-suggest theses from converging signals
+from src.knowledge.thesis_suggester import get_thesis_suggester
+suggester = get_thesis_suggester()
+suggestions = suggester.generate_suggestions()  # 3+ signals = suggestion
+```
 
 ---
 

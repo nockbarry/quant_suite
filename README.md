@@ -208,7 +208,50 @@ claude /eod-review
 ├── decisions/                  # Trading decisions with reasoning
 ├── briefings/                  # Morning briefings
 ├── eod_reviews/               # End-of-day reviews
-└── ...
+├── social/                     # Social signal tracking
+│   ├── wsb.db                 # WSB mention database
+│   ├── wsb_signals.json       # Processed WSB signals
+│   └── social_timeseries.db   # Cross-platform time-series
+├── signal_provenance/         # Signal tracking from discovery to outcome
+└── suggestions/               # Auto-generated thesis suggestions
+```
+
+---
+
+## Swarm Intelligence
+
+Project Athena implements **swarm intelligence** principles where specialized agents collaborate via shared state:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     SWARM ARCHITECTURE                               │
+│                                                                      │
+│  Trading Swarm        Research Swarm       Modeling Swarm           │
+│  ├─ critic-agent      ├─ research-agent    ├─ regime-detector       │
+│  ├─ monitor-agent     ├─ alpha-discovery   ├─ hypothesis-gen        │
+│  └─ news-analyst      └─ brainstorm        └─ text-research         │
+│                                                                      │
+│         ▼                    ▼                    ▼                  │
+│    ┌───────────────────────────────────────────────────────┐        │
+│    │           ~/quant_results/live/signals/               │        │
+│    │              (stigmergic communication)               │        │
+│    └───────────────────────────────────────────────────────┘        │
+│                           ▼                                          │
+│    ┌───────────────────────────────────────────────────────┐        │
+│    │              CONVERGENCE DETECTION                     │        │
+│    │         3+ agents agree → high confidence signal       │        │
+│    └───────────────────────────────────────────────────────┘        │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Swarm Execution Patterns:**
+- **Morning Swarm**: Parallel spawn of regime-detector, news-analyst, monitor
+- **Research Swarm**: Sequential pipeline from brainstorm → hypothesis → research
+- **Crisis Swarm**: All agents converge on risk assessment
+
+**Swarm Visualizer:**
+```bash
+python -m src.monitoring.swarm_visualizer --watch
 ```
 
 ---
@@ -227,6 +270,8 @@ claude /eod-review
 |-----------|---------|
 | `ThesisTracker` | Investment theses with signposts |
 | `ThesisPerformanceTracker` | P&L attribution by thesis |
+| `SignalProvenanceTracker` | Track signals from discovery to outcome |
+| `ThesisSuggester` | Auto-suggest theses from converging signals |
 | `PaperPositionTracker` | Track thesis performance without investing |
 | `LearningLog` | Extracted trade learnings |
 | `KnowledgeBase` | Company/sector understanding |
@@ -264,6 +309,8 @@ claude /eod-review
 | Component | Purpose |
 |-----------|---------|
 | `UnifiedDashboard` | Full system status with all data sources |
+| `SwarmMonitor` | Track agent swarms, detect signal convergences |
+| `SwarmVisualizer` | Timeline + heatmap displays for swarm activity |
 | `OperatorLoop` | Persistent monitoring check cycles |
 | `DataFreshnessTracker` | Track data source status + content summaries |
 | `SignalAggregator` | Aggregate signals + detect convergences |
@@ -272,13 +319,15 @@ claude /eod-review
 
 ---
 
-## Claude Code Skills (13)
+## Claude Code Skills (15)
 
 ### Daily Trading
 | Skill | Purpose |
 |-------|---------|
 | `/morning-briefing` | Read unified state, research overnight news |
 | `/operator-session` | Persistent monitoring mode with configurable intervals |
+| `/swarm-operator` | Orchestrate multi-agent swarms (trading, research, modeling) |
+| `/social-signals` | Check WSB, Stocktwits for early alpha signals |
 | `/trade-decision` | Synthesize + adversarial analysis + thesis linking |
 | `/execute-trades` | Execute with human approval |
 | `/eod-review` | Extract learnings, update thesis conviction |
@@ -366,6 +415,7 @@ Before production:
 | Category | Sources |
 |----------|---------|
 | **Core Alternative** | Congressional Trades, Insider Trading, Options Flow, Expert Sentiment, Prediction Markets, Social Sentiment |
+| **Social Signals** | WSB Tracker (Reddit), Stocktwits, Social Time-Series DB with signal "vintage" tracking |
 | **Market Regime** | VIX Term Structure, Put/Call Ratios, NYSE Breadth, Finviz Screens |
 | **Sentiment Extremes** | AAII Survey, Newsletter Sentiment, Commitment of Traders (COT) |
 | **Economic Calendar** | Earnings Calendar, Economic Releases, Fed Futures, Treasury Auctions |
