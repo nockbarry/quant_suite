@@ -142,6 +142,44 @@ from .signal_quality_tracker import (
     log_decision_signals,
 )
 
+from .action_queue import (
+    ActionQueue,
+    ActionType,
+    ActionPriority,
+    QueuedAction,
+    get_action_queue,
+    queue_signpost_trigger,
+    queue_convergence,
+    queue_stop_loss,
+    queue_drawdown_alert,
+    queue_rule_triggered,
+)
+
+from .autonomous_operator import (
+    AutonomousOperator,
+    ExecutionAuthority,
+    SafetyRails,
+    SessionState,
+    TradeProposal,
+    TradeType,
+    ExecutionResult,
+    get_autonomous_operator,
+    start_autonomous_session,
+)
+
+from .swarm_monitor import (
+    SwarmMonitor,
+    SwarmType,
+    AgentStatus,
+    AgentRun,
+    SwarmSignal,
+    SignalConvergence,
+    SwarmCycle,
+    get_swarm_monitor,
+    log_agent_signal,
+    get_convergences,
+)
+
 
 async def check_all() -> dict:
     """Quick check of all monitoring systems."""
@@ -247,4 +285,36 @@ __all__ = [
     "get_signal_quality_tracker",
     "log_signal_outcome",
     "log_decision_signals",
+    # Action queue
+    "ActionQueue",
+    "ActionType",
+    "ActionPriority",
+    "QueuedAction",
+    "get_action_queue",
+    "queue_signpost_trigger",
+    "queue_convergence",
+    "queue_stop_loss",
+    "queue_drawdown_alert",
+    "queue_rule_triggered",
+    # Autonomous operator
+    "AutonomousOperator",
+    "ExecutionAuthority",
+    "SafetyRails",
+    "SessionState",
+    "TradeProposal",
+    "TradeType",
+    "ExecutionResult",
+    "get_autonomous_operator",
+    "start_autonomous_session",
+    # Swarm monitor
+    "SwarmMonitor",
+    "SwarmType",
+    "AgentStatus",
+    "AgentRun",
+    "SwarmSignal",
+    "SignalConvergence",
+    "SwarmCycle",
+    "get_swarm_monitor",
+    "log_agent_signal",
+    "get_convergences",
 ]

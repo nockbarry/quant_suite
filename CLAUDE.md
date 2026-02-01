@@ -245,6 +245,7 @@ for conv in convergences:
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | **ComprehensiveDashboard** | `src/monitoring/comprehensive_dashboard.py` | Full system view with Claude activity |
+| **SwarmMonitor** | `src/monitoring/swarm_monitor.py` | **NEW** - Track agent swarms, detect signal convergences |
 | **AgentActivityMonitor** | `src/monitoring/agent_monitor.py` | Track Claude sessions and agents |
 | **OperatorLoop** | `src/monitoring/operator_loop.py` | Check cycle logic for operator mode |
 | **DataFreshnessTracker** | `src/monitoring/data_freshness_tracker.py` | Data source health |
@@ -661,13 +662,14 @@ Key patterns (see file for full details):
 
 ---
 
-## Claude Code Skills (13)
+## Claude Code Skills (14)
 
 ### Daily Trading
 | Skill | Purpose |
 |-------|---------|
 | `/morning-briefing` | Read unified state, research overnight news |
-| `/operator-session` | **NEW** - Persistent monitoring with configurable intervals |
+| `/operator-session` | Persistent monitoring with configurable intervals |
+| `/swarm-operator` | **NEW** - Orchestrate multi-agent swarms (trading, research, modeling) |
 | `/trade-decision` | Synthesize + adversarial + thesis linking |
 | `/execute-trades` | Execute with human approval |
 | `/eod-review` | Extract learnings, update thesis |
@@ -925,6 +927,7 @@ crontab -l | grep QUANT_SUITE_CRON
 | **Trade daily** | `docs/WORKFLOW.md` - Daily trading workflow |
 | **Create a thesis** | `docs/TRADING_PATTERNS.md` - Meta-learnings & vehicle enumeration |
 | **Understand the system** | `docs/ARCHITECTURE_DIAGRAMS.md` - Full system architecture |
+| **Run autonomous trading** | `docs/AUTONOMOUS_TRADING_ARCHITECTURE.md` - Swarm intelligence & agent frameworks |
 | **Find data sources** | `docs/FREE_DATA_SOURCES.md` - 40+ implemented sources |
 | **See hedge fund features** | `docs/ARCHITECTURE_DIAGRAMS.md` Section 14 - HF expansion modules |
 | **Identify opportunities** | `docs/ALTERNATIVE_DATA_OPPORTUNITIES.md` - Missed opportunities analysis |
@@ -933,6 +936,7 @@ crontab -l | grep QUANT_SUITE_CRON
 
 | Document | Purpose |
 |----------|---------|
+| `docs/AUTONOMOUS_TRADING_ARCHITECTURE.md` | Swarm intelligence, agent frameworks, cost analysis |
 | `docs/EVALUATION_API.md` | Backtesting, validation, metrics |
 | `docs/ALPHA_DISCOVERY.md` | Alternative data, market scanning |
 | `docs/TEXT_RESEARCH.md` | Text research, embeddings |
