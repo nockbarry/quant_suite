@@ -184,6 +184,10 @@ from .swarm_visualizer import (
     SwarmVisualizer,
 )
 
+from .mission_control import (
+    MissionControl,
+)
+
 
 async def check_all() -> dict:
     """Quick check of all monitoring systems."""
@@ -323,4 +327,6 @@ __all__ = [
     "get_convergences",
     # Swarm visualizer
     "SwarmVisualizer",
+    # Mission control
+    "MissionControl",
 ]
