@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-Project Athena - Command Center
+Project Athena - Operations Console
 
-Dense, information-rich trading dashboard.
+Real-time view of the autonomous trading system in action.
+Watch agents work, signals emerge, and decisions flow.
+
 Run: streamlit run scripts/athena_dashboard.py
 """
 
@@ -10,179 +12,182 @@ import json
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 import time
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 # =============================================================================
-# CONFIG
+# CONFIG - Minimal, terminal-like
 # =============================================================================
 
 st.set_page_config(
-    page_title="Athena",
+    page_title="Athena Ops",
     page_icon="🏛️",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-# Compact dark theme
 st.markdown("""
 <style>
-    .stApp { background: #0d1117; }
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap');
+
+    .stApp {
+        background: #0a0a0a;
+        font-family: 'JetBrains Mono', 'Courier New', monospace;
+    }
+
     #MainMenu, footer, header { visibility: hidden; }
+    .block-container { padding: 0.5rem; max-width: 100%; }
 
-    /* Tighter spacing */
-    .block-container { padding: 1rem 1rem 0 1rem; max-width: 100%; }
-    div[data-testid="stVerticalBlock"] > div { gap: 0.25rem; }
+    /* Terminal text */
+    .terminal {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        line-height: 1.4;
+        color: #c9d1d9;
+    }
 
-    /* Compact metrics */
-    [data-testid="stMetricValue"] { font-size: 1.1rem !important; }
-    [data-testid="stMetricLabel"] { font-size: 0.7rem !important; }
-    [data-testid="stMetricDelta"] { font-size: 0.7rem !important; }
+    .terminal-header {
+        color: #58a6ff;
+        border-bottom: 1px solid #30363d;
+        padding-bottom: 0.25rem;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
 
-    /* Dense tables */
-    .dataframe { font-size: 0.75rem !important; }
-    .dataframe td, .dataframe th { padding: 0.2rem 0.4rem !important; }
+    .terminal-dim { color: #484f58; }
+    .terminal-green { color: #3fb950; }
+    .terminal-red { color: #f85149; }
+    .terminal-yellow { color: #d29922; }
+    .terminal-blue { color: #58a6ff; }
+    .terminal-purple { color: #a371f7; }
+    .terminal-orange { color: #f0883e; }
 
-    /* Compact tabs */
-    .stTabs [data-baseweb="tab-list"] { gap: 0; background: #161b22; }
-    .stTabs [data-baseweb="tab"] { padding: 0.4rem 1rem; font-size: 0.8rem; }
-
-    /* Info boxes */
-    .info-box {
-        background: #161b22;
+    /* Panel styling */
+    .panel {
+        background: #0d1117;
         border: 1px solid #30363d;
         border-radius: 4px;
-        padding: 0.5rem;
-        margin: 0.25rem 0;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        font-family: 'JetBrains Mono', monospace;
         font-size: 0.8rem;
     }
-    .info-box-header {
+
+    .panel-title {
         color: #8b949e;
         font-size: 0.65rem;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 0.25rem;
+        letter-spacing: 1px;
+        margin-bottom: 0.5rem;
+        border-bottom: 1px solid #21262d;
+        padding-bottom: 0.25rem;
     }
 
-    /* Signals */
-    .signal-row {
+    /* Activity feed */
+    .feed-item {
+        padding: 0.3rem 0;
+        border-bottom: 1px solid #161b22;
+        display: flex;
+        gap: 0.75rem;
+    }
+    .feed-time { color: #484f58; width: 50px; }
+    .feed-type { width: 100px; }
+    .feed-content { color: #8b949e; flex: 1; }
+
+    /* Agent status */
+    .agent-row {
         display: flex;
         justify-content: space-between;
-        padding: 0.3rem 0;
-        border-bottom: 1px solid #21262d;
-        font-size: 0.8rem;
+        padding: 0.25rem 0;
+        border-bottom: 1px solid #161b22;
     }
+    .agent-active { color: #3fb950; }
+    .agent-idle { color: #484f58; }
+
+    /* Signal rows */
     .signal-bull { color: #3fb950; }
     .signal-bear { color: #f85149; }
     .signal-neutral { color: #8b949e; }
 
-    /* Header bar */
-    .header-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: #161b22;
-        padding: 0.5rem 1rem;
-        border-radius: 4px;
-        margin-bottom: 0.5rem;
-        border: 1px solid #30363d;
-    }
-    .header-title {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #58a6ff;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .header-metrics {
-        display: flex;
-        gap: 2rem;
-        font-size: 0.85rem;
-    }
-    .header-metric {
-        text-align: right;
-    }
-    .header-metric-label { color: #8b949e; font-size: 0.65rem; }
-    .header-metric-value { font-weight: 600; }
-    .positive { color: #3fb950; }
-    .negative { color: #f85149; }
-
-    /* Section headers */
-    .section-header {
-        font-size: 0.7rem;
-        color: #8b949e;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        padding: 0.5rem 0 0.25rem 0;
-        border-bottom: 1px solid #21262d;
-        margin-bottom: 0.25rem;
-    }
-
     /* Convergence highlight */
-    .convergence-item {
-        background: #1c2128;
-        border-left: 3px solid #f0883e;
+    .convergence {
+        background: #1c1c0a;
+        border-left: 2px solid #f0883e;
         padding: 0.4rem 0.6rem;
         margin: 0.25rem 0;
-        font-size: 0.8rem;
     }
 
-    /* Status indicators */
-    .status-ok { color: #3fb950; }
-    .status-warn { color: #d29922; }
-    .status-error { color: #f85149; }
-
-    /* Scrollable containers */
-    .scroll-container {
-        max-height: 300px;
-        overflow-y: auto;
+    /* Status bar */
+    .status-bar {
+        background: #161b22;
+        border: 1px solid #30363d;
+        padding: 0.5rem 1rem;
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        margin-bottom: 0.5rem;
+        border-radius: 4px;
     }
+    .status-item { display: flex; gap: 0.5rem; }
+    .status-label { color: #8b949e; }
+    .status-value { color: #c9d1d9; }
+
+    /* ASCII box drawing */
+    .ascii-box {
+        border: 1px solid #30363d;
+        background: #0d1117;
+        padding: 0.5rem;
+        white-space: pre;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        overflow-x: auto;
+    }
+
+    /* Hide streamlit defaults */
+    .stDataFrame { font-size: 0.75rem !important; }
+    div[data-testid="stVerticalBlock"] > div { gap: 0.25rem; }
 </style>
 """, unsafe_allow_html=True)
 
 # =============================================================================
-# DATA LOADING
+# DATA
 # =============================================================================
 
 RESULTS_DIR = Path.home() / "quant_results"
 
-
 def load_state():
-    """Load unified state."""
     f = RESULTS_DIR / "live" / "state.json"
-    if f.exists():
-        with open(f) as file:
-            return json.load(file)
-    return {}
+    return json.load(open(f)) if f.exists() else {}
 
+def load_operator_log():
+    f = RESULTS_DIR / "logs" / "operator_log.jsonl"
+    if not f.exists():
+        return []
+    entries = []
+    for line in open(f):
+        try:
+            entries.append(json.loads(line.strip()))
+        except:
+            pass
+    return entries[-100:]
 
-def load_theses():
-    """Load active theses."""
-    import yaml
-    theses = []
-    d = RESULTS_DIR / "theses"
-    if d.exists():
-        for f in d.glob("*.yaml"):
-            try:
-                with open(f) as file:
-                    t = yaml.safe_load(file)
-                    if t and t.get("status") == "active":
-                        theses.append(t)
-            except:
-                pass
-    return theses
-
+def load_agent_activity():
+    f = RESULTS_DIR / "logs" / "agent_activity.jsonl"
+    if not f.exists():
+        return []
+    entries = []
+    for line in open(f):
+        try:
+            entries.append(json.loads(line.strip()))
+        except:
+            pass
+    return entries[-100:]
 
 def load_convergences():
-    """Load signal convergences."""
     try:
         from src.monitoring.swarm_monitor import get_swarm_monitor
         monitor = get_swarm_monitor()
@@ -199,62 +204,358 @@ def load_convergences():
     except:
         return []
 
+def load_swarm_signals():
+    try:
+        from src.monitoring.swarm_monitor import get_swarm_monitor
+        monitor = get_swarm_monitor()
+        return monitor.get_recent_signals(max_age_hours=24)
+    except:
+        return []
 
 def load_social():
-    """Load social signals."""
     f = RESULTS_DIR / "social" / "wsb_signals.json"
-    if f.exists():
-        with open(f) as file:
-            return json.load(file)
-    return {"signals": []}
-
+    return json.load(open(f)) if f.exists() else {"signals": []}
 
 def load_suggestions():
-    """Load thesis suggestions."""
     f = RESULTS_DIR / "suggestions" / "thesis_suggestions.json"
     if f.exists():
-        with open(f) as file:
-            data = json.load(file)
-            return [s for s in data.get("suggestions", []) if s.get("status") == "pending"]
+        data = json.load(open(f))
+        return [s for s in data.get("suggestions", []) if s.get("status") == "pending"]
     return []
 
-
 def load_provenance():
-    """Load signal provenance."""
     signals = []
     d = RESULTS_DIR / "signal_provenance"
     if d.exists():
         for f in d.glob("*.json"):
             try:
-                with open(f) as file:
-                    signals.extend(json.load(file).get("signals", []))
+                signals.extend(json.load(open(f)).get("signals", []))
             except:
                 pass
     return signals
 
+def load_theses():
+    import yaml
+    theses = []
+    d = RESULTS_DIR / "theses"
+    if d.exists():
+        for f in d.glob("*.yaml"):
+            try:
+                t = yaml.safe_load(open(f))
+                if t and t.get("status") == "active":
+                    theses.append(t)
+            except:
+                pass
+    return theses
 
-def load_activity():
-    """Load recent activity."""
-    f = RESULTS_DIR / "logs" / "operator_log.jsonl"
-    entries = []
-    if f.exists():
-        with open(f) as file:
-            for line in file:
-                try:
-                    entries.append(json.loads(line.strip()))
-                except:
-                    pass
-    return entries[-50:]
+# =============================================================================
+# RENDER FUNCTIONS
+# =============================================================================
+
+def render_status_bar(state, convergences, suggestions):
+    portfolio = state.get("portfolio", {})
+    equity = portfolio.get("equity", 0)
+    pnl = portfolio.get("day_pnl", 0)
+    pnl_pct = portfolio.get("day_pnl_pct", 0)
+    pnl_class = "terminal-green" if pnl >= 0 else "terminal-red"
+
+    regime = state.get("market", {}).get("regime", "?").upper()
+    positions = len(state.get("positions", []))
+
+    st.markdown(f"""
+    <div class="status-bar">
+        <div class="status-item">
+            <span class="status-label">EQUITY</span>
+            <span class="status-value">${equity:,.0f}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">DAY</span>
+            <span class="{pnl_class}">${pnl:+,.0f} ({pnl_pct:+.2f}%)</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">REGIME</span>
+            <span class="terminal-blue">{regime}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">POS</span>
+            <span class="status-value">{positions}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">CONV</span>
+            <span class="terminal-orange">{len(convergences)}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">SUGG</span>
+            <span class="terminal-purple">{len(suggestions)}</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">TIME</span>
+            <span class="terminal-dim">{datetime.now().strftime("%H:%M:%S")}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
-def load_alerts():
-    """Load today's alerts."""
-    today = datetime.now().strftime("%Y%m%d")
-    f = RESULTS_DIR / "alerts" / f"alerts_{today}.json"
-    if f.exists():
-        with open(f) as file:
-            return json.load(file)
-    return []
+def render_agent_activity(activity):
+    """Render agent activity panel."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_activity = [a for a in activity if a.get("timestamp", "").startswith(today)]
+
+    # Count by type
+    running = []
+    completed = []
+    for a in today_activity:
+        if a.get("type") == "agent_start":
+            running.append(a)
+        elif a.get("type") == "agent_complete":
+            completed.append(a)
+
+    # Get currently running (started but not completed)
+    completed_ids = {a.get("agent_id") for a in completed}
+    active = [a for a in running if a.get("agent_id") not in completed_ids]
+
+    html = '<div class="panel"><div class="panel-title">🤖 AGENT ACTIVITY</div>'
+
+    if active:
+        html += '<div style="margin-bottom: 0.5rem;">'
+        for a in active[-5:]:
+            name = a.get("agent_name", "?").replace("-agent", "")
+            task = a.get("task", "")[:30]
+            html += f'<div class="agent-row"><span class="agent-active">● {name}</span><span class="terminal-dim">{task}</span></div>'
+        html += '</div>'
+    else:
+        html += '<div class="terminal-dim" style="margin-bottom: 0.5rem;">No agents running</div>'
+
+    # Recent completions
+    html += '<div class="terminal-dim" style="font-size: 0.7rem; margin-top: 0.5rem;">RECENT:</div>'
+    for a in list(reversed(completed))[-5:]:
+        name = a.get("agent_name", "?").replace("-agent", "")
+        ts = a.get("timestamp", "")[-8:-3] if a.get("timestamp") else ""
+        html += f'<div class="feed-item"><span class="feed-time">{ts}</span><span class="terminal-green">✓ {name}</span></div>'
+
+    if not completed:
+        html += '<div class="terminal-dim">No completions today</div>'
+
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_convergences(convergences):
+    """Render signal convergences."""
+    html = '<div class="panel"><div class="panel-title">⚡ CONVERGENCES</div>'
+
+    if convergences:
+        for c in convergences[:6]:
+            dir_class = "signal-bull" if c["direction"] == "bullish" else "signal-bear" if c["direction"] == "bearish" else "signal-neutral"
+            dir_icon = "▲" if c["direction"] == "bullish" else "▼" if c["direction"] == "bearish" else "●"
+            agents = ", ".join(c["names"][:4])
+
+            html += f'''
+            <div class="convergence">
+                <div style="display: flex; justify-content: space-between;">
+                    <span class="{dir_class}">{dir_icon} <strong>{c["symbol"]}</strong></span>
+                    <span class="terminal-orange">{c["agents"]} agents | {c["score"]:.0%}</span>
+                </div>
+                <div class="terminal-dim" style="font-size: 0.7rem;">{agents}</div>
+            </div>
+            '''
+    else:
+        html += '<div class="terminal-dim">No convergences detected</div>'
+
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_swarm_signals(signals):
+    """Render recent swarm signals."""
+    html = '<div class="panel"><div class="panel-title">📡 SIGNAL FEED</div>'
+
+    if signals:
+        for s in list(reversed(signals))[:12]:
+            ts = s.timestamp.strftime("%H:%M") if hasattr(s, 'timestamp') else "?"
+            agent = s.agent_name.replace("-agent", "") if hasattr(s, 'agent_name') else "?"
+            symbol = s.symbol or "MARKET" if hasattr(s, 'symbol') else "?"
+            direction = s.direction if hasattr(s, 'direction') else "?"
+            conf = s.confidence if hasattr(s, 'confidence') else 0
+
+            dir_class = "signal-bull" if direction == "bullish" else "signal-bear" if direction == "bearish" else "signal-neutral"
+            dir_icon = "▲" if direction == "bullish" else "▼" if direction == "bearish" else "●"
+
+            html += f'''
+            <div class="feed-item">
+                <span class="feed-time">{ts}</span>
+                <span class="terminal-purple">{agent[:8]}</span>
+                <span class="{dir_class}">{dir_icon} {symbol}</span>
+                <span class="terminal-dim">{conf:.0%}</span>
+            </div>
+            '''
+    else:
+        html += '<div class="terminal-dim">No signals in last 24h</div>'
+
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_operator_feed(log):
+    """Render operator activity feed."""
+    html = '<div class="panel"><div class="panel-title">📋 OPERATOR LOG</div>'
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_log = [e for e in log if e.get("timestamp", "").startswith(today)]
+
+    if today_log:
+        for entry in list(reversed(today_log))[-15:]:
+            ts = entry.get("timestamp", "")[-8:-3] if entry.get("timestamp") else "?"
+            etype = entry.get("type", entry.get("event", "?"))[:12]
+
+            # Color by type
+            if "alert" in etype.lower():
+                color = "terminal-yellow"
+            elif "signal" in etype.lower():
+                color = "terminal-blue"
+            elif "agent" in etype.lower():
+                color = "terminal-purple"
+            elif "decision" in etype.lower() or "trade" in etype.lower():
+                color = "terminal-green"
+            elif "error" in etype.lower():
+                color = "terminal-red"
+            else:
+                color = "terminal-dim"
+
+            details = str(entry.get("details", entry.get("message", "")))[:40]
+
+            html += f'''
+            <div class="feed-item">
+                <span class="feed-time">{ts}</span>
+                <span class="{color}">{etype}</span>
+                <span class="feed-content">{details}</span>
+            </div>
+            '''
+    else:
+        html += '<div class="terminal-dim">No activity today</div>'
+
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_suggestions(suggestions, social):
+    """Render thesis suggestions and social signals."""
+    html = '<div class="panel"><div class="panel-title">💡 THESIS SUGGESTIONS</div>'
+
+    if suggestions:
+        for s in suggestions[:4]:
+            symbol = s.get("symbol", "?")
+            name = s.get("suggested_name", "")[:25]
+            sources = list(set(s.get("signal_sources", [])))[:2]
+            conf = s.get("confidence_score", 0)
+
+            html += f'''
+            <div style="padding: 0.3rem 0; border-bottom: 1px solid #161b22;">
+                <div><span class="terminal-blue">{symbol}</span> — {name}</div>
+                <div class="terminal-dim" style="font-size: 0.7rem;">{s.get("signal_count", 0)} signals • {", ".join(sources)} • {conf:.0%}</div>
+            </div>
+            '''
+    else:
+        html += '<div class="terminal-dim">No pending suggestions</div>'
+
+    # Early social signals
+    html += '<div class="panel-title" style="margin-top: 0.75rem;">📱 EARLY SIGNALS</div>'
+    early = [s for s in social.get("signals", []) if s.get("signal_vintage", 99) <= 7][:5]
+
+    if early:
+        for s in early:
+            phase = s.get("current_phase", "?")
+            phase_color = "terminal-green" if phase == "early" else "terminal-yellow" if phase == "growing" else "terminal-dim"
+
+            html += f'''
+            <div class="feed-item">
+                <span class="terminal-blue">{s.get("symbol", "?")}</span>
+                <span class="{phase_color}">{phase}</span>
+                <span class="terminal-dim">{s.get("signal_vintage", 0)}d old</span>
+            </div>
+            '''
+    else:
+        html += '<div class="terminal-dim">No early signals</div>'
+
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_swarm_timeline(signals):
+    """Render ASCII swarm timeline."""
+    now = datetime.now()
+    hours = 4
+
+    # Group signals by hour
+    hourly = {}
+    for s in signals:
+        if hasattr(s, 'timestamp'):
+            hour = s.timestamp.strftime("%H:00")
+            if hour not in hourly:
+                hourly[hour] = []
+            hourly[hour].append(s)
+
+    lines = ["SWARM ACTIVITY TIMELINE", "═" * 60]
+
+    for i in range(hours):
+        hour_start = now - timedelta(hours=hours-i-1)
+        hour_label = hour_start.strftime("%H:00")
+
+        if hour_label in hourly:
+            sigs = hourly[hour_label]
+            agents = set(s.agent_name.replace("-agent", "")[:6] for s in sigs if hasattr(s, 'agent_name'))
+            agent_str = " ".join(f"[{a}]" for a in list(agents)[:4])
+            lines.append(f"{hour_label} ┃ {agent_str} → {len(sigs)} signals")
+        else:
+            lines.append(f"{hour_label} ┃ (no activity)")
+
+    lines.append("═" * 60)
+
+    st.markdown(f'<div class="ascii-box">{chr(10).join(lines)}</div>', unsafe_allow_html=True)
+
+
+def render_provenance_stats(provenance):
+    """Render signal provenance statistics."""
+    active = len([p for p in provenance if p.get("outcome") == "pending"])
+    hits = len([p for p in provenance if p.get("outcome") == "hit"])
+    misses = len([p for p in provenance if p.get("outcome") == "miss"])
+    total_closed = hits + misses
+    hit_rate = hits / total_closed if total_closed > 0 else 0
+
+    html = f'''
+    <div class="panel">
+        <div class="panel-title">📊 SIGNAL PROVENANCE</div>
+        <div class="agent-row"><span>Tracking</span><span class="terminal-blue">{active}</span></div>
+        <div class="agent-row"><span>Closed</span><span>{total_closed}</span></div>
+        <div class="agent-row"><span>Hit Rate</span><span class="{'terminal-green' if hit_rate > 0.5 else 'terminal-yellow'}">{hit_rate:.0%}</span></div>
+        <div class="agent-row"><span>Total</span><span class="terminal-dim">{len(provenance)}</span></div>
+    </div>
+    '''
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_system_status(state, theses):
+    """Render system status panel."""
+    state_file = RESULTS_DIR / "live" / "state.json"
+    state_age = (datetime.now() - datetime.fromtimestamp(state_file.stat().st_mtime)).seconds // 60 if state_file.exists() else 999
+
+    portfolio = state.get("portfolio", {})
+    cash = portfolio.get("cash", 0)
+
+    positions = state.get("positions", [])
+    total_value = sum(p.get("market_value", 0) for p in positions) if positions else 1
+    max_conc = max(p.get("market_value", 0) / total_value for p in positions) if positions else 0
+
+    html = f'''
+    <div class="panel">
+        <div class="panel-title">⚙️ SYSTEM STATUS</div>
+        <div class="agent-row"><span>State</span><span class="{'terminal-green' if state_age < 10 else 'terminal-yellow'}">{state_age}m ago</span></div>
+        <div class="agent-row"><span>Theses</span><span>{len(theses)} active</span></div>
+        <div class="agent-row"><span>Cash</span><span class="{'terminal-green' if cash > 5000 else 'terminal-yellow'}">${cash:,.0f}</span></div>
+        <div class="agent-row"><span>Max Pos</span><span class="{'terminal-green' if max_conc < 0.15 else 'terminal-yellow'}">{max_conc:.1%}</span></div>
+    </div>
+    '''
+    st.markdown(html, unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -262,355 +563,59 @@ def load_alerts():
 # =============================================================================
 
 def main():
-    # Load all data
+    # Load data
     state = load_state()
-    theses = load_theses()
+    operator_log = load_operator_log()
+    agent_activity = load_agent_activity()
     convergences = load_convergences()
+    swarm_signals = load_swarm_signals()
     social = load_social()
     suggestions = load_suggestions()
     provenance = load_provenance()
-    activity = load_activity()
-    alerts = load_alerts()
+    theses = load_theses()
 
-    portfolio = state.get("portfolio", {})
-    positions = state.get("positions", [])
-    market = state.get("market", {})
-    signals = state.get("signals", {})
+    # Status bar
+    render_status_bar(state, convergences, suggestions)
 
-    # Calculate key metrics
-    equity = portfolio.get("equity", 0)
-    day_pnl = portfolio.get("day_pnl", 0)
-    day_pnl_pct = portfolio.get("day_pnl_pct", 0)
-    cash = portfolio.get("cash", 0)
+    # Main layout - 3 columns
+    col1, col2, col3 = st.columns([1, 1, 1])
 
-    total_value = sum(p.get("market_value", 0) for p in positions) if positions else 0
-    max_conc = max(p.get("market_value", 0) / total_value for p in positions) if positions and total_value > 0 else 0
-
-    early_signals = len([s for s in social.get("signals", []) if s.get("signal_vintage", 99) <= 7])
-
-    # Header bar
-    pnl_class = "positive" if day_pnl >= 0 else "negative"
-    regime = market.get("regime", "unknown").upper()
-
-    st.markdown(f"""
-    <div class="header-bar">
-        <div class="header-title">🏛️ ATHENA COMMAND CENTER</div>
-        <div class="header-metrics">
-            <div class="header-metric">
-                <div class="header-metric-label">EQUITY</div>
-                <div class="header-metric-value">${equity:,.0f}</div>
-            </div>
-            <div class="header-metric">
-                <div class="header-metric-label">DAY P&L</div>
-                <div class="header-metric-value {pnl_class}">${day_pnl:+,.0f} ({day_pnl_pct:+.2f}%)</div>
-            </div>
-            <div class="header-metric">
-                <div class="header-metric-label">REGIME</div>
-                <div class="header-metric-value">{regime}</div>
-            </div>
-            <div class="header-metric">
-                <div class="header-metric-label">POSITIONS</div>
-                <div class="header-metric-value">{len(positions)}</div>
-            </div>
-            <div class="header-metric">
-                <div class="header-metric-label">CONVERGENCES</div>
-                <div class="header-metric-value" style="color: #f0883e;">{len(convergences)}</div>
-            </div>
-            <div class="header-metric">
-                <div class="header-metric-label">EARLY SIGNALS</div>
-                <div class="header-metric-value" style="color: #58a6ff;">{early_signals}</div>
-            </div>
-            <div class="header-metric">
-                <div class="header-metric-label">UPDATED</div>
-                <div class="header-metric-value">{datetime.now().strftime("%H:%M:%S")}</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Main layout - 4 columns
-    col1, col2, col3, col4 = st.columns([1.5, 1.5, 1, 1])
-
-    # Column 1: Positions
     with col1:
-        st.markdown('<div class="section-header">POSITIONS</div>', unsafe_allow_html=True)
+        render_agent_activity(agent_activity)
+        render_convergences(convergences)
 
-        if positions:
-            df = pd.DataFrame(positions)
-            if "market_value" in df.columns:
-                df = df.sort_values("market_value", ascending=False)
-                df["pnl"] = df.get("unrealized_pnl", 0)
-                df["pnl_pct"] = df.get("unrealized_pnl_pct", 0)
-                df["wgt"] = df["market_value"] / total_value * 100 if total_value > 0 else 0
-
-                # Format for display
-                display_df = df[["symbol", "quantity", "market_value", "pnl", "pnl_pct", "wgt"]].copy()
-                display_df.columns = ["SYM", "QTY", "VALUE", "P&L", "P&L%", "WT%"]
-                display_df["VALUE"] = display_df["VALUE"].apply(lambda x: f"${x:,.0f}")
-                display_df["P&L"] = display_df["P&L"].apply(lambda x: f"${x:+,.0f}")
-                display_df["P&L%"] = display_df["P&L%"].apply(lambda x: f"{x:+.1f}%")
-                display_df["WT%"] = display_df["WT%"].apply(lambda x: f"{x:.1f}%")
-
-                st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
-        else:
-            st.info("No positions")
-
-    # Column 2: Theses & Exposure
     with col2:
-        st.markdown('<div class="section-header">THESIS EXPOSURE</div>', unsafe_allow_html=True)
+        render_swarm_signals(swarm_signals)
+        render_swarm_timeline(swarm_signals)
 
-        if theses and positions:
-            # Build exposure table
-            symbol_thesis = {}
-            for t in theses:
-                for sym in t.get("positions", []):
-                    symbol_thesis[sym] = t.get("name", "Unknown")
-
-            thesis_exposure = {}
-            thesis_pnl = {}
-            for p in positions:
-                sym = p.get("symbol", "")
-                tname = symbol_thesis.get(sym, "Unassigned")
-                thesis_exposure[tname] = thesis_exposure.get(tname, 0) + p.get("market_value", 0)
-                thesis_pnl[tname] = thesis_pnl.get(tname, 0) + p.get("unrealized_pnl", 0)
-
-            rows = []
-            for tname, exp in sorted(thesis_exposure.items(), key=lambda x: -x[1]):
-                pnl = thesis_pnl.get(tname, 0)
-                pct = exp / total_value * 100 if total_value > 0 else 0
-                # Find conviction
-                conv = next((t.get("conviction", 0) for t in theses if t.get("name") == tname), 0)
-                rows.append({
-                    "THESIS": tname[:25],
-                    "EXPOSURE": f"${exp:,.0f}",
-                    "WT%": f"{pct:.1f}%",
-                    "P&L": f"${pnl:+,.0f}",
-                    "CONV": f"{conv}%",
-                })
-
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=200)
-
-        st.markdown('<div class="section-header">SIGNPOSTS</div>', unsafe_allow_html=True)
-
-        # Show signposts from theses
-        signposts_shown = 0
-        for t in theses[:5]:
-            for sp in t.get("signposts", [])[:2]:
-                status = sp.get("status", "pending")
-                icon = "✓" if status == "triggered" else "○"
-                st.markdown(f"""
-                <div class="info-box">
-                    <span style="color: {'#3fb950' if status == 'triggered' else '#8b949e'};">{icon}</span>
-                    <strong>{t.get('name', '?')[:15]}</strong>: {sp.get('description', '')[:40]}
-                </div>
-                """, unsafe_allow_html=True)
-                signposts_shown += 1
-                if signposts_shown >= 6:
-                    break
-            if signposts_shown >= 6:
-                break
-
-    # Column 3: Convergences & Signals
     with col3:
-        st.markdown('<div class="section-header">CONVERGENCES</div>', unsafe_allow_html=True)
+        render_operator_feed(operator_log)
+        render_suggestions(suggestions, social)
 
-        if convergences:
-            for c in convergences[:6]:
-                dir_class = "signal-bull" if c["direction"] == "bullish" else "signal-bear" if c["direction"] == "bearish" else "signal-neutral"
-                dir_icon = "▲" if c["direction"] == "bullish" else "▼" if c["direction"] == "bearish" else "●"
-                agents_str = ", ".join(c["names"][:3])
-
-                st.markdown(f"""
-                <div class="convergence-item">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span class="{dir_class}"><strong>{dir_icon} {c['symbol']}</strong></span>
-                        <span style="color: #f0883e;">{c['agents']} agents</span>
-                    </div>
-                    <div style="color: #8b949e; font-size: 0.7rem;">{agents_str}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="info-box">No convergences detected</div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="section-header">EARLY SIGNALS (SOCIAL)</div>', unsafe_allow_html=True)
-
-        early = [s for s in social.get("signals", []) if s.get("signal_vintage", 99) <= 7][:5]
-        if early:
-            for s in early:
-                phase = s.get("current_phase", "?")
-                phase_color = "#3fb950" if phase == "early" else "#d29922" if phase == "growing" else "#8b949e"
-                st.markdown(f"""
-                <div class="signal-row">
-                    <span><strong>{s.get('symbol', '?')}</strong></span>
-                    <span style="color: {phase_color};">{phase} ({s.get('signal_vintage', 0)}d)</span>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="info-box">No early signals</div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="section-header">SUGGESTIONS</div>', unsafe_allow_html=True)
-
-        if suggestions:
-            for s in suggestions[:4]:
-                sources = list(set(s.get("signal_sources", [])))[:2]
-                sources_str = ", ".join(sources) if sources else "?"
-                conf = s.get("confidence_score", 0)
-                st.markdown(f"""
-                <div class="info-box">
-                    <strong>{s.get('symbol', '?')}</strong> — {s.get('suggested_name', '?')[:20]}
-                    <div style="color: #8b949e; font-size: 0.7rem;">{s.get('signal_count', 0)} signals ({sources_str}) • {conf:.0%}</div>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="info-box">No pending suggestions</div>', unsafe_allow_html=True)
-
-    # Column 4: Activity & Status
-    with col4:
-        st.markdown('<div class="section-header">ACTIVITY</div>', unsafe_allow_html=True)
-
-        today = datetime.now().strftime("%Y-%m-%d")
-        recent = [a for a in activity if a.get("timestamp", "").startswith(today)][-10:]
-
-        if recent:
-            for a in reversed(recent):
-                ts = a.get("timestamp", "")[-8:-3] if a.get("timestamp") else "?"  # HH:MM
-                etype = a.get("type", a.get("event", "?"))[:15]
-                details = str(a.get("details", a.get("message", "")))[:30]
-
-                if "alert" in etype.lower():
-                    color = "#d29922"
-                elif "signal" in etype.lower():
-                    color = "#58a6ff"
-                elif "agent" in etype.lower():
-                    color = "#a371f7"
-                else:
-                    color = "#8b949e"
-
-                st.markdown(f"""
-                <div class="signal-row">
-                    <span style="color: {color};">{etype}</span>
-                    <span style="color: #484f58;">{ts}</span>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="info-box">No activity today</div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="section-header">STATUS</div>', unsafe_allow_html=True)
-
-        # System status checks
-        state_file = RESULTS_DIR / "live" / "state.json"
-        state_age = (datetime.now() - datetime.fromtimestamp(state_file.stat().st_mtime)).seconds // 60 if state_file.exists() else 999
-
-        active_prov = len([p for p in provenance if p.get("outcome") == "pending"])
-        hit_prov = len([p for p in provenance if p.get("outcome") == "hit"])
-        closed_prov = len([p for p in provenance if p.get("outcome") in ["hit", "miss"]])
-        hit_rate = hit_prov / closed_prov if closed_prov > 0 else 0
-
-        status_items = [
-            ("State", f"{state_age}m ago", "status-ok" if state_age < 10 else "status-warn" if state_age < 30 else "status-error"),
-            ("Theses", f"{len(theses)} active", "status-ok" if theses else "status-warn"),
-            ("Signals", f"{active_prov} tracking", "status-ok"),
-            ("Hit Rate", f"{hit_rate:.0%}", "status-ok" if hit_rate > 0.5 else "status-warn"),
-            ("Cash", f"${cash:,.0f}", "status-ok" if cash > 5000 else "status-warn"),
-            ("Max Pos", f"{max_conc:.1%}", "status-ok" if max_conc < 0.15 else "status-warn" if max_conc < 0.20 else "status-error"),
-        ]
-
-        for label, value, status_class in status_items:
-            st.markdown(f"""
-            <div class="signal-row">
-                <span>{label}</span>
-                <span class="{status_class}">{value}</span>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown('<div class="section-header">ALERTS</div>', unsafe_allow_html=True)
-
-        if alerts:
-            for a in alerts[:5]:
-                priority = a.get("priority", "medium")
-                p_color = "#f85149" if priority == "critical" else "#d29922" if priority == "high" else "#8b949e"
-                st.markdown(f"""
-                <div class="info-box" style="border-left: 2px solid {p_color};">
-                    <strong>{a.get('symbol', '?')}</strong>: {a.get('description', '')[:35]}
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="info-box" style="color: #3fb950;">No alerts today</div>', unsafe_allow_html=True)
-
-    # Bottom section - Top Signals & Charts
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    bcol1, bcol2 = st.columns([1, 1])
+    # Bottom row
+    bcol1, bcol2, bcol3 = st.columns([1, 1, 1])
 
     with bcol1:
-        st.markdown('<div class="section-header">TOP SIGNALS</div>', unsafe_allow_html=True)
-
-        top_signals = signals.get("watchlist", [])[:10] if signals else []
-        if top_signals:
-            rows = []
-            for sig in top_signals:
-                direction = sig.get("direction", "neutral")
-                d_icon = "▲" if direction == "bullish" else "▼" if direction == "bearish" else "●"
-                rows.append({
-                    "": d_icon,
-                    "SYM": sig.get("symbol", "?"),
-                    "TYPE": sig.get("type", "?")[:10],
-                    "STRENGTH": f"{sig.get('strength', 0):.2f}",
-                    "DESCRIPTION": sig.get("description", "")[:40],
-                })
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-        else:
-            st.info("No active signals in watchlist")
+        render_provenance_stats(provenance)
 
     with bcol2:
-        st.markdown('<div class="section-header">POSITION CHART</div>', unsafe_allow_html=True)
+        render_system_status(state, theses)
 
-        if positions:
-            df = pd.DataFrame(positions).nlargest(15, "market_value")
+    with bcol3:
+        # Refresh controls
+        st.markdown("""
+        <div class="panel">
+            <div class="panel-title">🔄 CONTROLS</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-            pnl_values = df.get("unrealized_pnl", pd.Series([0] * len(df)))
-            colors = ["#3fb950" if p >= 0 else "#f85149" for p in pnl_values]
-
-            fig = go.Figure(data=[
-                go.Bar(
-                    x=df["symbol"],
-                    y=df["market_value"],
-                    marker_color=colors,
-                    text=df["market_value"].apply(lambda x: f"${x/1000:.1f}k"),
-                    textposition="outside",
-                    textfont=dict(size=9),
-                )
-            ])
-
-            fig.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=10, r=10, t=10, b=30),
-                height=180,
-                xaxis=dict(showgrid=False, tickfont=dict(size=9)),
-                yaxis=dict(showgrid=True, gridcolor="#21262d", tickfont=dict(size=9)),
-                bargap=0.3,
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-    # Auto-refresh in sidebar
-    with st.sidebar:
-        st.markdown("### Controls")
-        if st.button("🔄 Refresh", use_container_width=True):
+        if st.button("Refresh", use_container_width=True):
             st.rerun()
 
-        auto = st.checkbox("Auto-refresh (30s)")
+        auto = st.checkbox("Auto (10s)")
         if auto:
-            time.sleep(30)
+            time.sleep(10)
             st.rerun()
-
-        st.markdown("---")
-        st.markdown("### Quick Commands")
-        st.code("streamlit run scripts/athena_dashboard.py", language="bash")
-        st.markdown("**Update state:**")
-        st.code("./scripts/mission_control.sh --quick", language="bash")
 
 
 if __name__ == "__main__":
