@@ -1,0 +1,18 @@
+[Unit]
+Description=Athena Web Dashboard (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=nock
+WorkingDirectory=/home/nock/projects/quant_suite
+Environment=PYTHONPATH=/home/nock/projects/quant_suite
+ExecStart=/usr/bin/python3 -m uvicorn src.web.app:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=athena-web
+
+[Install]
+WantedBy=multi-user.target

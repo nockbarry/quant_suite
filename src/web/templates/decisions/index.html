@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% set active_page = "decisions" %}
+{% block title %}Decisions{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-xl font-bold text-gray-100">Trading Decisions</h1>
+        <p class="text-sm text-gray-500">Full decision audit trail with lineage</p>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+        <form hx-get="/decisions" hx-target="#decision-table" hx-swap="innerHTML" hx-push-url="true"
+              class="flex flex-wrap items-end gap-3">
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Status</label>
+                <select name="status" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                    <option value="">All</option>
+                    {% for s in ['pending', 'executed', 'filled', 'rejected', 'cancelled', 'closed'] %}
+                    <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s | capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Symbol</label>
+                <input type="text" name="symbol" value="{{ filter_symbol or '' }}" placeholder="e.g., SLB"
+                       class="w-24 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 mono focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Thesis</label>
+                <select name="thesis_id" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                    <option value="">All</option>
+                    {% for t in thesis_options %}
+                    <option value="{{ t.id }}" {% if filter_thesis == t.id %}selected{% endif %}>{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Setup Type</label>
+                <select name="setup_type" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                    <option value="">All</option>
+                    {% for st in setup_types %}
+                    <option value="{{ st }}" {% if filter_setup == st %}selected{% endif %}>{{ st }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">From</label>
+                <input type="date" name="date_from" value="{{ filter_date_from or '' }}"
+                       class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">To</label>
+                <input type="date" name="date_to" value="{{ filter_date_to or '' }}"
+                       class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+            </div>
+            <button type="submit" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded transition">Filter</button>
+            <a href="/decisions" class="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded transition">Reset</a>
+        </form>
+    </div>
+
+    <!-- Decision Table -->
+    <div id="decision-table" class="bg-gray-900 border border-gray-800 rounded-lg">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                        <th class="px-4 py-2 text-left">Date</th>
+                        <th class="px-4 py-2 text-left">Symbol</th>
+                        <th class="px-4 py-2 text-left">Action</th>
+                        <th class="px-4 py-2 text-left">Confidence</th>
+                        <th class="px-4 py-2 text-left">Status</th>
+                        <th class="px-4 py-2 text-right">P&L</th>
+                        <th class="px-4 py-2 text-left">Thesis</th>
+                        <th class="px-4 py-2 text-right">Signals</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in decisions %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer"
+                        onclick="window.location='/decisions/{{ d.id }}'">
+                        <td class="px-4 py-2 text-gray-400 mono text-xs">{{ d.timestamp[:16] if d.timestamp else "" }}</td>
+                        <td class="px-4 py-2 mono font-medium text-emerald-400">{{ d.symbol }}</td>
+                        <td class="px-4 py-2">
+                            <span class="rounded-full px-2 py-0.5 text-xs
+                                {% if d.action in ['BUY', 'ADD'] %}bg-emerald-900/50 text-emerald-400
+                                {% elif d.action in ['SELL', 'CLOSE'] %}bg-red-900/50 text-red-400
+                                {% elif d.action == 'TRIM' %}bg-amber-900/50 text-amber-400
+                                {% elif d.action == 'HOLD' %}bg-gray-800 text-gray-400
+                                {% else %}bg-blue-900/50 text-blue-400{% endif %}">
+                                {{ d.action }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2">
+                            <div class="flex items-center gap-2">
+                                <div class="w-16 bg-gray-800 rounded-full h-1.5">
+                                    <div class="h-1.5 rounded-full"
+                                         style="width: {{ (d.confidence * 100) | int }}%;
+                                                background: linear-gradient(90deg,
+                                                    {% if d.confidence < 0.3 %}#ef4444, #f97316
+                                                    {% elif d.confidence < 0.6 %}#f97316, #eab308
+                                                    {% elif d.confidence < 0.8 %}#eab308, #22c55e
+                                                    {% else %}#22c55e, #10b981{% endif %});">
+                                    </div>
+                                </div>
+                                <span class="mono text-xs text-gray-400">{{ "%.0f"|format(d.confidence * 100) }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-2">
+                            <span class="rounded-full px-2 py-0.5 text-xs
+                                {% if d.status == 'pending' %}bg-yellow-900/50 text-yellow-400
+                                {% elif d.status == 'executed' %}bg-blue-900/50 text-blue-400
+                                {% elif d.status == 'filled' %}bg-emerald-900/50 text-emerald-400
+                                {% elif d.status in ['failed', 'rejected'] %}bg-red-900/50 text-red-400
+                                {% elif d.status == 'cancelled' %}bg-gray-800 text-gray-500
+                                {% elif d.status == 'closed' %}bg-purple-900/50 text-purple-400
+                                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                {{ d.status }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-right mono
+                            {% if d.realized_pnl_pct and d.realized_pnl_pct >= 0 %}text-profit{% elif d.realized_pnl_pct %}text-loss{% else %}text-gray-500{% endif %}">
+                            {% if d.realized_pnl_pct is not none %}{{ "%+.1f"|format(d.realized_pnl_pct) }}%{% else %}&mdash;{% endif %}
+                        </td>
+                        <td class="px-4 py-2">
+                            {% if d.thesis_id %}
+                            <span class="text-xs text-blue-400 truncate max-w-[120px] inline-block">{{ d.thesis_name or d.thesis_id[:12] }}</span>
+                            {% else %}
+                            <span class="text-xs text-gray-600">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2 text-right">
+                            {% set signal_count = d.signal_ids | length if d.signal_ids else 0 %}
+                            {% if signal_count > 0 %}
+                            <span class="rounded-full px-2 py-0.5 text-xs bg-purple-900/50 text-purple-400">{{ signal_count }}</span>
+                            {% else %}
+                            <span class="text-gray-600">&mdash;</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not decisions %}
+                    <tr><td colspan="8" class="px-4 py-8 text-center text-gray-600">No decisions found matching filters.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

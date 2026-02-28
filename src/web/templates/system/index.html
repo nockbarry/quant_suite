@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% set active_page = "system" %}
+{% block title %}System Health{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-xl font-bold text-gray-100">System Health</h1>
+        <p class="text-sm text-gray-500">Services, cron jobs, database, and logs</p>
+    </div>
+
+    <!-- Service Status Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3" hx-get="/system/status" hx-trigger="every 30s" hx-target="#service-cards" hx-swap="innerHTML">
+        <div id="service-cards" class="contents">
+            {% for svc in services %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                <div class="flex items-center gap-2 mb-1">
+                    <div class="w-2 h-2 rounded-full {% if svc.running %}bg-emerald-500 pulse-green{% else %}bg-red-500{% endif %}"></div>
+                    <span class="text-xs text-gray-400">{{ svc.name }}</span>
+                </div>
+                <p class="text-sm font-medium {% if svc.running %}text-emerald-400{% else %}text-red-400{% endif %}">
+                    {{ "Running" if svc.running else "Stopped" }}
+                </p>
+                {% if svc.pid %}
+                <p class="text-[10px] text-gray-600 mono">PID: {{ svc.pid }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% if not services %}
+            <div class="col-span-full text-center text-gray-600 text-sm py-4">No services configured</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Cron Job Status -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg">
+            <div class="px-4 py-3 border-b border-gray-800">
+                <h2 class="text-sm font-semibold text-gray-300">Cron Jobs</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                            <th class="px-4 py-2 text-left">Job</th>
+                            <th class="px-4 py-2 text-left">Schedule</th>
+                            <th class="px-4 py-2 text-left">Last Run</th>
+                            <th class="px-4 py-2 text-left">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job in cron_jobs %}
+                        <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                            <td class="px-4 py-2 text-gray-300 text-xs">{{ job.name }}</td>
+                            <td class="px-4 py-2 text-gray-400 mono text-xs">{{ job.schedule }}</td>
+                            <td class="px-4 py-2 text-gray-500 mono text-xs">{{ job.last_run[:16] if job.last_run else "Never" }}</td>
+                            <td class="px-4 py-2">
+                                <span class="rounded-full px-2 py-0.5 text-[10px]
+                                    {% if job.status == 'ok' or job.status == 'success' %}bg-emerald-900/50 text-emerald-400
+                                    {% elif job.status == 'error' or job.status == 'failed' %}bg-red-900/50 text-red-400
+                                    {% elif job.status == 'running' %}bg-yellow-900/50 text-yellow-400
+                                    {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                    {{ job.status | default("unknown") }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not cron_jobs %}
+                        <tr><td colspan="4" class="px-4 py-6 text-center text-gray-600 text-sm">No cron jobs detected</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Database Stats -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg">
+            <div class="px-4 py-3 border-b border-gray-800">
+                <h2 class="text-sm font-semibold text-gray-300">Database Stats</h2>
+            </div>
+            <div class="p-4 space-y-4">
+                {% if db_stats.file_size %}
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-500">File Size</span>
+                    <span class="mono text-gray-300">{{ db_stats.file_size }}</span>
+                </div>
+                {% endif %}
+
+                {% if db_stats.tables %}
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                            <th class="py-1 text-left">Table</th>
+                            <th class="py-1 text-right">Rows</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tbl in db_stats.tables %}
+                        <tr class="border-b border-gray-800/50">
+                            <td class="py-1 text-gray-400 text-xs">{{ tbl.name }}</td>
+                            <td class="py-1 text-right mono text-gray-300 text-xs">{{ "{:,}".format(tbl.count) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-sm text-gray-600">No database stats available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Autonomy Loop Stats -->
+    {% if autonomy_stats %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-gray-300 mb-3">Autonomy Loop</h2>
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">Last Check</p>
+                <p class="mono text-gray-300 text-xs">{{ autonomy_stats.last_check[:16] if autonomy_stats.last_check else "Never" }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">Checks Today</p>
+                <p class="mono text-gray-300">{{ autonomy_stats.checks_today | default(0) }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">Avg Duration</p>
+                <p class="mono text-gray-300">{{ autonomy_stats.avg_duration_ms | default(0) }}ms</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">Alerts Found</p>
+                <p class="mono text-gray-300">{{ autonomy_stats.total_alerts | default(0) }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">Convergences</p>
+                <p class="mono text-gray-300">{{ autonomy_stats.total_convergences | default(0) }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">Errors</p>
+                <p class="mono {% if autonomy_stats.total_errors %}text-red-400{% else %}text-gray-300{% endif %}">{{ autonomy_stats.total_errors | default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Log Viewer -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-300">Recent Logs</h2>
+            <div class="flex gap-1">
+                {% for log_name in log_files %}
+                <button hx-get="/system/logs?file={{ log_name }}" hx-target="#log-content" hx-swap="innerHTML"
+                        class="px-2 py-1 text-xs rounded bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300 transition">
+                    {{ log_name }}
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+        <div id="log-content" class="p-4">
+            <pre class="bg-gray-950 rounded p-3 text-xs text-gray-400 mono overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap">{{ log_content or "Select a log file to view." }}</pre>
+        </div>
+    </div>
+</div>
+{% endblock %}

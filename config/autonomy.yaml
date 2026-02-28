@@ -1,0 +1,26 @@
+event_loop:
+  check_interval_minutes: 3
+  active_hours: [6, 17]  # ET
+
+execution:
+  authority: thesis_only  # thesis_only, rules_only, full
+  max_daily_trades: 10
+  max_daily_loss_pct: 3.0
+  max_single_trade_pct: 5.0
+  dry_run: true  # SAFETY: start in dry-run mode
+
+llm:
+  model: claude-sonnet-4-20250514
+  max_decisions_per_day: 20
+  min_confidence_for_auto: 0.75
+  log_full_prompts: true
+  max_tokens: 4096
+
+alerts:
+  telegram_enabled: false
+  alert_on_every_trade: true
+  quiet_hours: [22, 6]
+
+provenance:
+  log_level: full  # full, summary, minimal
+  retain_days: 365

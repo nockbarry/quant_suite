@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set active_page = "reports" %}
+{% block title %}{{ file_name }}{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <a href="/reports" class="text-gray-500 hover:text-gray-300 text-sm">&larr; Reports</a>
+            <h1 class="text-xl font-bold text-gray-100 mt-1">{{ file_name }}</h1>
+            <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                <span class="rounded-full px-2 py-0.5 text-[10px] bg-gray-800 text-gray-400">{{ content_type }}</span>
+                <span>{{ size_human }}</span>
+                <span class="mono text-gray-600">{{ file_path }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Viewer -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+        {% if content_type == 'html' %}
+        <div class="prose prose-invert prose-sm max-w-none">
+            {{ content | safe }}
+        </div>
+        {% elif content_type == 'json' %}
+        <pre class="text-sm text-gray-300 mono whitespace-pre-wrap overflow-x-auto">{{ content }}</pre>
+        {% elif content_type == 'csv' %}
+        <div class="overflow-x-auto">
+            <pre class="text-sm text-gray-300 mono whitespace-pre overflow-x-auto">{{ content }}</pre>
+        </div>
+        {% elif content_type == 'markdown' %}
+        <div class="prose prose-invert prose-sm max-w-none">
+            <div class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap mono">{{ content }}</div>
+        </div>
+        {% elif content_type == 'yaml' %}
+        <pre class="text-sm text-gray-300 mono whitespace-pre-wrap overflow-x-auto">{{ content }}</pre>
+        {% else %}
+        <pre class="text-sm text-gray-300 mono whitespace-pre-wrap overflow-x-auto">{{ content }}</pre>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Athena{% endblock %} | Trading Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/htmx.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        profit: '#22c55e',
+                        loss: '#ef4444',
+                        neutral: '#94a3b8',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
+        .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .pulse-green { animation: pulseGreen 2s infinite; }
+        @keyframes pulseGreen { 0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); } }
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body class="h-full text-gray-200" hx-headers='{"HX-Auth": "{{ auth_token | default("") }}"}'>
+    <div class="flex h-full">
+        <!-- Sidebar -->
+        <nav class="w-56 bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0">
+            <div class="p-4 border-b border-gray-800">
+                <h1 class="text-lg font-bold text-emerald-400 mono">ATHENA</h1>
+                <p class="text-xs text-gray-500">Trading Intelligence</p>
+            </div>
+            <div class="flex-1 overflow-y-auto py-2">
+                <div class="px-3 py-1">
+                    <p class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Overview</p>
+                </div>
+                <a href="/" class="flex items-center px-4 py-2 text-sm {% if active_page == 'dashboard' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9632;</span> Dashboard
+                </a>
+                <a href="/flows" class="flex items-center px-4 py-2 text-sm {% if active_page == 'flows' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#8634;</span> Activity
+                </a>
+
+                <div class="px-3 py-1 mt-3">
+                    <p class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Trading</p>
+                </div>
+                <a href="/decisions" class="flex items-center px-4 py-2 text-sm {% if active_page == 'decisions' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9654;</span> Decisions
+                </a>
+                <a href="/theses" class="flex items-center px-4 py-2 text-sm {% if active_page == 'theses' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9672;</span> Theses
+                </a>
+                <a href="/signals" class="flex items-center px-4 py-2 text-sm {% if active_page == 'signals' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9889;</span> Signals
+                </a>
+                <a href="/learnings" class="flex items-center px-4 py-2 text-sm {% if active_page == 'learnings' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9733;</span> Learnings
+                </a>
+
+                <div class="px-3 py-1 mt-3">
+                    <p class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Knowledge</p>
+                </div>
+                <a href="/knowledge" class="flex items-center px-4 py-2 text-sm {% if active_page == 'knowledge' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9679;</span> Companies
+                </a>
+
+                <div class="px-3 py-1 mt-3">
+                    <p class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Intelligence</p>
+                </div>
+                <a href="/agents" class="flex items-center px-4 py-2 text-sm {% if active_page == 'agents' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9881;</span> Agents
+                </a>
+                <a href="/llm" class="flex items-center px-4 py-2 text-sm {% if active_page == 'llm' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9041;</span> LLM Log
+                </a>
+
+                <div class="px-3 py-1 mt-3">
+                    <p class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">System</p>
+                </div>
+                <a href="/data" class="flex items-center px-4 py-2 text-sm {% if active_page == 'data' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9783;</span> Data Sources
+                </a>
+                <a href="/reports" class="flex items-center px-4 py-2 text-sm {% if active_page == 'reports' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9776;</span> Reports
+                </a>
+                <a href="/system" class="flex items-center px-4 py-2 text-sm {% if active_page == 'system' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#9881;</span> System
+                </a>
+                <a href="/upload" class="flex items-center px-4 py-2 text-sm {% if active_page == 'upload' %}bg-gray-800 text-emerald-400 border-r-2 border-emerald-400{% else %}text-gray-400 hover:bg-gray-800/50 hover:text-gray-200{% endif %}">
+                    <span class="w-5 text-center mr-2">&#8679;</span> Upload
+                </a>
+            </div>
+            <div class="p-3 border-t border-gray-800 text-xs text-gray-600">
+                <div id="status-dot" class="inline-block w-2 h-2 rounded-full bg-emerald-500 pulse-green mr-1"></div>
+                <span hx-get="/api/health" hx-trigger="every 60s" hx-target="#health-status" hx-swap="innerHTML">
+                    <span id="health-status">Online</span>
+                </span>
+            </div>
+        </nav>
+
+        <!-- Main content -->
+        <main class="flex-1 overflow-y-auto">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

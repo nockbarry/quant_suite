@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% set active_page = "theses" %}
+{% block title %}{% if thesis %}Edit {{ thesis.name }}{% else %}New Thesis{% endif %}{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <a href="/theses" class="text-gray-500 hover:text-gray-300 text-sm">&larr; Theses</a>
+        <h1 class="text-xl font-bold text-gray-100 mt-1">{% if thesis %}Edit Thesis{% else %}New Investment Thesis{% endif %}</h1>
+    </div>
+
+    <form {% if thesis %}hx-put="/theses/{{ thesis.id }}"{% else %}hx-post="/theses"{% endif %}
+          hx-target="body" hx-push-url="true"
+          class="space-y-6">
+
+        <!-- Core Fields -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
+            <h2 class="text-sm font-semibold text-gray-300">Core</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:col-span-2">
+                    <label class="block text-xs text-gray-500 mb-1">Thesis Name *</label>
+                    <input type="text" name="name" required value="{{ thesis.name if thesis else '' }}" placeholder="e.g., Venezuela Energy Recovery"
+                           class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-xs text-gray-500 mb-1">Summary *</label>
+                    <textarea name="summary" required rows="3" placeholder="Brief summary of the thesis..."
+                              class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">{{ thesis.summary if thesis else '' }}</textarea>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Status</label>
+                    <select name="status" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                        {% for s in ['active', 'validated', 'invalidated', 'expired', 'paused'] %}
+                        <option value="{{ s }}" {% if thesis and thesis.status == s %}selected{% elif not thesis and s == 'active' %}selected{% endif %}>{{ s | capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Initial Conviction (0-100)</label>
+                    <input type="number" name="conviction" min="0" max="100" value="{{ thesis.conviction | int if thesis else 50 }}"
+                           class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 mono focus:border-emerald-500 focus:outline-none">
+                </div>
+            </div>
+        </div>
+
+        <!-- Bull & Bear Cases -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-gray-900 border border-emerald-900/30 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-emerald-400 mb-2">Bull Case *</h2>
+                <textarea name="bull_case" required rows="4" placeholder="Why this thesis will succeed..."
+                          class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">{{ thesis.bull_case if thesis else '' }}</textarea>
+            </div>
+            <div class="bg-gray-900 border border-red-900/30 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-red-400 mb-2">Bear Case *</h2>
+                <textarea name="bear_case" required rows="4" placeholder="Why this thesis could fail..."
+                          class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">{{ thesis.bear_case if thesis else '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Positions -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-2">Positions</h2>
+            <label class="block text-xs text-gray-500 mb-1">Symbols (comma separated)</label>
+            <input type="text" name="positions" placeholder="SLB, HAL, XLE"
+                   value="{{ thesis.positions | join(', ') if thesis and thesis.positions else '' }}"
+                   class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 mono focus:border-emerald-500 focus:outline-none">
+        </div>
+
+        <!-- Invalidation Triggers -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-2">Invalidation Triggers</h2>
+            <label class="block text-xs text-gray-500 mb-1">One per line &mdash; conditions that would kill this thesis</label>
+            <textarea name="invalidation_triggers" rows="3" placeholder="US reinstates full sanctions&#10;Oil drops below $50/bbl&#10;Regime change in Venezuela"
+                      class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">{% if thesis and thesis.invalidation_triggers %}{% for t in thesis.invalidation_triggers %}{{ t }}{% if not loop.last %}
+{% endif %}{% endfor %}{% endif %}</textarea>
+        </div>
+
+        <!-- Signposts -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-semibold text-gray-300">Signposts</h2>
+                <button type="button" onclick="addSignpost()" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded transition">
+                    + Add Signpost
+                </button>
+            </div>
+            <div id="signposts-container" class="space-y-4">
+                {% if thesis and thesis.signposts %}
+                {% for s in thesis.signposts %}
+                <div class="signpost-entry bg-gray-800/50 border border-gray-700 rounded-lg p-3 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-gray-500">Signpost {{ loop.index }}</span>
+                        <button type="button" onclick="this.closest('.signpost-entry').remove()" class="text-xs text-red-400 hover:text-red-300">Remove</button>
+                    </div>
+                    <input type="text" name="signpost_description[]" value="{{ s.description }}" placeholder="What event to watch for"
+                           class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <input type="text" name="signpost_bullish_if[]" value="{{ s.bullish_if }}" placeholder="Bullish if..."
+                               class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none">
+                        <input type="text" name="signpost_bearish_if[]" value="{{ s.bearish_if }}" placeholder="Bearish if..."
+                               class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none">
+                        <input type="date" name="signpost_target_date[]" value="{{ s.target_date or '' }}"
+                               class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Review Settings -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-2">Review Schedule</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Review Interval (days)</label>
+                    <input type="number" name="review_interval_days" min="1" max="90"
+                           value="{{ thesis.review_interval_days if thesis else 7 }}"
+                           class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 mono focus:border-emerald-500 focus:outline-none">
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex gap-3">
+            <button type="submit" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition font-medium">
+                {% if thesis %}Update Thesis{% else %}Create Thesis{% endif %}
+            </button>
+            <a href="/theses" class="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let signpostCount = {{ thesis.signposts | length if thesis and thesis.signposts else 0 }};
+
+function addSignpost() {
+    signpostCount++;
+    const container = document.getElementById('signposts-container');
+    const html = `
+        <div class="signpost-entry bg-gray-800/50 border border-gray-700 rounded-lg p-3 space-y-2">
+            <div class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">Signpost ${signpostCount}</span>
+                <button type="button" onclick="this.closest('.signpost-entry').remove()" class="text-xs text-red-400 hover:text-red-300">Remove</button>
+            </div>
+            <input type="text" name="signpost_description[]" placeholder="What event to watch for"
+                   class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <input type="text" name="signpost_bullish_if[]" placeholder="Bullish if..."
+                       class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none">
+                <input type="text" name="signpost_bearish_if[]" placeholder="Bearish if..."
+                       class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none">
+                <input type="date" name="signpost_target_date[]"
+                       class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none">
+            </div>
+        </div>`;
+    container.insertAdjacentHTML('beforeend', html);
+}
+</script>
+{% endblock %}

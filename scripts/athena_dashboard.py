@@ -205,12 +205,61 @@ def load_convergences():
         return []
 
 def load_swarm_signals():
+    """Load signals from both signal files and swarm_state.json."""
+    signals = []
+    cutoff = datetime.now() - timedelta(hours=48)  # Extended window
+
+    # 1. Read from individual signal files (primary source)
+    signals_dir = RESULTS_DIR / "live" / "signals"
+    if signals_dir.exists():
+        for f in signals_dir.glob("*.json"):
+            try:
+                with open(f) as file:
+                    file_signals = json.load(file)
+                    for s in file_signals:
+                        ts = datetime.fromisoformat(s.get("timestamp", "2020-01-01"))
+                        if ts > cutoff:
+                            signals.append({
+                                "timestamp": ts,
+                                "agent_name": s.get("agent_name", "?"),
+                                "symbol": s.get("symbol"),
+                                "direction": s.get("direction", "neutral"),
+                                "confidence": s.get("confidence", 0.5),
+                                "description": s.get("description", ""),
+                            })
+            except Exception:
+                pass
+
+    # 2. Also read from swarm_state.json (fallback)
     try:
         from src.monitoring.swarm_monitor import get_swarm_monitor
         monitor = get_swarm_monitor()
-        return monitor.get_recent_signals(max_age_hours=24)
-    except:
-        return []
+        for s in monitor.get_recent_signals(max_age_hours=48):
+            # Convert SwarmSignal to dict for consistent handling
+            ts = s.timestamp if hasattr(s, 'timestamp') else datetime.now()
+            if ts > cutoff:
+                signals.append({
+                    "timestamp": ts,
+                    "agent_name": getattr(s, 'agent_name', '?'),
+                    "symbol": getattr(s, 'symbol', None),
+                    "direction": getattr(s, 'direction', 'neutral'),
+                    "confidence": getattr(s, 'confidence', 0.5),
+                    "description": getattr(s, 'description', ''),
+                })
+    except Exception:
+        pass
+
+    # Deduplicate by (timestamp, agent_name, symbol)
+    seen = set()
+    unique = []
+    for s in signals:
+        key = (s["timestamp"].isoformat()[:16], s["agent_name"], s.get("symbol"))
+        if key not in seen:
+            seen.add(key)
+            unique.append(s)
+
+    # Sort by timestamp descending
+    return sorted(unique, key=lambda x: x["timestamp"], reverse=True)
 
 def load_social():
     f = RESULTS_DIR / "social" / "wsb_signals.json"
@@ -368,32 +417,38 @@ def render_convergences(convergences):
 
 def render_swarm_signals(signals):
     """Render recent swarm signals."""
-    html = '<div class="panel"><div class="panel-title">📡 SIGNAL FEED</div>'
+    lines = ['<div class="panel"><div class="panel-title">📡 SIGNAL FEED</div>']
 
     if signals:
-        for s in list(reversed(signals))[:12]:
-            ts = s.timestamp.strftime("%H:%M") if hasattr(s, 'timestamp') else "?"
-            agent = s.agent_name.replace("-agent", "") if hasattr(s, 'agent_name') else "?"
-            symbol = s.symbol or "MARKET" if hasattr(s, 'symbol') else "?"
-            direction = s.direction if hasattr(s, 'direction') else "?"
-            conf = s.confidence if hasattr(s, 'confidence') else 0
+        # signals are now dicts with keys: timestamp, agent_name, symbol, direction, confidence
+        for s in signals[:12]:
+            ts_val = s.get("timestamp")
+            ts = ts_val.strftime("%H:%M") if isinstance(ts_val, datetime) else "?"
+            agent = s.get("agent_name", "?").replace("-agent", "")[:8]
+            symbol = s.get("symbol") or "MARKET"
+            direction = s.get("direction", "neutral")
+            conf = s.get("confidence", 0)
 
             dir_class = "signal-bull" if direction == "bullish" else "signal-bear" if direction == "bearish" else "signal-neutral"
             dir_icon = "▲" if direction == "bullish" else "▼" if direction == "bearish" else "●"
 
-            html += f'''
-            <div class="feed-item">
-                <span class="feed-time">{ts}</span>
-                <span class="terminal-purple">{agent[:8]}</span>
-                <span class="{dir_class}">{dir_icon} {symbol}</span>
-                <span class="terminal-dim">{conf:.0%}</span>
-            </div>
-            '''
-    else:
-        html += '<div class="terminal-dim">No signals in last 24h</div>'
+            # Use safe string escaping
+            symbol_safe = str(symbol).replace("<", "&lt;").replace(">", "&gt;")[:8]
+            agent_safe = str(agent).replace("<", "&lt;").replace(">", "&gt;")
 
-    html += '</div>'
-    st.markdown(html, unsafe_allow_html=True)
+            lines.append(
+                f'<div class="feed-item">'
+                f'<span class="feed-time">{ts}</span>'
+                f'<span class="terminal-purple">{agent_safe}</span>'
+                f'<span class="{dir_class}">{dir_icon} {symbol_safe}</span>'
+                f'<span class="terminal-dim">{conf:.0%}</span>'
+                f'</div>'
+            )
+    else:
+        lines.append('<div class="terminal-dim">No signals in last 48h</div>')
+
+    lines.append('</div>')
+    st.markdown("".join(lines), unsafe_allow_html=True)
 
 
 def render_operator_feed(log):
@@ -486,11 +541,12 @@ def render_swarm_timeline(signals):
     now = datetime.now()
     hours = 4
 
-    # Group signals by hour
+    # Group signals by hour (signals are now dicts)
     hourly = {}
     for s in signals:
-        if hasattr(s, 'timestamp'):
-            hour = s.timestamp.strftime("%H:00")
+        ts = s.get("timestamp")
+        if isinstance(ts, datetime):
+            hour = ts.strftime("%H:00")
             if hour not in hourly:
                 hourly[hour] = []
             hourly[hour].append(s)
@@ -503,7 +559,7 @@ def render_swarm_timeline(signals):
 
         if hour_label in hourly:
             sigs = hourly[hour_label]
-            agents = set(s.agent_name.replace("-agent", "")[:6] for s in sigs if hasattr(s, 'agent_name'))
+            agents = set(s.get("agent_name", "?").replace("-agent", "")[:6] for s in sigs)
             agent_str = " ".join(f"[{a}]" for a in list(agents)[:4])
             lines.append(f"{hour_label} ┃ {agent_str} → {len(sigs)} signals")
         else:

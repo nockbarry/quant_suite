@@ -1,0 +1,60 @@
+{# HTMX partial: Single event in timeline - used for inline expand in /flows #}
+<div class="bg-gray-800/50 border border-gray-700 rounded-lg p-3 mt-1 fade-in">
+    <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+            <span class="rounded-full px-2 py-0.5 text-[10px]
+                {% if event.event_type == 'trade' %}bg-emerald-900/50 text-emerald-400
+                {% elif event.event_type == 'signal' %}bg-purple-900/50 text-purple-400
+                {% elif event.event_type == 'decision' %}bg-blue-900/50 text-blue-400
+                {% elif event.event_type == 'alert' %}bg-red-900/50 text-red-400
+                {% elif event.event_type == 'agent' %}bg-cyan-900/50 text-cyan-400
+                {% elif event.event_type == 'llm' %}bg-indigo-900/50 text-indigo-400
+                {% elif event.event_type == 'thesis' %}bg-amber-900/50 text-amber-400
+                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                {{ event.event_type }}
+            </span>
+            <span class="rounded-full px-2 py-0.5 text-[10px] bg-gray-800 text-gray-500">{{ event.source }}</span>
+            <span class="rounded-full px-2 py-0.5 text-[10px]
+                {% if event.severity == 'critical' %}bg-red-900/50 text-red-400
+                {% elif event.severity == 'warning' %}bg-yellow-900/50 text-yellow-400
+                {% else %}bg-gray-800 text-gray-500{% endif %}">
+                {{ event.severity }}
+            </span>
+        </div>
+        <span class="text-[10px] text-gray-600 mono">{{ event.id[:12] }}</span>
+    </div>
+
+    <p class="text-sm text-gray-300 mb-2">{{ event.title }}</p>
+
+    {% if event.detail %}
+    <div class="bg-gray-900 rounded p-2 text-xs text-gray-400 max-h-48 overflow-y-auto">
+        {% if event.detail is mapping %}
+        <pre class="mono whitespace-pre-wrap">{{ event.detail | tojson(indent=2) }}</pre>
+        {% else %}
+        <p class="whitespace-pre-wrap">{{ event.detail }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Links -->
+    <div class="flex items-center gap-3 mt-2 text-xs">
+        {% if event.symbol %}
+        <a href="/knowledge/{{ event.symbol }}" class="text-emerald-400 hover:underline mono">{{ event.symbol }}</a>
+        {% endif %}
+        {% if event.decision_id %}
+        <a href="/decisions/{{ event.decision_id }}" class="text-blue-400 hover:underline">Decision &rarr;</a>
+        {% endif %}
+        {% if event.thesis_id %}
+        <a href="/theses/{{ event.thesis_id }}" class="text-amber-400 hover:underline">Thesis &rarr;</a>
+        {% endif %}
+        {% if event.agent_run_id %}
+        <a href="/agents/{{ event.agent_run_id }}" class="text-cyan-400 hover:underline">Agent Run &rarr;</a>
+        {% endif %}
+        {% if event.signal_id %}
+        <a href="/signals?id={{ event.signal_id }}" class="text-purple-400 hover:underline">Signal &rarr;</a>
+        {% endif %}
+        {% if event.decision_id %}
+        <a href="/flows/decision/{{ event.decision_id }}" class="text-gray-400 hover:text-gray-200">Full flow &rarr;</a>
+        {% endif %}
+    </div>
+</div>

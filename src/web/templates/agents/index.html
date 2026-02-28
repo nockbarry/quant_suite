@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% set active_page = "agents" %}
+{% block title %}Agent Runs{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-xl font-bold text-gray-100">Agent Intelligence</h1>
+        <p class="text-sm text-gray-500">Autonomous agent runs, metrics, and outputs</p>
+    </div>
+
+    <!-- Metrics Panel -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3" hx-get="/agents/metrics" hx-trigger="every 30s" hx-target="#agent-metrics" hx-swap="innerHTML">
+        <div id="agent-metrics" class="contents">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                <p class="text-[10px] text-gray-500 uppercase">Total Runs</p>
+                <p class="text-lg font-bold mono text-gray-200">{{ metrics.total_runs | default(0) }}</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                <p class="text-[10px] text-gray-500 uppercase">Total Cost</p>
+                <p class="text-lg font-bold mono text-gray-200">${{ "%.2f"|format(metrics.total_cost | default(0)) }}</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                <p class="text-[10px] text-gray-500 uppercase">Avg Duration</p>
+                <p class="text-lg font-bold mono text-gray-200">{{ "%.0f"|format(metrics.avg_duration_sec | default(0)) }}s</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                <p class="text-[10px] text-gray-500 uppercase">Signals Generated</p>
+                <p class="text-lg font-bold mono text-emerald-400">{{ metrics.signals_generated | default(0) }}</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                <p class="text-[10px] text-gray-500 uppercase">Decisions Influenced</p>
+                <p class="text-lg font-bold mono text-blue-400">{{ metrics.decisions_influenced | default(0) }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex items-center gap-3">
+        <span class="text-xs text-gray-500">Filter:</span>
+        <button hx-get="/agents?type=" hx-target="#agent-table-body" hx-swap="innerHTML"
+                class="rounded-full px-2.5 py-1 text-xs {% if not filter_type %}bg-emerald-900/50 text-emerald-400{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %} transition">
+            All
+        </button>
+        {% for atype in agent_types %}
+        <button hx-get="/agents?type={{ atype }}" hx-target="#agent-table-body" hx-swap="innerHTML"
+                class="rounded-full px-2.5 py-1 text-xs {% if filter_type == atype %}bg-emerald-900/50 text-emerald-400{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %} transition">
+            {{ atype }}
+        </button>
+        {% endfor %}
+
+        <span class="text-xs text-gray-500 ml-4">Status:</span>
+        {% for st in ['running', 'completed', 'failed'] %}
+        <button hx-get="/agents?status={{ st }}" hx-target="#agent-table-body" hx-swap="innerHTML"
+                class="rounded-full px-2.5 py-1 text-xs {% if filter_status == st %}bg-emerald-900/50 text-emerald-400{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %} transition">
+            {{ st | capitalize }}
+        </button>
+        {% endfor %}
+    </div>
+
+    <!-- Agent Runs Table -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                        <th class="px-4 py-2 text-left">Timestamp</th>
+                        <th class="px-4 py-2 text-left">Agent</th>
+                        <th class="px-4 py-2 text-left">Task</th>
+                        <th class="px-4 py-2 text-left">Status</th>
+                        <th class="px-4 py-2 text-right">Duration</th>
+                        <th class="px-4 py-2 text-right">Tokens</th>
+                        <th class="px-4 py-2 text-right">Cost</th>
+                    </tr>
+                </thead>
+                <tbody id="agent-table-body">
+                    {% for r in runs %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer"
+                        onclick="window.location='/agents/{{ r.id }}'">
+                        <td class="px-4 py-2 text-gray-400 mono text-xs">{{ r.started_at[:16] if r.started_at else "" }}</td>
+                        <td class="px-4 py-2">
+                            <span class="rounded-full px-2 py-0.5 text-xs
+                                {% if r.agent_type == 'research' %}bg-purple-900/50 text-purple-400
+                                {% elif r.agent_type == 'monitor' %}bg-blue-900/50 text-blue-400
+                                {% elif r.agent_type == 'critic' %}bg-red-900/50 text-red-400
+                                {% elif r.agent_type == 'alpha-discovery' %}bg-emerald-900/50 text-emerald-400
+                                {% elif r.agent_type == 'macro-research' %}bg-amber-900/50 text-amber-400
+                                {% elif r.agent_type == 'news-analyst' %}bg-cyan-900/50 text-cyan-400
+                                {% elif r.agent_type == 'orchestrator' %}bg-indigo-900/50 text-indigo-400
+                                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                {{ r.agent_type }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-gray-300 max-w-xs truncate">{{ r.task[:80] if r.task else "" }}{% if r.task and r.task|length > 80 %}...{% endif %}</td>
+                        <td class="px-4 py-2">
+                            <span class="rounded-full px-2 py-0.5 text-xs
+                                {% if r.status == 'running' %}bg-yellow-900/50 text-yellow-400
+                                {% elif r.status == 'completed' %}bg-emerald-900/50 text-emerald-400
+                                {% elif r.status == 'failed' %}bg-red-900/50 text-red-400
+                                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                {% if r.status == 'running' %}&#9679; {% endif %}{{ r.status }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-right mono text-gray-400">
+                            {% if r.completed_at and r.started_at %}
+                            {{ r.duration_display | default("N/A") }}
+                            {% elif r.status == 'running' %}
+                            <span class="text-yellow-400">running</span>
+                            {% else %}
+                            &mdash;
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2 text-right mono text-gray-400">{{ "{:,}".format(r.tokens_used) if r.tokens_used else "&mdash;" }}</td>
+                        <td class="px-4 py-2 text-right mono text-gray-400">${{ "%.4f"|format(r.cost_usd) if r.cost_usd else "&mdash;" }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if not runs %}
+                    <tr><td colspan="7" class="px-4 py-8 text-center text-gray-600">No agent runs found.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% set active_page = "flows" %}
+{% block title %}Activity Stream{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-xl font-bold text-gray-100">Activity Stream</h1>
+        <p class="text-sm text-gray-500">Real-time system events and process flow</p>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+        <form hx-get="/flows" hx-target="#event-timeline" hx-swap="innerHTML" hx-push-url="true"
+              class="flex flex-wrap items-end gap-3">
+            <!-- Event Type Checkboxes -->
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Event Types</label>
+                <div class="flex flex-wrap gap-1">
+                    {% for etype in event_types %}
+                    <label class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs bg-gray-800 text-gray-400 cursor-pointer hover:bg-gray-700">
+                        <input type="checkbox" name="event_type" value="{{ etype }}"
+                               {% if not filter_event_types or etype in filter_event_types %}checked{% endif %}
+                               class="rounded bg-gray-700 border-gray-600 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 w-3 h-3">
+                        {{ etype }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Symbol</label>
+                <input type="text" name="symbol" value="{{ filter_symbol or '' }}" placeholder="e.g., SLB"
+                       class="w-24 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 mono focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Source</label>
+                <select name="source" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                    <option value="">All</option>
+                    {% for src in sources %}
+                    <option value="{{ src }}" {% if filter_source == src %}selected{% endif %}>{{ src }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Severity</label>
+                <select name="severity" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                    <option value="">All</option>
+                    {% for sev in ['info', 'warning', 'critical'] %}
+                    <option value="{{ sev }}" {% if filter_severity == sev %}selected{% endif %}>{{ sev | capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">From</label>
+                <input type="date" name="date_from" value="{{ filter_date_from or '' }}"
+                       class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">To</label>
+                <input type="date" name="date_to" value="{{ filter_date_to or '' }}"
+                       class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+            </div>
+            <button type="submit" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded transition">Filter</button>
+            <a href="/flows" class="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded transition">Reset</a>
+        </form>
+    </div>
+
+    <!-- Event Timeline -->
+    <div id="event-timeline" class="space-y-0" hx-get="/flows?partial=1" hx-trigger="every 30s" hx-swap="innerHTML">
+        {% for event in events %}
+        <div class="flex gap-3 group">
+            <!-- Timeline column -->
+            <div class="flex flex-col items-center w-6 flex-shrink-0">
+                <div class="w-2.5 h-2.5 rounded-full mt-2 flex-shrink-0
+                    {% if event.severity == 'critical' %}bg-red-500
+                    {% elif event.severity == 'warning' %}bg-yellow-500
+                    {% else %}bg-blue-500{% endif %}">
+                </div>
+                {% if not loop.last %}
+                <div class="w-0.5 flex-1 min-h-[16px] bg-gray-800"></div>
+                {% endif %}
+            </div>
+
+            <!-- Event content -->
+            <div class="flex-1 pb-3 min-w-0">
+                <div class="bg-gray-900 border border-gray-800 rounded-lg p-3 hover:border-gray-700 transition cursor-pointer"
+                     hx-get="/flows/{{ event.id }}" hx-target="#event-detail-{{ event.id }}" hx-swap="innerHTML" hx-trigger="click">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-xs text-gray-500 mono">{{ event.timestamp[:16] if event.timestamp else "" }}</span>
+                        <span class="rounded-full px-2 py-0.5 text-[10px]
+                            {% if event.event_type == 'trade' %}bg-emerald-900/50 text-emerald-400
+                            {% elif event.event_type == 'signal' %}bg-purple-900/50 text-purple-400
+                            {% elif event.event_type == 'decision' %}bg-blue-900/50 text-blue-400
+                            {% elif event.event_type == 'alert' %}bg-red-900/50 text-red-400
+                            {% elif event.event_type == 'agent' %}bg-cyan-900/50 text-cyan-400
+                            {% elif event.event_type == 'llm' %}bg-indigo-900/50 text-indigo-400
+                            {% elif event.event_type == 'thesis' %}bg-amber-900/50 text-amber-400
+                            {% else %}bg-gray-800 text-gray-400{% endif %}">
+                            {{ event.event_type }}
+                        </span>
+                        <span class="rounded-full px-2 py-0.5 text-[10px] bg-gray-800 text-gray-500">{{ event.source }}</span>
+                        {% if event.symbol %}
+                        <span class="text-xs mono text-emerald-400 font-medium">{{ event.symbol }}</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm text-gray-300 mt-1">{{ event.title }}</p>
+                </div>
+                <!-- Inline detail area (HTMX target) -->
+                <div id="event-detail-{{ event.id }}" class="mt-1"></div>
+            </div>
+        </div>
+        {% endfor %}
+        {% if not events %}
+        <div class="text-center py-12">
+            <p class="text-gray-600 text-sm">No events found matching filters.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,160 @@
+{# HTMX partial: Decision lineage visualization
+   Expected context: lineage (dict with optional keys: signals, convergence, briefing, llm_analysis, adversarial, decision, execution, outcome, learning)
+   Each key contains a dict with relevant data for that lineage step.
+#}
+<div class="space-y-0">
+    {% set steps = [
+        ('signals', 'Signals', 'purple', '&#9889;'),
+        ('convergence', 'Convergence', 'purple', '&#9733;'),
+        ('briefing', 'Briefing', 'cyan', '&#9783;'),
+        ('llm_analysis', 'LLM Analysis', 'indigo', '&#9041;'),
+        ('adversarial', 'Adversarial', 'red', '&#9876;'),
+        ('decision', 'Decision', 'blue', '&#9654;'),
+        ('execution', 'Execution', 'emerald', '&#9632;'),
+        ('outcome', 'Outcome', 'amber', '&#9679;'),
+        ('learning', 'Learning', 'yellow', '&#9733;')
+    ] %}
+
+    {% for step_key, step_label, step_color, step_icon in steps %}
+    {% set step_data = lineage.get(step_key) if lineage else None %}
+    {% if step_data or (step_key == 'decision') %}
+    <div class="flex gap-3">
+        <!-- Vertical line + node -->
+        <div class="flex flex-col items-center w-6">
+            <div class="w-3.5 h-3.5 rounded-full border-2 flex-shrink-0
+                {% if step_data %}
+                    {% if step_color == 'purple' %}bg-purple-500 border-purple-400
+                    {% elif step_color == 'cyan' %}bg-cyan-500 border-cyan-400
+                    {% elif step_color == 'indigo' %}bg-indigo-500 border-indigo-400
+                    {% elif step_color == 'red' %}bg-red-500 border-red-400
+                    {% elif step_color == 'blue' %}bg-blue-500 border-blue-400
+                    {% elif step_color == 'emerald' %}bg-emerald-500 border-emerald-400
+                    {% elif step_color == 'amber' %}bg-amber-500 border-amber-400
+                    {% elif step_color == 'yellow' %}bg-yellow-500 border-yellow-400
+                    {% else %}bg-gray-500 border-gray-400{% endif %}
+                {% else %}bg-gray-800 border-gray-600{% endif %}">
+            </div>
+            {% if not loop.last %}
+            <div class="w-0.5 flex-1 min-h-[12px] bg-gray-800"></div>
+            {% endif %}
+        </div>
+
+        <!-- Step card -->
+        <div class="flex-1 pb-2">
+            <div class="bg-gray-800/30 border border-gray-800 rounded-lg p-3
+                {% if step_data %}hover:border-gray-700{% else %}opacity-40{% endif %} transition">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xs
+                        {% if step_color == 'purple' %}text-purple-400
+                        {% elif step_color == 'cyan' %}text-cyan-400
+                        {% elif step_color == 'indigo' %}text-indigo-400
+                        {% elif step_color == 'red' %}text-red-400
+                        {% elif step_color == 'blue' %}text-blue-400
+                        {% elif step_color == 'emerald' %}text-emerald-400
+                        {% elif step_color == 'amber' %}text-amber-400
+                        {% elif step_color == 'yellow' %}text-yellow-400
+                        {% else %}text-gray-400{% endif %}">
+                        {{ step_icon }} {{ step_label }}
+                    </span>
+                    {% if step_data and step_data.timestamp %}
+                    <span class="text-[10px] text-gray-600 mono">{{ step_data.timestamp[:16] }}</span>
+                    {% endif %}
+                </div>
+
+                {% if step_data %}
+                    {% if step_key == 'signals' %}
+                    <div class="flex flex-wrap gap-1">
+                        {% for sig in step_data.items %}
+                        <span class="rounded-full px-2 py-0.5 text-[10px] bg-gray-800 text-gray-400">
+                            {{ sig.source }}: {{ sig.direction }} ({{ "%.0f"|format(sig.confidence * 100) }}%)
+                        </span>
+                        {% endfor %}
+                        {% if not step_data.items %}
+                        <span class="text-xs text-gray-500">{{ step_data.count | default(0) }} signals detected</span>
+                        {% endif %}
+                    </div>
+
+                    {% elif step_key == 'convergence' %}
+                    <p class="text-xs text-gray-400">{{ step_data.signal_count | default(0) }} aligned signals, score: <span class="mono text-purple-400">{{ "%.2f"|format(step_data.weighted_score | default(0)) }}</span></p>
+
+                    {% elif step_key == 'briefing' %}
+                    <p class="text-xs text-gray-400 truncate">{{ step_data.summary | default("Briefing provided market context") }}</p>
+                    {% if step_data.id %}
+                    <a href="/reports/view?type=briefings&file={{ step_data.id }}" class="text-[10px] text-cyan-400 hover:underline">View briefing &rarr;</a>
+                    {% endif %}
+
+                    {% elif step_key == 'llm_analysis' %}
+                    <p class="text-xs text-gray-400 truncate">{{ step_data.summary | default("LLM analyzed signals and context") }}</p>
+                    {% if step_data.id %}
+                    <a href="/llm/{{ step_data.id }}" class="text-[10px] text-indigo-400 hover:underline">Full LLM interaction &rarr;</a>
+                    {% endif %}
+                    {% if step_data.model %}
+                    <span class="text-[10px] text-gray-600 mono ml-2">{{ step_data.model }}</span>
+                    {% endif %}
+
+                    {% elif step_key == 'adversarial' %}
+                    <p class="text-xs text-gray-400">{{ step_data.summary | default("") }}</p>
+                    {% if step_data.concern_level %}
+                    <span class="text-[10px]
+                        {% if step_data.concern_level == 'high' %}text-red-400
+                        {% elif step_data.concern_level == 'medium' %}text-yellow-400
+                        {% else %}text-gray-500{% endif %}">
+                        Concern: {{ step_data.concern_level }}
+                    </span>
+                    {% endif %}
+
+                    {% elif step_key == 'decision' %}
+                    <div class="flex items-center gap-2">
+                        <span class="rounded-full px-2 py-0.5 text-xs
+                            {% if step_data.action in ['BUY', 'ADD'] %}bg-emerald-900/50 text-emerald-400
+                            {% elif step_data.action in ['SELL', 'CLOSE'] %}bg-red-900/50 text-red-400
+                            {% else %}bg-gray-800 text-gray-400{% endif %}">
+                            {{ step_data.action }}
+                        </span>
+                        <span class="text-xs text-gray-400">{{ "%.0f"|format(step_data.confidence * 100) }}% confidence</span>
+                        <span class="text-xs text-gray-500">{{ "%.1f"|format(step_data.size_pct) }}% size</span>
+                    </div>
+
+                    {% elif step_key == 'execution' %}
+                    <div class="text-xs text-gray-400">
+                        {% if step_data.price %}Price: <span class="mono">${{ "%.2f"|format(step_data.price) }}</span>{% endif %}
+                        {% if step_data.status %}
+                        <span class="rounded-full px-2 py-0.5 text-[10px] ml-1
+                            {% if step_data.status == 'filled' %}bg-emerald-900/50 text-emerald-400
+                            {% elif step_data.status == 'rejected' %}bg-red-900/50 text-red-400
+                            {% else %}bg-gray-800 text-gray-400{% endif %}">
+                            {{ step_data.status }}
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    {% elif step_key == 'outcome' %}
+                    <div class="flex items-center gap-2 text-xs">
+                        {% if step_data.pnl_pct is defined %}
+                        <span class="mono font-medium {% if step_data.pnl_pct >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                            {{ "%+.1f"|format(step_data.pnl_pct) }}%
+                        </span>
+                        {% endif %}
+                        {% if step_data.pnl is defined %}
+                        <span class="mono text-gray-500">${{ "%+.0f"|format(step_data.pnl) }}</span>
+                        {% endif %}
+                        {% if step_data.hold_days %}
+                        <span class="text-gray-500">{{ step_data.hold_days }}d hold</span>
+                        {% endif %}
+                    </div>
+
+                    {% elif step_key == 'learning' %}
+                    <p class="text-xs text-gray-400 truncate">{{ step_data.summary | default("Learning extracted") }}</p>
+                    {% if step_data.id %}
+                    <a href="/learnings#{{ step_data.id }}" class="text-[10px] text-yellow-400 hover:underline">View learning &rarr;</a>
+                    {% endif %}
+                    {% endif %}
+                {% else %}
+                <p class="text-xs text-gray-600">Not available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>

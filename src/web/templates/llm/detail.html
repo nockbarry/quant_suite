@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% set active_page = "llm" %}
+{% block title %}LLM Interaction Detail{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <a href="/llm" class="text-gray-500 hover:text-gray-300 text-sm">&larr; LLM Log</a>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="text-xl font-bold text-gray-100">LLM Interaction</h1>
+            <span class="rounded-full px-2.5 py-0.5 text-sm
+                {% if interaction.trigger_type == 'convergence' %}bg-purple-900/50 text-purple-400
+                {% elif interaction.trigger_type == 'alert' %}bg-red-900/50 text-red-400
+                {% elif interaction.trigger_type == 'scheduled' %}bg-blue-900/50 text-blue-400
+                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                {{ interaction.trigger_type or "manual" }}
+            </span>
+        </div>
+        <p class="text-xs text-gray-500 mt-1 mono">{{ interaction.timestamp[:19] if interaction.timestamp else "" }}</p>
+    </div>
+
+    <!-- Trigger Info + Metadata -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Model</p>
+            <p class="text-sm mono text-gray-200 truncate">{{ interaction.model or "N/A" }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Tokens In</p>
+            <p class="text-sm mono text-gray-200">{{ "{:,}".format(interaction.tokens_input) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Tokens Out</p>
+            <p class="text-sm mono text-gray-200">{{ "{:,}".format(interaction.tokens_output) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Cost</p>
+            <p class="text-sm mono text-gray-200">${{ "%.4f"|format(interaction.cost_usd) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Latency</p>
+            <p class="text-sm mono text-gray-200">{{ "{:,}".format(interaction.latency_ms) }}ms</p>
+        </div>
+    </div>
+
+    {% if interaction.trigger_id %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-3 text-sm">
+        <span class="text-gray-500">Trigger ID:</span>
+        <span class="mono text-gray-300 ml-2">{{ interaction.trigger_id }}</span>
+    </div>
+    {% endif %}
+
+    {% if interaction.decision_id %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-3 text-sm">
+        <span class="text-gray-500">Linked Decision:</span>
+        <a href="/decisions/{{ interaction.decision_id }}" class="mono text-emerald-400 hover:underline ml-2">{{ interaction.decision_id }}</a>
+    </div>
+    {% endif %}
+
+    <!-- System Prompt (collapsible) -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <button onclick="document.getElementById('system-prompt').classList.toggle('hidden')"
+                class="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-gray-800/30 transition">
+            <h2 class="text-sm font-semibold text-gray-300">System Prompt</h2>
+            <span class="text-gray-500 text-xs">
+                {% if interaction.system_prompt_hash %}hash: {{ interaction.system_prompt_hash[:16] }}{% else %}Click to expand{% endif %}
+            </span>
+        </button>
+        <div id="system-prompt" class="hidden px-4 pb-4">
+            {% if system_prompt %}
+            <pre class="bg-gray-950 rounded p-4 text-xs text-gray-400 mono overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap">{{ system_prompt }}</pre>
+            {% else %}
+            <p class="text-sm text-gray-600">System prompt not stored (only hash available)</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- User Prompt -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-gray-300 mb-3">User Prompt</h2>
+        <div class="bg-gray-950 rounded p-4 max-h-96 overflow-y-auto">
+            <pre class="text-xs text-gray-300 mono whitespace-pre-wrap">{{ interaction.user_prompt }}</pre>
+        </div>
+    </div>
+
+    <!-- Response -->
+    <div class="bg-gray-900 border border-emerald-900/30 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-emerald-400 mb-3">Response</h2>
+        <div class="bg-gray-950 rounded p-4 max-h-[600px] overflow-y-auto">
+            <pre class="text-xs text-gray-300 mono whitespace-pre-wrap">{{ interaction.response }}</pre>
+        </div>
+    </div>
+</div>
+{% endblock %}

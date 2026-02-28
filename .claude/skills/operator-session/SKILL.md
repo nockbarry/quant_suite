@@ -224,13 +224,158 @@ print(f"Convergences: {len(summary.convergences)}")
 | Position loss | -10% | -15% |
 | Data staleness | >1 hour | >4 hours |
 
+## Autonomous Execution Mode
+
+Claude can execute trades directly during operator sessions with appropriate safety rails.
+
+### Execution Authority Levels
+
+| Level | What Claude Can Do |
+|-------|-------------------|
+| `FULL` | Execute any trade within risk limits |
+| `THESIS_ONLY` | Only trades linked to active theses (default) |
+| `APPROVED` | Only stop-loss and signpost exits |
+| `NOTIFY` | Log and alert, but don't execute |
+| `DISABLED` | Monitoring only, no execution |
+
+### Set Authority at Session Start
+
+```bash
+# Start with thesis-only execution (default, safest for active trading)
+PYTHONPATH=. python scripts/claude_execute.py authority thesis
+
+# Full authority for active day
+PYTHONPATH=. python scripts/claude_execute.py authority full
+
+# Monitoring only
+PYTHONPATH=. python scripts/claude_execute.py authority notify
+```
+
+### Execute Trades
+
+```bash
+# Check if trade is allowed first
+PYTHONPATH=. python scripts/claude_execute.py check BUY FCX 5% --thesis copper123
+
+# Execute a trade
+PYTHONPATH=. python scripts/claude_execute.py execute BUY FCX 10 --thesis copper123 --reason "Copper squeeze thesis, adding on dip"
+
+# Close a position
+PYTHONPATH=. python scripts/claude_execute.py execute CLOSE ERY --reason "Thesis conflict with Venezuela bull"
+
+# Dry run (check but don't execute)
+PYTHONPATH=. python scripts/claude_execute.py execute BUY AAPL 5 --dry-run
+```
+
+### Safety Rails
+
+The autonomous operator has built-in safety rails:
+
+| Rail | Default | Purpose |
+|------|---------|---------|
+| Max single trade | 5% | No single trade > 5% of portfolio |
+| Max daily trades | 10 | Stop after 10 trades per day |
+| Max daily loss | 3% | Stop buying if down 3%+ |
+| Max position | 15% | No position > 15% of portfolio |
+| Max sector | 40% | No sector > 40% concentration |
+| Trading hours | 9-16 ET | Only trade during market hours |
+
+### Session Persistence
+
+Session state persists to `~/quant_results/live/operator_session.json`:
+
+```bash
+# View current session
+PYTHONPATH=. python scripts/claude_execute.py status
+
+# Add focus area
+PYTHONPATH=. python scripts/claude_execute.py focus "Monitor energy concentration"
+
+# Record observation
+PYTHONPATH=. python scripts/claude_execute.py observe "Gold breaking out, thesis confirmed"
+
+# Add pending action
+PYTHONPATH=. python scripts/claude_execute.py pending --add "Review LEN if breaks -10%" --priority high
+
+# Get handoff context for next session
+PYTHONPATH=. python scripts/claude_execute.py handoff
+```
+
+### Autonomous Operator Workflow
+
+```python
+from src.monitoring.autonomous_operator import (
+    get_autonomous_operator,
+    start_autonomous_session,
+    ExecutionAuthority,
+    TradeProposal,
+    TradeType,
+)
+
+# Start/resume session
+session = start_autonomous_session(
+    authority=ExecutionAuthority.THESIS_ONLY,
+    resume=True,
+)
+
+# Check session state
+operator = get_autonomous_operator()
+print(operator.get_session_summary())
+
+# Propose and check a trade
+proposal = TradeProposal(
+    symbol="FCX",
+    action="BUY",
+    size_pct=3.0,
+    trade_type=TradeType.THESIS_ADD,
+    thesis_id="copper123",
+    reasoning="Copper at record highs, thesis validated",
+    confidence=0.75,
+)
+
+# Get portfolio context
+from src.synthesis.state import UnifiedState
+from src.core.paths import paths
+state = UnifiedState.load(paths.live_state)
+
+allowed, reason = operator.check_trade_allowed(
+    proposal,
+    portfolio_value=state.portfolio.equity,
+    current_positions={p.symbol: p.market_value for p in state.positions},
+    daily_pnl_pct=state.portfolio.day_pnl_pct,
+)
+
+if allowed:
+    # Execute the trade
+    result = await operator.execute_trade(proposal, ...)
+    print(f"Trade result: {result.message}")
+```
+
+### Session Handoff
+
+When context is running low or switching sessions:
+
+```bash
+# Generate handoff summary
+PYTHONPATH=. python scripts/claude_execute.py handoff
+
+# The next session reads this and continues seamlessly
+```
+
+The handoff includes:
+- Trades executed this session
+- Focus areas and pending actions
+- Key observations
+- Current authority and safety rails
+
 ## Best Practices
 
-1. **Start with default interval** - adjust based on market conditions
+1. **Start with THESIS_ONLY authority** - safest for active trading
 2. **Review action items immediately** - especially HIGH priority
-3. **Spawn research on convergences** - multiple signals = higher confidence
-4. **Update theses on signpost triggers** - keep conviction levels current
-5. **Use `/trade-decision` for actual trades** - operator mode is for monitoring
+3. **Execute thesis-aligned trades** - use the tools to check and execute
+4. **Record observations** - builds context for handoff
+5. **Set focus areas** - helps maintain attention on key items
+6. **Use handoff before context limit** - ensures continuity
 
 ## Related Skills
 

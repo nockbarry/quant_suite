@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Top metrics bar -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3" hx-get="/partials/activity-feed" hx-trigger="every 30s" hx-target="#activity-feed" hx-swap="innerHTML">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Equity</p>
+            <p class="text-lg font-bold mono">${{ "%.0f"|format(portfolio.total_value) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Day P&L</p>
+            <p class="text-lg font-bold mono {% if portfolio.day_pnl >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                {{ "%+.0f"|format(portfolio.day_pnl) }}
+            </p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Unreal P&L</p>
+            <p class="text-lg font-bold mono {% if portfolio.total_pnl >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                {{ "%+.0f"|format(portfolio.total_pnl) }} <span class="text-xs">({{ "%.1f"|format(portfolio.total_pnl_pct) }}%)</span>
+            </p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Positions</p>
+            <p class="text-lg font-bold mono">{{ portfolio.position_count }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Regime</p>
+            <p class="text-lg font-bold mono">{{ market.regime | default("N/A") }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">VIX</p>
+            <p class="text-lg font-bold mono">{{ "%.1f"|format(market.vix | default(0)) }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Positions table -->
+        <div class="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-lg">
+            <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
+                <h2 class="text-sm font-semibold text-gray-300">Positions</h2>
+                <span class="text-xs text-gray-500">{{ portfolio.position_count }} open</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                            <th class="px-4 py-2 text-left">Symbol</th>
+                            <th class="px-4 py-2 text-right">Qty</th>
+                            <th class="px-4 py-2 text-right">Price</th>
+                            <th class="px-4 py-2 text-right">Value</th>
+                            <th class="px-4 py-2 text-right">P&L</th>
+                            <th class="px-4 py-2 text-right">P&L %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in portfolio.positions %}
+                        <tr class="data-row border-b border-gray-800/50 hover:bg-gray-800/30">
+                            <td class="px-4 py-2 font-medium mono text-emerald-400">{{ p.symbol }}</td>
+                            <td class="px-4 py-2 text-right mono">{{ p.quantity }}</td>
+                            <td class="px-4 py-2 text-right mono">${{ "%.2f"|format(p.current_price | default(0)) }}</td>
+                            <td class="px-4 py-2 text-right mono">${{ "%.0f"|format(p.market_value | default(0)) }}</td>
+                            <td class="px-4 py-2 text-right mono {% if (p.unrealized_pnl | default(0)) >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                                {{ "%+.0f"|format(p.unrealized_pnl | default(0)) }}
+                            </td>
+                            <td class="px-4 py-2 text-right mono {% if (p.unrealized_pnl_pct | default(0)) >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                                {{ "%+.1f"|format(p.unrealized_pnl_pct | default(0)) }}%
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not portfolio.positions %}
+                        <tr><td colspan="6" class="px-4 py-8 text-center text-gray-600">No positions</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Activity feed -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg">
+            <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
+                <h2 class="text-sm font-semibold text-gray-300">Activity</h2>
+                <a href="/flows" class="text-xs text-emerald-400 hover:underline">View all</a>
+            </div>
+            <div id="activity-feed" class="divide-y divide-gray-800/50 max-h-96 overflow-y-auto">
+                {% for event in events %}
+                <div class="px-4 py-2 hover:bg-gray-800/30 cursor-pointer"
+                     hx-get="/flows/{{ event.id }}" hx-target="#event-detail" hx-swap="innerHTML">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full {% if event.severity == 'critical' %}bg-red-500{% elif event.severity == 'warning' %}bg-yellow-500{% else %}bg-blue-500{% endif %}"></span>
+                        <span class="text-xs text-gray-400 mono">{{ event.timestamp[:16] if event.timestamp else '' }}</span>
+                    </div>
+                    <p class="text-sm text-gray-300 mt-0.5">{{ event.title }}</p>
+                    {% if event.symbol %}
+                    <span class="text-xs text-emerald-400 mono">{{ event.symbol }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% if not events %}
+                <div class="px-4 py-8 text-center text-gray-600 text-sm">No recent activity</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Event detail modal area -->
+    <div id="event-detail"></div>
+
+    <!-- Autonomy Status -->
+    {% if autonomy %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-gray-300 mb-3">Autonomy Loop</h2>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">Last Check</p>
+                <p class="mono">{{ autonomy.last_check | default("Never") }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">Checks Today</p>
+                <p class="mono">{{ autonomy.checks_today | default(0) }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">LLM Calls</p>
+                <p class="mono">{{ autonomy.llm_calls | default(0) }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">Trades Today</p>
+                <p class="mono">{{ autonomy.trades_today | default(0) }}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-gray-500 uppercase">Cost Today</p>
+                <p class="mono">${{ "%.2f"|format(autonomy.cost_today | default(0)) }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+[Unit]
+Description=Athena Autonomous Trading Event Loop
+After=network.target
+Wants=athena-data.service
+
+[Service]
+Type=simple
+User=nock
+WorkingDirectory=/home/nock/projects/quant_suite
+Environment=PYTHONPATH=/home/nock/projects/quant_suite
+ExecStart=/usr/bin/python3 scripts/athena_autonomy.py
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=athena-autonomy
+
+[Install]
+WantedBy=multi-user.target

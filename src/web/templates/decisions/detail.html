@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% set active_page = "decisions" %}
+{% block title %}Decision: {{ decision.symbol }} {{ decision.action }}{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <a href="/decisions" class="text-gray-500 hover:text-gray-300 text-sm">&larr; Decisions</a>
+            <div class="flex items-center gap-3 mt-1">
+                <h1 class="text-xl font-bold text-gray-100">
+                    <span class="mono text-emerald-400">{{ decision.symbol }}</span>
+                    <span class="rounded-full px-2.5 py-0.5 text-sm ml-2
+                        {% if decision.action in ['BUY', 'ADD'] %}bg-emerald-900/50 text-emerald-400
+                        {% elif decision.action in ['SELL', 'CLOSE'] %}bg-red-900/50 text-red-400
+                        {% elif decision.action == 'TRIM' %}bg-amber-900/50 text-amber-400
+                        {% else %}bg-gray-800 text-gray-400{% endif %}">
+                        {{ decision.action }}
+                    </span>
+                </h1>
+                <span class="rounded-full px-2 py-0.5 text-xs
+                    {% if decision.status == 'pending' %}bg-yellow-900/50 text-yellow-400
+                    {% elif decision.status == 'executed' %}bg-blue-900/50 text-blue-400
+                    {% elif decision.status == 'filled' %}bg-emerald-900/50 text-emerald-400
+                    {% elif decision.status in ['failed', 'rejected'] %}bg-red-900/50 text-red-400
+                    {% elif decision.status == 'closed' %}bg-purple-900/50 text-purple-400
+                    {% else %}bg-gray-800 text-gray-400{% endif %}">
+                    {{ decision.status }}
+                </span>
+            </div>
+            <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                <span class="mono">{{ decision.timestamp[:16] if decision.timestamp else "" }}</span>
+                {% if decision.confidence %}
+                <span>Confidence: <span class="mono font-medium
+                    {% if decision.confidence >= 0.7 %}text-emerald-400
+                    {% elif decision.confidence >= 0.4 %}text-yellow-400
+                    {% else %}text-red-400{% endif %}">{{ "%.0f"|format(decision.confidence * 100) }}%</span></span>
+                {% endif %}
+                {% if decision.realized_pnl_pct is not none %}
+                <span>P&L: <span class="mono font-medium {% if decision.realized_pnl_pct >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                    {{ "%+.1f"|format(decision.realized_pnl_pct) }}%
+                    {% if decision.realized_pnl is not none %}(${{ "%.0f"|format(decision.realized_pnl) }}){% endif %}
+                </span></span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- LINEAGE CHAIN -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-gray-300 mb-4">Decision Lineage</h2>
+        {% include "components/lineage_chain.html" %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column -->
+        <div class="lg:col-span-2 space-y-4">
+            <!-- Reasoning -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Reasoning</h2>
+                <p class="text-sm text-gray-300 leading-relaxed">{{ decision.reasoning }}</p>
+            </div>
+
+            <!-- Key Factors & Risks -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                    <h2 class="text-sm font-semibold text-gray-300 mb-2">Key Factors</h2>
+                    <ul class="space-y-1">
+                        {% for f in decision.key_factors %}
+                        <li class="text-sm text-gray-400 flex items-start gap-2">
+                            <span class="text-emerald-500 mt-1 flex-shrink-0">&#9654;</span>
+                            {{ f }}
+                        </li>
+                        {% endfor %}
+                        {% if not decision.key_factors %}
+                        <li class="text-sm text-gray-600">None recorded</li>
+                        {% endif %}
+                    </ul>
+                </div>
+                <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                    <h2 class="text-sm font-semibold text-gray-300 mb-2">Risks</h2>
+                    <ul class="space-y-1">
+                        {% for r in decision.risks %}
+                        <li class="text-sm text-gray-400 flex items-start gap-2">
+                            <span class="text-red-500 mt-1 flex-shrink-0">&#9632;</span>
+                            {{ r }}
+                        </li>
+                        {% endfor %}
+                        {% if not decision.risks %}
+                        <li class="text-sm text-gray-600">None recorded</li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Pre-mortem -->
+            {% if decision.pre_mortem %}
+            <div class="bg-gray-900 border border-amber-900/30 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-amber-400 mb-2">Pre-Mortem</h2>
+                <p class="text-sm text-gray-300 leading-relaxed italic">"{{ decision.pre_mortem }}"</p>
+            </div>
+            {% endif %}
+
+            <!-- Adversarial Notes -->
+            {% if decision.adversarial_notes %}
+            <div class="bg-gray-900 border border-red-900/30 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-red-400 mb-2">Adversarial Challenge</h2>
+                <p class="text-sm text-gray-300 leading-relaxed">{{ decision.adversarial_notes }}</p>
+            </div>
+            {% endif %}
+
+            <!-- LLM Interaction Preview -->
+            {% if decision.llm_interaction_id %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-sm font-semibold text-gray-300">LLM Analysis</h2>
+                    <a href="/llm/{{ decision.llm_interaction_id }}" class="text-xs text-emerald-400 hover:underline">Full view &rarr;</a>
+                </div>
+                {% if llm_interaction %}
+                <div class="bg-gray-800/50 rounded p-3 max-h-48 overflow-y-auto">
+                    <p class="text-xs text-gray-400 mono whitespace-pre-wrap">{{ llm_interaction.response[:1000] }}{% if llm_interaction.response|length > 1000 %}...{% endif %}</p>
+                </div>
+                <div class="flex gap-4 mt-2 text-xs text-gray-500">
+                    <span>Model: <span class="mono">{{ llm_interaction.model }}</span></span>
+                    <span>Tokens: <span class="mono">{{ llm_interaction.tokens_input + llm_interaction.tokens_output }}</span></span>
+                    <span>Cost: <span class="mono">${{ "%.4f"|format(llm_interaction.cost_usd) }}</span></span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Outcome Notes -->
+            {% if decision.outcome_notes %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Outcome Notes</h2>
+                <p class="text-sm text-gray-300">{{ decision.outcome_notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column: Details -->
+        <div class="space-y-4">
+            <!-- Position Details -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Position Details</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Size</span>
+                        <span class="mono text-gray-300">{{ "%.1f"|format(decision.size_pct) }}%</span>
+                    </div>
+                    {% if decision.limit_price %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Limit Price</span>
+                        <span class="mono text-gray-300">${{ "%.2f"|format(decision.limit_price) }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Stop Loss</span>
+                        <span class="mono text-gray-300">{{ "%.1f"|format(decision.stop_loss_pct) }}%</span>
+                    </div>
+                    {% if decision.take_profit_pct %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Take Profit</span>
+                        <span class="mono text-gray-300">{{ "%.1f"|format(decision.take_profit_pct) }}%</span>
+                    </div>
+                    {% endif %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Expected Hold</span>
+                        <span class="mono text-gray-300">{{ decision.expected_hold_days }}d</span>
+                    </div>
+                    <div class="border-t border-gray-800 my-2"></div>
+                    {% if decision.execution_price %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Entry Price</span>
+                        <span class="mono text-gray-300">${{ "%.2f"|format(decision.execution_price) }}</span>
+                    </div>
+                    {% endif %}
+                    {% if decision.execution_time %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Executed</span>
+                        <span class="mono text-gray-300 text-xs">{{ decision.execution_time[:16] }}</span>
+                    </div>
+                    {% endif %}
+                    {% if decision.exit_price %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Exit Price</span>
+                        <span class="mono text-gray-300">${{ "%.2f"|format(decision.exit_price) }}</span>
+                    </div>
+                    {% endif %}
+                    {% if decision.actual_hold_days %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Actual Hold</span>
+                        <span class="mono text-gray-300">{{ decision.actual_hold_days }}d</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Setup Type -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Setup</h2>
+                <span class="rounded-full px-2 py-0.5 text-xs bg-gray-800 text-gray-400">{{ decision.setup_type or "unclassified" }}</span>
+            </div>
+
+            <!-- Thesis Link -->
+            {% if decision.thesis_id %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Linked Thesis</h2>
+                <a href="/theses/{{ decision.thesis_id }}" class="text-sm text-emerald-400 hover:underline">
+                    {{ decision.thesis_name or decision.thesis_id }}
+                </a>
+            </div>
+            {% endif %}
+
+            <!-- Learning Link -->
+            {% if decision.learning_extracted and learnings %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Extracted Learnings</h2>
+                {% for l in learnings %}
+                <a href="/learnings#{{ l.id }}" class="block text-sm text-gray-400 hover:text-gray-200 mb-1">
+                    <span class="{% if l.outcome == 'win' %}text-emerald-400{% elif l.outcome == 'loss' %}text-red-400{% else %}text-gray-400{% endif %}">&#9679;</span>
+                    {{ l.what_i_learned[:80] }}{% if l.what_i_learned|length > 80 %}...{% endif %}
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

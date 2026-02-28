@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% set active_page = "knowledge" %}
+{% block title %}Knowledge Base{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Knowledge Base</h1>
+            <p class="text-sm text-gray-500">Company briefs and sector intelligence</p>
+        </div>
+        <button onclick="document.getElementById('add-company-form').classList.toggle('hidden')"
+                class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition">
+            + Add Company
+        </button>
+    </div>
+
+    <!-- Add Company Form (hidden by default) -->
+    <div id="add-company-form" class="hidden bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <h3 class="text-sm font-semibold text-gray-300 mb-3">New Company Brief</h3>
+        <form hx-post="/knowledge" hx-target="#company-table-body" hx-swap="beforeend" hx-on::after-request="this.reset(); document.getElementById('add-company-form').classList.add('hidden')">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Symbol</label>
+                    <input type="text" name="symbol" required placeholder="AAPL"
+                           class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 mono focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Name</label>
+                    <input type="text" name="name" required placeholder="Apple Inc."
+                           class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Sector</label>
+                    <input type="text" name="sector" placeholder="Technology"
+                           class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-xs text-gray-500 mb-1">Business Model</label>
+                    <input type="text" name="business_model" placeholder="What they do, how they make money"
+                           class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Market Cap Tier</label>
+                    <select name="market_cap_tier" class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                        <option value="">Select...</option>
+                        <option value="mega">Mega</option>
+                        <option value="large">Large</option>
+                        <option value="mid">Mid</option>
+                        <option value="small">Small</option>
+                        <option value="micro">Micro</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-4 flex gap-2">
+                <button type="submit" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded transition">Save</button>
+                <button type="button" onclick="document.getElementById('add-company-form').classList.add('hidden')"
+                        class="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded transition">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Companies Table -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-300">Companies</h2>
+            <span class="text-xs text-gray-500">{{ companies | length }} tracked</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                        <th class="px-4 py-2 text-left">Symbol</th>
+                        <th class="px-4 py-2 text-left">Name</th>
+                        <th class="px-4 py-2 text-left">Sector</th>
+                        <th class="px-4 py-2 text-left">Cap Tier</th>
+                        <th class="px-4 py-2 text-left">Moat</th>
+                        <th class="px-4 py-2 text-left">Last Updated</th>
+                    </tr>
+                </thead>
+                <tbody id="company-table-body">
+                    {% for c in companies %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer"
+                        onclick="window.location='/knowledge/{{ c.symbol }}'">
+                        <td class="px-4 py-2 font-medium mono text-emerald-400">{{ c.symbol }}</td>
+                        <td class="px-4 py-2 text-gray-300">{{ c.name }}</td>
+                        <td class="px-4 py-2">
+                            <span class="rounded-full px-2 py-0.5 text-xs bg-gray-800 text-gray-400">{{ c.sector or "N/A" }}</span>
+                        </td>
+                        <td class="px-4 py-2 text-gray-400 text-xs uppercase">{{ c.market_cap_tier or "N/A" }}</td>
+                        <td class="px-4 py-2 text-gray-400 max-w-xs truncate">{{ c.moat[:80] if c.moat else "N/A" }}{% if c.moat and c.moat|length > 80 %}...{% endif %}</td>
+                        <td class="px-4 py-2 text-gray-500 mono text-xs">{{ c.updated[:10] if c.updated else "N/A" }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if not companies %}
+                    <tr><td colspan="6" class="px-4 py-8 text-center text-gray-600">No companies tracked yet. Add one above.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Sectors Grid -->
+    <div>
+        <h2 class="text-sm font-semibold text-gray-300 mb-3">Sectors</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for s in sectors %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-gray-700 transition">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-gray-200">{{ s.sector }}</h3>
+                    <span class="rounded-full px-2 py-0.5 text-xs
+                        {% if s.relative_strength == 'strong' %}bg-emerald-900/50 text-emerald-400
+                        {% elif s.relative_strength == 'weak' %}bg-red-900/50 text-red-400
+                        {% else %}bg-gray-800 text-gray-400{% endif %}">
+                        {{ s.relative_strength or "neutral" }}
+                    </span>
+                </div>
+                <p class="text-xs text-gray-500 mb-2">Cycle: {{ s.current_cycle_position or "N/A" }}</p>
+                <p class="text-xs text-gray-400 line-clamp-2">{{ s.current_assessment or "No assessment yet" }}</p>
+                {% if s.leaders %}
+                <div class="mt-2 flex flex-wrap gap-1">
+                    {% for leader in s.leaders[:4] %}
+                    <span class="text-xs mono text-emerald-400">{{ leader }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% if not sectors %}
+            <div class="col-span-full text-center text-gray-600 text-sm py-8">No sectors tracked yet.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

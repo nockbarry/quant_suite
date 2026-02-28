@@ -1,0 +1,60 @@
+{# HTMX partial: Single thesis card - used in theses/index.html grid #}
+<div class="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-gray-700 transition h-full">
+    <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-semibold text-gray-200 truncate flex-1 mr-2">{{ t.name }}</h3>
+        <span class="rounded-full px-2 py-0.5 text-[10px] flex-shrink-0
+            {% if t.status == 'active' %}bg-emerald-900/50 text-emerald-400
+            {% elif t.status == 'validated' %}bg-blue-900/50 text-blue-400
+            {% elif t.status == 'invalidated' %}bg-red-900/50 text-red-400
+            {% elif t.status == 'paused' %}bg-yellow-900/50 text-yellow-400
+            {% elif t.status == 'expired' %}bg-gray-800 text-gray-500
+            {% else %}bg-gray-800 text-gray-400{% endif %}">
+            {{ t.status }}
+        </span>
+    </div>
+
+    <!-- Conviction Bar -->
+    <div class="flex items-center gap-2 mb-3">
+        <div class="flex-1 bg-gray-800 rounded-full h-1.5">
+            <div class="h-1.5 rounded-full transition-all duration-500"
+                 style="width: {{ t.conviction }}%;
+                        background: linear-gradient(90deg,
+                            {% if t.conviction < 30 %}#ef4444, #f97316
+                            {% elif t.conviction < 60 %}#f97316, #eab308
+                            {% elif t.conviction < 80 %}#eab308, #22c55e
+                            {% else %}#22c55e, #10b981{% endif %});">
+            </div>
+        </div>
+        <span class="mono text-xs font-medium
+            {% if t.conviction >= 70 %}text-emerald-400
+            {% elif t.conviction >= 40 %}text-yellow-400
+            {% else %}text-red-400{% endif %}">
+            {{ "%.0f"|format(t.conviction) }}%
+        </span>
+    </div>
+
+    <!-- Summary snippet -->
+    {% if t.summary %}
+    <p class="text-xs text-gray-400 line-clamp-2 mb-3">{{ t.summary[:120] }}{% if t.summary|length > 120 %}...{% endif %}</p>
+    {% endif %}
+
+    <!-- Positions -->
+    <div class="flex items-center justify-between">
+        <div class="flex flex-wrap gap-1">
+            {% set positions = t.positions if t.positions is iterable and t.positions is not string else [] %}
+            {% for sym in positions[:5] %}
+            <span class="mono text-[10px] text-emerald-400/70 bg-emerald-900/20 rounded px-1.5 py-0.5">{{ sym }}</span>
+            {% endfor %}
+            {% if positions | length > 5 %}
+            <span class="text-[10px] text-gray-500">+{{ positions | length - 5 }}</span>
+            {% endif %}
+        </div>
+        <span class="text-[10px] text-gray-600">
+            {{ positions | length }} position{{ 's' if positions | length != 1 else '' }}
+        </span>
+    </div>
+
+    {% if t.created %}
+    <p class="text-[10px] text-gray-600 mt-2">Created {{ t.created[:10] if t.created is string else t.created.strftime('%Y-%m-%d') }}</p>
+    {% endif %}
+</div>

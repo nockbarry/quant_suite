@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set active_page = "theses" %}
+{% block title %}Investment Theses{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Investment Theses</h1>
+            <p class="text-sm text-gray-500">{{ theses | length }} theses tracked</p>
+        </div>
+        <a href="/theses/new" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition">
+            + New Thesis
+        </a>
+    </div>
+
+    <!-- Filter Tabs -->
+    <div class="flex gap-1 border-b border-gray-800 pb-0">
+        {% set filters = [('all', 'All'), ('active', 'Active'), ('validated', 'Validated'), ('invalidated', 'Invalidated')] %}
+        {% for value, label in filters %}
+        <button hx-get="/theses?status={{ value }}" hx-target="#thesis-grid" hx-swap="innerHTML" hx-push-url="true"
+                class="px-4 py-2 text-sm border-b-2 transition
+                {% if (filter_status or 'all') == value %}border-emerald-400 text-emerald-400{% else %}border-transparent text-gray-500 hover:text-gray-300{% endif %}">
+            {{ label }}
+            <span class="ml-1 text-xs text-gray-600">
+                {% if value == 'all' %}{{ theses | length }}
+                {% else %}{{ theses | selectattr('status', 'equalto', value) | list | length }}{% endif %}
+            </span>
+        </button>
+        {% endfor %}
+    </div>
+
+    <!-- Thesis Card Grid -->
+    <div id="thesis-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for t in theses %}
+        {% if filter_status in [None, 'all'] or t.status == filter_status %}
+        <a href="/theses/{{ t.id }}" class="block">
+            {% include "components/thesis_card.html" %}
+        </a>
+        {% endif %}
+        {% endfor %}
+        {% if not theses %}
+        <div class="col-span-full text-center py-12">
+            <p class="text-gray-600 text-sm">No theses found.</p>
+            <a href="/theses/new" class="text-emerald-400 text-sm hover:underline mt-2 inline-block">Create your first thesis</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% set active_page = "upload" %}
+{% block title %}Upload Data{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-xl font-bold text-gray-100">Upload Data</h1>
+        <p class="text-sm text-gray-500">Import companies, learnings, theses, and other data</p>
+    </div>
+
+    <!-- Upload Form -->
+    <div class="max-w-2xl">
+        <form hx-post="/upload" hx-target="#upload-result" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+            <!-- File Type Selector -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4">
+                <label class="block text-xs text-gray-500 uppercase mb-2">Data Type</label>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {% for dtype in [
+                        ('companies', 'Companies', 'Company briefs (YAML/JSON)'),
+                        ('sectors', 'Sectors', 'Sector context (YAML/JSON)'),
+                        ('theses', 'Theses', 'Investment theses (YAML/JSON)'),
+                        ('learnings', 'Learnings', 'Trade learnings (JSON)'),
+                        ('decisions', 'Decisions', 'Trading decisions (JSON)'),
+                        ('signals', 'Signals', 'Signal data (JSON)'),
+                        ('knowledge', 'Knowledge', 'Knowledge base entries'),
+                        ('csv', 'CSV Data', 'Generic CSV import')
+                    ] %}
+                    <label class="relative cursor-pointer">
+                        <input type="radio" name="data_type" value="{{ dtype[0] }}" class="peer sr-only" {% if loop.first %}checked{% endif %}>
+                        <div class="border border-gray-700 rounded-lg p-3 hover:border-gray-600 transition
+                                    peer-checked:border-emerald-500 peer-checked:bg-emerald-900/10">
+                            <p class="text-sm text-gray-300 font-medium">{{ dtype[1] }}</p>
+                            <p class="text-[10px] text-gray-500 mt-0.5">{{ dtype[2] }}</p>
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Drag and Drop Area -->
+            <div class="bg-gray-900 border-2 border-dashed border-gray-700 rounded-lg p-8 text-center
+                        hover:border-gray-600 transition"
+                 id="drop-zone"
+                 ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+                <div class="text-gray-500">
+                    <p class="text-4xl mb-2">&#8679;</p>
+                    <p class="text-sm">Drag and drop files here or</p>
+                    <label class="inline-block mt-2 px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded cursor-pointer transition">
+                        Browse Files
+                        <input type="file" name="file" id="file-input" class="sr-only" accept=".json,.yaml,.yml,.csv"
+                               onchange="showPreview(this)">
+                    </label>
+                    <p class="text-xs text-gray-600 mt-2">Accepts: JSON, YAML, CSV</p>
+                </div>
+            </div>
+
+            <!-- Preview Area -->
+            <div id="preview-area" class="hidden mt-4 bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-gray-300">Preview</h3>
+                    <span id="file-name" class="text-xs text-gray-500 mono"></span>
+                </div>
+                <pre id="preview-content" class="bg-gray-950 rounded p-3 text-xs text-gray-400 mono overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap"></pre>
+            </div>
+
+            <!-- Import Button -->
+            <div class="mt-4 flex gap-3">
+                <button type="submit" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition font-medium">
+                    Import
+                </button>
+                <button type="reset" onclick="clearPreview()" class="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition">
+                    Clear
+                </button>
+            </div>
+        </form>
+
+        <!-- Upload Result -->
+        <div id="upload-result" class="mt-4"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function handleDragOver(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('border-emerald-500', 'bg-emerald-900/5');
+}
+
+function handleDragLeave(e) {
+    e.currentTarget.classList.remove('border-emerald-500', 'bg-emerald-900/5');
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('border-emerald-500', 'bg-emerald-900/5');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        const input = document.getElementById('file-input');
+        input.files = files;
+        showPreview(input);
+    }
+}
+
+function showPreview(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const content = e.target.result;
+            document.getElementById('file-name').textContent = file.name + ' (' + formatSize(file.size) + ')';
+            document.getElementById('preview-content').textContent = content.substring(0, 5000);
+            if (content.length > 5000) {
+                document.getElementById('preview-content').textContent += '\n\n... (truncated, ' + formatSize(file.size) + ' total)';
+            }
+            document.getElementById('preview-area').classList.remove('hidden');
+        };
+        reader.readAsText(file);
+    }
+}
+
+function clearPreview() {
+    document.getElementById('preview-area').classList.add('hidden');
+    document.getElementById('preview-content').textContent = '';
+    document.getElementById('file-name').textContent = '';
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% set active_page = "signals" %}
+{% block title %}Signal: {{ signal.symbol }} {{ signal.source }}{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <a href="/signals" class="text-gray-500 hover:text-gray-300 text-sm">&larr; Signals</a>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="text-xl font-bold text-gray-100">
+                <span class="mono text-emerald-400">{{ signal.symbol }}</span>
+            </h1>
+            <span class="rounded-full px-2 py-0.5 text-xs
+                {% if signal.source == 'congressional' %}bg-blue-900/50 text-blue-400
+                {% elif signal.source == 'insider' %}bg-amber-900/50 text-amber-400
+                {% elif signal.source == 'technical' %}bg-cyan-900/50 text-cyan-400
+                {% elif signal.source in ['social', 'wsb'] %}bg-orange-900/50 text-orange-400
+                {% elif signal.source == 'options_flow' %}bg-purple-900/50 text-purple-400
+                {% elif signal.source == 'news' %}bg-indigo-900/50 text-indigo-400
+                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                {{ signal.source }}
+            </span>
+            <span class="text-lg
+                {% if signal.initial_direction == 'bullish' %}text-emerald-400{% elif signal.initial_direction == 'bearish' %}text-red-400{% else %}text-gray-500{% endif %}">
+                {% if signal.initial_direction == 'bullish' %}&#9650;{% elif signal.initial_direction == 'bearish' %}&#9660;{% else %}&#9644;{% endif %}
+                {{ signal.initial_direction }}
+            </span>
+            <span class="rounded-full px-2 py-0.5 text-xs
+                {% if signal.outcome == 'hit' %}bg-emerald-900/50 text-emerald-400
+                {% elif signal.outcome == 'miss' %}bg-red-900/50 text-red-400
+                {% elif signal.outcome == 'expired' %}bg-gray-800 text-gray-500
+                {% elif signal.outcome == 'abandoned' %}bg-gray-800 text-gray-600
+                {% else %}bg-yellow-900/50 text-yellow-400{% endif %}">
+                {{ signal.outcome }}
+            </span>
+        </div>
+        <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+            <span class="mono">{{ signal.first_detected[:16] if signal.first_detected else "" }}</span>
+            <span class="mono text-gray-600">{{ signal.id }}</span>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column: Signal Details -->
+        <div class="lg:col-span-2 space-y-4">
+            <!-- Description -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Signal Description</h2>
+                <p class="text-sm text-gray-300 leading-relaxed">{{ signal.initial_description }}</p>
+            </div>
+
+            <!-- Confidence -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Confidence</h2>
+                <div class="flex items-center gap-3">
+                    <div class="flex-1">
+                        <div class="w-full bg-gray-800 rounded-full h-2">
+                            <div class="h-2 rounded-full bg-emerald-500" style="width: {{ (signal.initial_confidence * 100) | int }}%"></div>
+                        </div>
+                    </div>
+                    <span class="mono text-sm text-gray-300 font-medium">{{ "%.0f"|format(signal.initial_confidence * 100) }}%</span>
+                </div>
+                {% if signal.current_confidence is defined and signal.current_confidence != signal.initial_confidence %}
+                <div class="flex items-center gap-3 mt-2">
+                    <span class="text-xs text-gray-500">Current:</span>
+                    <div class="flex-1">
+                        <div class="w-full bg-gray-800 rounded-full h-2">
+                            <div class="h-2 rounded-full bg-blue-500" style="width: {{ (signal.current_confidence * 100) | int }}%"></div>
+                        </div>
+                    </div>
+                    <span class="mono text-sm text-gray-300 font-medium">{{ "%.0f"|format(signal.current_confidence * 100) }}%</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Updates / History -->
+            {% if signal.updates %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Signal Updates</h2>
+                <div class="space-y-2">
+                    {% for update in signal.updates %}
+                    <div class="text-xs border-l-2 border-gray-700 pl-3 py-1">
+                        <span class="text-gray-600 mono">{{ update.timestamp[:16] if update.timestamp else "" }}</span>
+                        <p class="text-gray-400 mt-0.5">{{ update.note or update.description or "" }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Outcome Details -->
+            {% if signal.outcome_details %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Outcome Details</h2>
+                <p class="text-sm text-gray-300 leading-relaxed">{{ signal.outcome_details }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Linked Decisions -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg">
+                <div class="px-4 py-3 border-b border-gray-800">
+                    <h2 class="text-sm font-semibold text-gray-300">Decisions Using This Signal</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                                <th class="px-4 py-2 text-left">Date</th>
+                                <th class="px-4 py-2 text-left">Symbol</th>
+                                <th class="px-4 py-2 text-left">Action</th>
+                                <th class="px-4 py-2 text-right">Confidence</th>
+                                <th class="px-4 py-2 text-left">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in linked_decisions %}
+                            <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer"
+                                onclick="window.location='/decisions/{{ d.id }}'">
+                                <td class="px-4 py-2 text-gray-400 mono text-xs">{{ d.timestamp[:10] if d.timestamp else "" }}</td>
+                                <td class="px-4 py-2 mono text-emerald-400">{{ d.symbol }}</td>
+                                <td class="px-4 py-2">
+                                    <span class="rounded-full px-2 py-0.5 text-xs
+                                        {% if d.action in ['BUY', 'ADD'] %}bg-emerald-900/50 text-emerald-400
+                                        {% elif d.action in ['SELL', 'CLOSE'] %}bg-red-900/50 text-red-400
+                                        {% elif d.action == 'TRIM' %}bg-amber-900/50 text-amber-400
+                                        {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                        {{ d.action }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 text-right mono">{{ "%.0f"|format(d.confidence * 100) }}%</td>
+                                <td class="px-4 py-2">
+                                    <span class="rounded-full px-2 py-0.5 text-xs
+                                        {% if d.status == 'pending' %}bg-yellow-900/50 text-yellow-400
+                                        {% elif d.status == 'executed' %}bg-blue-900/50 text-blue-400
+                                        {% elif d.status == 'filled' %}bg-emerald-900/50 text-emerald-400
+                                        {% elif d.status in ['failed', 'rejected'] %}bg-red-900/50 text-red-400
+                                        {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                        {{ d.status }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not linked_decisions %}
+                            <tr><td colspan="5" class="px-4 py-6 text-center text-gray-600 text-sm">No decisions linked to this signal.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Metadata -->
+        <div class="space-y-4">
+            <!-- Signal Metadata -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Details</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Source</span>
+                        <span class="text-gray-300">{{ signal.source }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Direction</span>
+                        <span class="{% if signal.initial_direction == 'bullish' %}text-emerald-400{% elif signal.initial_direction == 'bearish' %}text-red-400{% else %}text-gray-400{% endif %}">
+                            {{ signal.initial_direction }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Confidence</span>
+                        <span class="mono text-gray-300">{{ "%.0f"|format(signal.initial_confidence * 100) }}%</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">First Detected</span>
+                        <span class="mono text-gray-300 text-xs">{{ signal.first_detected[:10] if signal.first_detected else "N/A" }}</span>
+                    </div>
+                    {% if signal.last_updated %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Last Updated</span>
+                        <span class="mono text-gray-300 text-xs">{{ signal.last_updated[:10] }}</span>
+                    </div>
+                    {% endif %}
+                    {% if signal.resolved_at %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Resolved</span>
+                        <span class="mono text-gray-300 text-xs">{{ signal.resolved_at[:10] }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Linked Thesis -->
+            {% if signal.linked_thesis_id %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Linked Thesis</h2>
+                <a href="/theses/{{ signal.linked_thesis_id }}" class="text-sm text-emerald-400 hover:underline">
+                    {{ signal.linked_thesis_name | default(signal.linked_thesis_id) }}
+                </a>
+            </div>
+            {% endif %}
+
+            <!-- Raw Data -->
+            {% if signal.raw_data %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Raw Data</h2>
+                <div class="bg-gray-800/50 rounded p-3 max-h-64 overflow-y-auto">
+                    <pre class="text-xs text-gray-400 mono whitespace-pre-wrap">{{ signal.raw_data | tojson(indent=2) if signal.raw_data is mapping else signal.raw_data }}</pre>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

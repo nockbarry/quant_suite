@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% set active_page = "signals" %}
+{% block title %}Signals{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-xl font-bold text-gray-100">Signal Provenance</h1>
+        <p class="text-sm text-gray-500">All detected signals grouped by symbol, with convergence detection</p>
+    </div>
+
+    <!-- Convergence Highlights -->
+    {% if convergences %}
+    <div class="bg-gray-900 border border-purple-900/50 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-purple-400 mb-3">Active Convergences (3+ aligned signals)</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for conv in convergences %}
+            <div class="bg-gray-800/50 border border-purple-900/30 rounded-lg p-3">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="mono text-sm font-bold text-emerald-400">
+                        {% for sym in conv.symbols %}{{ sym }}{% if not loop.last %}, {% endif %}{% endfor %}
+                    </span>
+                    <span class="rounded-full px-2 py-0.5 text-xs
+                        {% if conv.direction == 'bullish' %}bg-emerald-900/50 text-emerald-400
+                        {% elif conv.direction == 'bearish' %}bg-red-900/50 text-red-400
+                        {% else %}bg-gray-800 text-gray-400{% endif %}">
+                        {{ conv.direction }}
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="text-gray-500">{{ conv.signal_count }} signals</span>
+                    <span class="text-gray-600">|</span>
+                    <span class="text-gray-500">Score: <span class="mono text-purple-400">{{ "%.2f"|format(conv.weighted_score) }}</span></span>
+                </div>
+                {% if conv.agent_sources %}
+                <div class="flex flex-wrap gap-1 mt-1">
+                    {% for src in conv.agent_sources %}
+                    <span class="rounded-full px-1.5 py-0.5 text-[10px] bg-gray-800 text-gray-500">{{ src }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Signals Grouped by Symbol -->
+    {% for symbol, signals in signals_by_symbol.items() %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="mono text-sm font-bold text-emerald-400">{{ symbol }}</span>
+                <span class="text-xs text-gray-500">{{ signals | length }} signal{{ 's' if signals | length != 1 else '' }}</span>
+            </div>
+            {% set bullish_count = signals | selectattr('initial_direction', 'equalto', 'bullish') | list | length %}
+            {% set bearish_count = signals | selectattr('initial_direction', 'equalto', 'bearish') | list | length %}
+            <div class="flex items-center gap-2">
+                {% if bullish_count > 0 %}
+                <span class="text-xs text-emerald-400">&#9650; {{ bullish_count }}</span>
+                {% endif %}
+                {% if bearish_count > 0 %}
+                <span class="text-xs text-red-400">&#9660; {{ bearish_count }}</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="divide-y divide-gray-800/50">
+            {% for sig in signals %}
+            <div class="px-4 py-2 hover:bg-gray-800/30 flex items-center gap-3">
+                <!-- Direction Arrow -->
+                <span class="text-lg flex-shrink-0
+                    {% if sig.initial_direction == 'bullish' %}text-emerald-400{% elif sig.initial_direction == 'bearish' %}text-red-400{% else %}text-gray-500{% endif %}">
+                    {% if sig.initial_direction == 'bullish' %}&#9650;{% elif sig.initial_direction == 'bearish' %}&#9660;{% else %}&#9644;{% endif %}
+                </span>
+
+                <!-- Source Badge -->
+                <span class="rounded-full px-2 py-0.5 text-[10px] flex-shrink-0
+                    {% if sig.source == 'congressional' %}bg-blue-900/50 text-blue-400
+                    {% elif sig.source == 'insider' %}bg-amber-900/50 text-amber-400
+                    {% elif sig.source == 'technical' %}bg-cyan-900/50 text-cyan-400
+                    {% elif sig.source == 'social' or sig.source == 'wsb' %}bg-orange-900/50 text-orange-400
+                    {% elif sig.source == 'options_flow' %}bg-purple-900/50 text-purple-400
+                    {% elif sig.source == 'news' %}bg-indigo-900/50 text-indigo-400
+                    {% else %}bg-gray-800 text-gray-400{% endif %}">
+                    {{ sig.source }}
+                </span>
+
+                <!-- Confidence -->
+                <div class="w-12 flex-shrink-0">
+                    <div class="w-full bg-gray-800 rounded-full h-1">
+                        <div class="h-1 rounded-full bg-emerald-500" style="width: {{ (sig.initial_confidence * 100) | int }}%"></div>
+                    </div>
+                    <p class="text-[10px] mono text-gray-500 text-center">{{ "%.0f"|format(sig.initial_confidence * 100) }}%</p>
+                </div>
+
+                <!-- Description -->
+                <p class="text-sm text-gray-300 flex-1 truncate">{{ sig.initial_description }}</p>
+
+                <!-- Outcome Badge -->
+                <span class="rounded-full px-2 py-0.5 text-[10px] flex-shrink-0
+                    {% if sig.outcome == 'hit' %}bg-emerald-900/50 text-emerald-400
+                    {% elif sig.outcome == 'miss' %}bg-red-900/50 text-red-400
+                    {% elif sig.outcome == 'expired' %}bg-gray-800 text-gray-500
+                    {% elif sig.outcome == 'abandoned' %}bg-gray-800 text-gray-600
+                    {% else %}bg-yellow-900/50 text-yellow-400{% endif %}">
+                    {{ sig.outcome }}
+                </span>
+
+                <!-- Thesis Link -->
+                {% if sig.linked_thesis_id %}
+                <a href="/theses/{{ sig.linked_thesis_id }}" class="text-[10px] text-blue-400 hover:underline flex-shrink-0" title="{{ sig.linked_thesis_name }}">
+                    thesis
+                </a>
+                {% endif %}
+
+                <!-- Date -->
+                <span class="text-[10px] text-gray-600 mono flex-shrink-0">{{ sig.first_detected[:10] if sig.first_detected else "" }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if not signals_by_symbol %}
+    <div class="text-center py-12">
+        <p class="text-gray-600 text-sm">No signals tracked yet.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

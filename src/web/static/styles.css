@@ -1,0 +1,26 @@
+/* Athena custom styles — supplements Tailwind CDN */
+
+/* Severity badges */
+.badge-info { @apply bg-blue-900/50 text-blue-300 border border-blue-800; }
+.badge-warning { @apply bg-yellow-900/50 text-yellow-300 border border-yellow-800; }
+.badge-critical { @apply bg-red-900/50 text-red-300 border border-red-800; }
+
+/* Event type icons */
+.event-icon { @apply w-6 h-6 rounded flex items-center justify-center text-xs font-mono; }
+
+/* Conviction bar */
+.conviction-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #ef4444 0%, #eab308 50%, #22c55e 100%);
+}
+
+/* Table hover */
+.data-row:hover { background-color: rgba(30, 41, 59, 0.5); }
+
+/* Lineage chain connector */
+.lineage-connector {
+    width: 2px;
+    background: #475569;
+    margin: 0 auto;
+}

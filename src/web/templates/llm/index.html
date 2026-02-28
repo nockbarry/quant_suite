@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% set active_page = "llm" %}
+{% block title %}LLM Interactions{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-xl font-bold text-gray-100">LLM Interaction Log</h1>
+        <p class="text-sm text-gray-500">Full audit trail of LLM calls, costs, and outputs</p>
+    </div>
+
+    <!-- Cost Summary Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Total Cost</p>
+            <p class="text-lg font-bold mono text-gray-200">${{ "%.2f"|format(cost_summary.total_cost | default(0)) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Avg Per Call</p>
+            <p class="text-lg font-bold mono text-gray-200">${{ "%.4f"|format(cost_summary.avg_per_call | default(0)) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Calls Today</p>
+            <p class="text-lg font-bold mono text-gray-200">{{ cost_summary.calls_today | default(0) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Total Tokens</p>
+            <p class="text-lg font-bold mono text-gray-200">{{ "{:,}".format(cost_summary.total_tokens | default(0)) }}</p>
+        </div>
+    </div>
+
+    <!-- Interaction Table -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                        <th class="px-4 py-2 text-left">Timestamp</th>
+                        <th class="px-4 py-2 text-left">Trigger</th>
+                        <th class="px-4 py-2 text-left">Model</th>
+                        <th class="px-4 py-2 text-right">Tokens In</th>
+                        <th class="px-4 py-2 text-right">Tokens Out</th>
+                        <th class="px-4 py-2 text-right">Cost</th>
+                        <th class="px-4 py-2 text-right">Latency</th>
+                        <th class="px-4 py-2 text-left">Decision</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for i in interactions %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer"
+                        onclick="window.location='/llm/{{ i.id }}'">
+                        <td class="px-4 py-2 text-gray-400 mono text-xs">{{ i.timestamp[:16] if i.timestamp else "" }}</td>
+                        <td class="px-4 py-2">
+                            <span class="rounded-full px-2 py-0.5 text-xs
+                                {% if i.trigger_type == 'convergence' %}bg-purple-900/50 text-purple-400
+                                {% elif i.trigger_type == 'alert' %}bg-red-900/50 text-red-400
+                                {% elif i.trigger_type == 'scheduled' %}bg-blue-900/50 text-blue-400
+                                {% elif i.trigger_type == 'rule' %}bg-amber-900/50 text-amber-400
+                                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                {{ i.trigger_type or "manual" }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-gray-400 mono text-xs">{{ i.model[:20] if i.model else "N/A" }}</td>
+                        <td class="px-4 py-2 text-right mono text-gray-400">{{ "{:,}".format(i.tokens_input) if i.tokens_input else "0" }}</td>
+                        <td class="px-4 py-2 text-right mono text-gray-400">{{ "{:,}".format(i.tokens_output) if i.tokens_output else "0" }}</td>
+                        <td class="px-4 py-2 text-right mono text-gray-300">${{ "%.4f"|format(i.cost_usd) if i.cost_usd else "0.0000" }}</td>
+                        <td class="px-4 py-2 text-right mono text-gray-400">{{ "{:,}".format(i.latency_ms) if i.latency_ms else "&mdash;" }}ms</td>
+                        <td class="px-4 py-2">
+                            {% if i.decision_id %}
+                            <a href="/decisions/{{ i.decision_id }}" class="text-xs text-emerald-400 hover:underline mono" onclick="event.stopPropagation()">
+                                {{ i.decision_id[:12] }}
+                            </a>
+                            {% else %}
+                            <span class="text-gray-600">&mdash;</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not interactions %}
+                    <tr><td colspan="8" class="px-4 py-8 text-center text-gray-600">No LLM interactions recorded.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

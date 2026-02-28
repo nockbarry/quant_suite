@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% set active_page = "agents" %}
+{% block title %}Agent Run: {{ run.agent_type }}{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <a href="/agents" class="text-gray-500 hover:text-gray-300 text-sm">&larr; Agent Runs</a>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="text-xl font-bold text-gray-100">Agent Run</h1>
+            <span class="rounded-full px-2.5 py-0.5 text-sm
+                {% if run.agent_type == 'research' %}bg-purple-900/50 text-purple-400
+                {% elif run.agent_type == 'monitor' %}bg-blue-900/50 text-blue-400
+                {% elif run.agent_type == 'critic' %}bg-red-900/50 text-red-400
+                {% elif run.agent_type == 'alpha-discovery' %}bg-emerald-900/50 text-emerald-400
+                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                {{ run.agent_type }}
+            </span>
+            <span class="rounded-full px-2 py-0.5 text-xs
+                {% if run.status == 'running' %}bg-yellow-900/50 text-yellow-400
+                {% elif run.status == 'completed' %}bg-emerald-900/50 text-emerald-400
+                {% elif run.status == 'failed' %}bg-red-900/50 text-red-400
+                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                {{ run.status }}
+            </span>
+        </div>
+        <p class="text-xs text-gray-500 mt-1 mono">ID: {{ run.id }}</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column -->
+        <div class="lg:col-span-2 space-y-4">
+            <!-- Task Description -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Task</h2>
+                <p class="text-sm text-gray-300 leading-relaxed">{{ run.task }}</p>
+            </div>
+
+            <!-- Trigger Reason -->
+            {% if run.trigger_reason %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Trigger Reason</h2>
+                <p class="text-sm text-gray-400">{{ run.trigger_reason }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Findings Summary -->
+            {% if run.findings_summary %}
+            <div class="bg-gray-900 border border-emerald-900/30 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-emerald-400 mb-2">Findings</h2>
+                <p class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{{ run.findings_summary }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Signals Generated -->
+            {% if run.signals_generated %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Signals Generated</h2>
+                <div class="space-y-2">
+                    {% for sig_id in run.signals_generated %}
+                    <a href="/signals?id={{ sig_id }}" class="block text-sm text-purple-400 hover:text-purple-300 mono">
+                        &#9889; {{ sig_id }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Decisions Influenced -->
+            {% if run.decisions_influenced %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Decisions Influenced</h2>
+                <div class="space-y-2">
+                    {% for dec_id in run.decisions_influenced %}
+                    <a href="/decisions/{{ dec_id }}" class="block text-sm text-blue-400 hover:text-blue-300 mono">
+                        &#9654; {{ dec_id }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Child Runs -->
+            {% if children %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Child Runs</h2>
+                <div class="space-y-2">
+                    {% for child in children %}
+                    <a href="/agents/{{ child.id }}" class="flex items-center justify-between py-2 px-3 rounded bg-gray-800/50 hover:bg-gray-800 transition">
+                        <div class="flex items-center gap-2">
+                            <span class="rounded-full px-2 py-0.5 text-xs bg-gray-700 text-gray-300">{{ child.agent_type }}</span>
+                            <span class="text-sm text-gray-400 truncate max-w-xs">{{ child.task[:60] }}{% if child.task|length > 60 %}...{% endif %}</span>
+                        </div>
+                        <span class="rounded-full px-2 py-0.5 text-xs
+                            {% if child.status == 'completed' %}bg-emerald-900/50 text-emerald-400
+                            {% elif child.status == 'running' %}bg-yellow-900/50 text-yellow-400
+                            {% else %}bg-red-900/50 text-red-400{% endif %}">
+                            {{ child.status }}
+                        </span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Raw Output (collapsible) -->
+            {% if run.raw_output %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg">
+                <button onclick="document.getElementById('raw-output').classList.toggle('hidden')"
+                        class="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-gray-800/30 transition">
+                    <h2 class="text-sm font-semibold text-gray-300">Raw Output</h2>
+                    <span class="text-gray-500 text-xs">Click to expand</span>
+                </button>
+                <div id="raw-output" class="hidden px-4 pb-4">
+                    <pre class="bg-gray-950 rounded p-3 text-xs text-gray-400 mono overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap">{{ run.raw_output }}</pre>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column: Metadata -->
+        <div class="space-y-4">
+            <!-- Timing -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Timing</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Started</span>
+                        <span class="mono text-gray-300 text-xs">{{ run.started_at[:19] if run.started_at else "N/A" }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Completed</span>
+                        <span class="mono text-gray-300 text-xs">{{ run.completed_at[:19] if run.completed_at else "N/A" }}</span>
+                    </div>
+                    {% if run.completed_at and run.started_at %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Duration</span>
+                        <span class="mono text-gray-300">{{ run.duration_display | default("N/A") }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Token / Cost Breakdown -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Cost Breakdown</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Tokens Used</span>
+                        <span class="mono text-gray-300">{{ "{:,}".format(run.tokens_used) if run.tokens_used else "0" }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Cost</span>
+                        <span class="mono text-gray-300">${{ "%.4f"|format(run.cost_usd) if run.cost_usd else "0.0000" }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Parent Run -->
+            {% if run.parent_run_id %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Parent Run</h2>
+                <a href="/agents/{{ run.parent_run_id }}" class="text-sm text-emerald-400 hover:underline mono">
+                    {{ run.parent_run_id }}
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

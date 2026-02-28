@@ -1,0 +1,18 @@
+[Unit]
+Description=Athena Data Collection Services
+After=network.target
+
+[Service]
+Type=simple
+User=nock
+WorkingDirectory=/home/nock/projects/quant_suite
+ExecStart=/home/nock/projects/quant_suite/scripts/trading_day.sh start
+ExecStop=/home/nock/projects/quant_suite/scripts/trading_day.sh stop
+Restart=on-failure
+RestartSec=60
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=athena-data
+
+[Install]
+WantedBy=multi-user.target

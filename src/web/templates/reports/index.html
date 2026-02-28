@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% set active_page = "reports" %}
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-xl font-bold text-gray-100">Reports</h1>
+        <p class="text-sm text-gray-500">Briefings, reviews, and generated reports</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- File Listing Sidebar -->
+        <div class="space-y-4">
+            <!-- Briefings -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg">
+                <div class="px-4 py-3 border-b border-gray-800">
+                    <h2 class="text-sm font-semibold text-gray-300">Morning Briefings</h2>
+                </div>
+                <div class="max-h-64 overflow-y-auto divide-y divide-gray-800/50">
+                    {% for f in briefings %}
+                    <a href="/reports/view?type=briefings&file={{ f.filename }}"
+                       hx-get="/reports/view?type=briefings&file={{ f.filename }}"
+                       hx-target="#report-content"
+                       hx-swap="innerHTML"
+                       class="block px-4 py-2 hover:bg-gray-800/30 transition
+                              {% if active_file == f.filename %}bg-gray-800/50 text-emerald-400{% else %}text-gray-400{% endif %}">
+                        <span class="text-xs mono">{{ f.date or f.filename }}</span>
+                    </a>
+                    {% endfor %}
+                    {% if not briefings %}
+                    <div class="px-4 py-4 text-xs text-gray-600 text-center">No briefings</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- EOD Reviews -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg">
+                <div class="px-4 py-3 border-b border-gray-800">
+                    <h2 class="text-sm font-semibold text-gray-300">EOD Reviews</h2>
+                </div>
+                <div class="max-h-64 overflow-y-auto divide-y divide-gray-800/50">
+                    {% for f in eod_reviews %}
+                    <a href="/reports/view?type=eod_reviews&file={{ f.filename }}"
+                       hx-get="/reports/view?type=eod_reviews&file={{ f.filename }}"
+                       hx-target="#report-content"
+                       hx-swap="innerHTML"
+                       class="block px-4 py-2 hover:bg-gray-800/30 transition
+                              {% if active_file == f.filename %}bg-gray-800/50 text-emerald-400{% else %}text-gray-400{% endif %}">
+                        <span class="text-xs mono">{{ f.date or f.filename }}</span>
+                    </a>
+                    {% endfor %}
+                    {% if not eod_reviews %}
+                    <div class="px-4 py-4 text-xs text-gray-600 text-center">No reviews</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Reports -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg">
+                <div class="px-4 py-3 border-b border-gray-800">
+                    <h2 class="text-sm font-semibold text-gray-300">Reports</h2>
+                </div>
+                <div class="max-h-64 overflow-y-auto divide-y divide-gray-800/50">
+                    {% for f in reports %}
+                    <a href="/reports/view?type=reports&file={{ f.filename }}"
+                       hx-get="/reports/view?type=reports&file={{ f.filename }}"
+                       hx-target="#report-content"
+                       hx-swap="innerHTML"
+                       class="block px-4 py-2 hover:bg-gray-800/30 transition
+                              {% if active_file == f.filename %}bg-gray-800/50 text-emerald-400{% else %}text-gray-400{% endif %}">
+                        <span class="text-xs mono truncate block">{{ f.date or f.filename }}</span>
+                    </a>
+                    {% endfor %}
+                    {% if not reports %}
+                    <div class="px-4 py-4 text-xs text-gray-600 text-center">No reports</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Content Viewer -->
+        <div class="lg:col-span-3">
+            <div id="report-content" class="bg-gray-900 border border-gray-800 rounded-lg p-6 min-h-[400px]">
+                {% if content %}
+                <div class="prose prose-invert prose-sm max-w-none">
+                    <div class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap mono">{{ content }}</div>
+                </div>
+                {% else %}
+                <div class="flex items-center justify-center h-64">
+                    <p class="text-gray-600 text-sm">Select a report to view its contents.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

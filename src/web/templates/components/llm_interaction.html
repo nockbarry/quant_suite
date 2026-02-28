@@ -1,0 +1,55 @@
+{# HTMX partial: LLM prompt/response viewer - used inline in decision detail and agent detail #}
+<div class="bg-gray-900 border border-gray-800 rounded-lg fade-in">
+    <!-- Header -->
+    <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold text-gray-300">LLM Interaction</span>
+            <span class="rounded-full px-2 py-0.5 text-[10px]
+                {% if interaction.trigger_type == 'convergence' %}bg-purple-900/50 text-purple-400
+                {% elif interaction.trigger_type == 'alert' %}bg-red-900/50 text-red-400
+                {% elif interaction.trigger_type == 'scheduled' %}bg-blue-900/50 text-blue-400
+                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                {{ interaction.trigger_type or "manual" }}
+            </span>
+        </div>
+        <div class="flex items-center gap-3 text-[10px] text-gray-500">
+            <span class="mono">{{ interaction.model or "N/A" }}</span>
+            <span class="mono">{{ "{:,}".format(interaction.tokens_input + interaction.tokens_output) }} tokens</span>
+            <span class="mono">${{ "%.4f"|format(interaction.cost_usd) }}</span>
+            {% if interaction.latency_ms %}
+            <span class="mono">{{ "{:,}".format(interaction.latency_ms) }}ms</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- User Prompt -->
+    <div class="border-b border-gray-800">
+        <button onclick="this.nextElementSibling.classList.toggle('hidden')"
+                class="w-full px-4 py-2 text-left flex items-center justify-between hover:bg-gray-800/30 transition">
+            <span class="text-xs text-gray-400">User Prompt</span>
+            <span class="text-[10px] text-gray-600 mono">{{ "{:,}".format(interaction.tokens_input) }} tokens in</span>
+        </button>
+        <div class="hidden px-4 pb-3">
+            <pre class="bg-gray-950 rounded p-3 text-xs text-gray-300 mono overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap">{{ interaction.user_prompt }}</pre>
+        </div>
+    </div>
+
+    <!-- Response -->
+    <div>
+        <button onclick="this.nextElementSibling.classList.toggle('hidden')"
+                class="w-full px-4 py-2 text-left flex items-center justify-between hover:bg-gray-800/30 transition">
+            <span class="text-xs text-emerald-400">Response</span>
+            <span class="text-[10px] text-gray-600 mono">{{ "{:,}".format(interaction.tokens_output) }} tokens out</span>
+        </button>
+        <div class="px-4 pb-3">
+            <pre class="bg-gray-950 rounded p-3 text-xs text-gray-300 mono overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap">{{ interaction.response }}</pre>
+        </div>
+    </div>
+
+    <!-- Link to full view -->
+    {% if interaction.id %}
+    <div class="px-4 py-2 border-t border-gray-800">
+        <a href="/llm/{{ interaction.id }}" class="text-xs text-emerald-400 hover:underline">Full view &rarr;</a>
+    </div>
+    {% endif %}
+</div>

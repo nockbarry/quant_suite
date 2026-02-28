@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% set active_page = "learnings" %}
+{% block title %}Learning: {{ learning.symbol }}{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div>
+        <a href="/learnings" class="text-gray-500 hover:text-gray-300 text-sm">&larr; Learnings</a>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="text-xl font-bold text-gray-100">
+                <span class="mono text-emerald-400">{{ learning.symbol }}</span>
+            </h1>
+            <span class="rounded-full px-2 py-0.5 text-xs
+                {% if learning.outcome == 'win' %}bg-emerald-900/50 text-emerald-400
+                {% elif learning.outcome == 'loss' %}bg-red-900/50 text-red-400
+                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                {{ learning.outcome }}
+            </span>
+            <span class="mono text-sm {% if learning.pnl_pct >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                {{ "%+.1f"|format(learning.pnl_pct) }}%
+            </span>
+            {% if learning.action %}
+            <span class="rounded-full px-2 py-0.5 text-[10px] bg-gray-800 text-gray-500">{{ learning.action }}</span>
+            {% endif %}
+        </div>
+        <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+            <span class="mono">{{ learning.created[:16] if learning.created else "" }}</span>
+            {% if learning.hold_days %}
+            <span>Hold: <span class="mono">{{ learning.hold_days }}d</span></span>
+            {% endif %}
+            <span class="mono text-gray-600">{{ learning.id }}</span>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column: Main Content -->
+        <div class="lg:col-span-2 space-y-4">
+            <!-- What I Learned -->
+            <div class="bg-gray-900 border border-emerald-900/30 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-emerald-400 mb-2">What I Learned</h2>
+                <p class="text-sm text-gray-300 leading-relaxed">{{ learning.what_i_learned }}</p>
+            </div>
+
+            <!-- What Happened -->
+            {% if learning.what_happened %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">What Happened</h2>
+                <p class="text-sm text-gray-300 leading-relaxed">{{ learning.what_happened }}</p>
+            </div>
+            {% endif %}
+
+            <!-- How This Changes My Approach -->
+            {% if learning.how_this_changes_approach %}
+            <div class="bg-gray-900 border border-amber-900/30 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-amber-400 mb-2">How This Changes My Approach</h2>
+                <p class="text-sm text-gray-300 leading-relaxed">{{ learning.how_this_changes_approach }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column: Metadata -->
+        <div class="space-y-4">
+            <!-- Pattern -->
+            {% if learning.pattern_name %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Pattern</h2>
+                <span class="rounded-full px-2 py-0.5 text-xs bg-purple-900/50 text-purple-400 border border-purple-900/50">{{ learning.pattern_name }}</span>
+            </div>
+            {% endif %}
+
+            <!-- Tags -->
+            {% if learning.tags %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Tags</h2>
+                <div class="flex flex-wrap gap-1">
+                    {% for tag in learning.tags %}
+                    <span class="rounded-full px-2 py-0.5 text-xs bg-gray-800 text-gray-400">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Linked Thesis -->
+            {% if learning.thesis_id %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Linked Thesis</h2>
+                <a href="/theses/{{ learning.thesis_id }}" class="text-sm text-emerald-400 hover:underline">
+                    {{ learning.thesis_name | default(learning.thesis_id) }}
+                </a>
+            </div>
+            {% endif %}
+
+            <!-- Linked Decision -->
+            {% if learning.decision_id %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Linked Decision</h2>
+                <a href="/decisions/{{ learning.decision_id }}" class="text-sm text-blue-400 hover:underline">
+                    {{ learning.decision_id }}
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
