@@ -221,9 +221,20 @@ class AgentActivityMonitor:
         task: str,
         parent_agent_id: str | None = None,
     ) -> str:
-        """Record start of an agent/subagent."""
-        agent_id = f"{agent_type.value}_{datetime.now().strftime('%H%M%S')}"
+        """Record start of an agent/subagent — writes to DB via write_api."""
+        # Write to DB as primary store
+        try:
+            from src.db.write_api import athena_db
+            agent_id = athena_db.start_agent_run(
+                agent_type=agent_type.value,
+                task=task,
+                parent_run_id=parent_agent_id or self._session_id,
+            )
+        except Exception as e:
+            logger.warning(f"DB agent start failed: {e}")
+            agent_id = f"{agent_type.value}_{datetime.now().strftime('%H%M%S')}"
 
+        # In-memory cache
         self._activities[agent_id] = AgentActivity(
             agent_id=agent_id,
             agent_type=agent_type,
@@ -232,6 +243,7 @@ class AgentActivityMonitor:
             parent_agent_id=parent_agent_id or self._session_id,
         )
 
+        # Append-only audit log
         self._log_activity("agent_start", self._activities[agent_id])
         return agent_id
 
@@ -243,7 +255,18 @@ class AgentActivityMonitor:
         success: bool = True,
         error_message: str | None = None,
     ) -> None:
-        """Record completion of an agent."""
+        """Record completion of an agent — writes to DB via write_api."""
+        # Write to DB as primary store
+        try:
+            from src.db.write_api import athena_db
+            if success:
+                athena_db.complete_agent_run(agent_id, result_summary, tokens_used=tokens_used)
+            else:
+                athena_db.fail_agent_run(agent_id, error_message or "")
+        except Exception as e:
+            logger.warning(f"DB agent complete failed: {e}")
+
+        # Update in-memory cache
         if agent_id not in self._activities:
             logger.warning(f"Unknown agent_id: {agent_id}")
             return
@@ -259,6 +282,7 @@ class AgentActivityMonitor:
         agent_type = activity.agent_type.value
         self._token_usage[agent_type] = self._token_usage.get(agent_type, 0) + tokens_used
 
+        # Append-only audit log
         self._log_activity("agent_complete", activity)
 
     def record_decision(

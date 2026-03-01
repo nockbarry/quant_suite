@@ -31,6 +31,14 @@ class Base(DeclarativeBase):
     pass
 
 
+def _safe_json_loads(text: str | None, default=None):
+    """Safely parse JSON, returning default on failure."""
+    try:
+        return json.loads(text) if text else (default if default is not None else text)
+    except (json.JSONDecodeError, TypeError):
+        return default if default is not None else text
+
+
 # ---------------------------------------------------------------------------
 # Core knowledge tables (mirror existing YAML/JSON dataclasses)
 # ---------------------------------------------------------------------------
@@ -406,6 +414,7 @@ class DecisionRecord(Base):
     __table_args__ = (
         Index("ix_decisions_thesis_status", "thesis_id", "status"),
         Index("ix_decisions_setup_type", "setup_type"),
+        Index("ix_decisions_symbol_timestamp", "symbol", "timestamp"),
     )
 
     def to_dict(self) -> dict:
@@ -647,7 +656,11 @@ class AgentRun(Base):
     signals_generated = Column(Text, default="[]")  # JSON list of signal_ids
     decisions_influenced = Column(Text, default="[]")  # JSON list of decision_ids
     findings_summary = Column(Text, default="")
-    raw_output = Column(Text, default="")  # Truncated to 10K chars
+    raw_output = Column(Text, default="")
+
+    # Artifacts and provenance
+    artifacts = Column(Text, default="{}")  # JSON: {canonical_path, saved_path, stream_log_path}
+    session_id = Column(String(100), nullable=True)  # Claude Code session_id for CLI provenance
 
     # Relationships
     children = relationship("AgentRun", backref="parent", remote_side=[id])
@@ -655,9 +668,21 @@ class AgentRun(Base):
 
     __table_args__ = (
         Index("ix_agent_runs_type_status", "agent_type", "status"),
+        Index("ix_agent_runs_completed", "completed_at"),
     )
 
     def to_dict(self) -> dict:
+        # Compute human-readable duration
+        duration_display = None
+        if self.started_at and self.completed_at:
+            delta = int((self.completed_at - self.started_at).total_seconds())
+            if delta < 60:
+                duration_display = f"{delta}s"
+            elif delta < 3600:
+                duration_display = f"{delta // 60}m {delta % 60}s"
+            else:
+                duration_display = f"{delta // 3600}h {(delta % 3600) // 60}m"
+
         return {
             "id": self.id,
             "agent_type": self.agent_type,
@@ -669,10 +694,13 @@ class AgentRun(Base):
             "status": self.status,
             "tokens_used": self.tokens_used,
             "cost_usd": self.cost_usd,
-            "signals_generated": json.loads(self.signals_generated or "[]"),
-            "decisions_influenced": json.loads(self.decisions_influenced or "[]"),
+            "signals_generated": _safe_json_loads(self.signals_generated, []),
+            "decisions_influenced": _safe_json_loads(self.decisions_influenced, []),
             "findings_summary": self.findings_summary,
-            "raw_output": self.raw_output[:500] if self.raw_output else "",
+            "raw_output": self.raw_output or "",
+            "artifacts": _safe_json_loads(self.artifacts, {}),
+            "session_id": self.session_id,
+            "duration_display": duration_display,
         }
 
 
@@ -705,14 +733,11 @@ class ProcessEvent(Base):
         Index("ix_events_type_timestamp", "event_type", "timestamp"),
         Index("ix_events_source", "source"),
         Index("ix_events_severity", "severity"),
+        Index("ix_events_agent_timestamp", "agent_run_id", "timestamp"),
     )
 
     def to_dict(self) -> dict:
-        detail = self.detail or ""
-        try:
-            detail_parsed = json.loads(detail)
-        except (json.JSONDecodeError, TypeError):
-            detail_parsed = detail
+        detail_parsed = _safe_json_loads(self.detail, self.detail or "")
 
         return {
             "id": self.id,
@@ -729,6 +754,35 @@ class ProcessEvent(Base):
             "agent_run_id": self.agent_run_id,
             "signal_id": self.signal_id,
         }
+
+
+class ThesisPositionLink(Base):
+    """Junction table linking theses to their position symbols."""
+
+    __tablename__ = "thesis_position_links"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    thesis_id = Column(String(100), ForeignKey("theses.id"), nullable=False, index=True)
+    symbol = Column(String(10), nullable=False, index=True)
+    added_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_tpl_thesis_symbol", "thesis_id", "symbol", unique=True),
+    )
+
+
+class LearningTag(Base):
+    """Junction table for learning tags (enables tag-based queries)."""
+
+    __tablename__ = "learning_tags"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    learning_id = Column(String(100), ForeignKey("learnings.id"), nullable=False, index=True)
+    tag = Column(String(100), nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_lt_learning_tag", "learning_id", "tag", unique=True),
+    )
 
 
 class AutonomyCheck(Base):

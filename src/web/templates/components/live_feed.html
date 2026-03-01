@@ -1,0 +1,109 @@
+<!-- Live Event Feed — WebSocket-connected, reusable component.
+     Include in any page:  {% include "components/live_feed.html" %}
+     Requires: <script> block at bottom of page that calls initLiveFeed()
+-->
+<div class="bg-gray-900 border border-gray-800 rounded-lg" id="live-feed-container">
+    <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <h2 class="text-sm font-semibold text-gray-300">Live Feed</h2>
+            <span id="ws-status" class="w-2 h-2 rounded-full bg-gray-600" title="Disconnected"></span>
+        </div>
+        <span class="text-xs text-gray-500" id="feed-count">0 events</span>
+    </div>
+    <div id="live-feed" class="divide-y divide-gray-800/50 max-h-80 overflow-y-auto">
+        <!-- Events injected here by WebSocket -->
+    </div>
+</div>
+
+<script>
+function initLiveFeed(maxItems = 100) {
+    const feed = document.getElementById('live-feed');
+    const statusDot = document.getElementById('ws-status');
+    const feedCount = document.getElementById('feed-count');
+    let ws = null;
+    let eventCount = 0;
+
+    const EVENT_COLORS = {
+        'agent_started':    { bg: 'bg-blue-900/30', dot: 'bg-blue-400', label: 'STARTED' },
+        'agent_completed':  { bg: 'bg-emerald-900/30', dot: 'bg-emerald-400', label: 'DONE' },
+        'agent_failed':     { bg: 'bg-red-900/30', dot: 'bg-red-400', label: 'FAILED' },
+        'decision_created': { bg: 'bg-purple-900/30', dot: 'bg-purple-400', label: 'DECISION' },
+        'thesis_conviction_changed': { bg: 'bg-yellow-900/30', dot: 'bg-yellow-400', label: 'CONVICTION' },
+        'signal_detected':  { bg: 'bg-cyan-900/30', dot: 'bg-cyan-400', label: 'SIGNAL' },
+    };
+
+    function formatEvent(evt) {
+        const style = EVENT_COLORS[evt.type] || { bg: 'bg-gray-800/30', dot: 'bg-gray-400', label: evt.type };
+        const ts = evt.timestamp ? evt.timestamp.substring(11, 19) : '';
+
+        let detail = '';
+        if (evt.type === 'agent_started') {
+            detail = `<span class="text-gray-300">${evt.agent_type || ''}</span> — ${(evt.task || '').substring(0, 80)}`;
+        } else if (evt.type === 'agent_completed') {
+            detail = `<span class="text-emerald-400">${(evt.findings_summary || '').substring(0, 80)}</span>`;
+            if (evt.cost_usd) detail += ` <span class="text-gray-500">$${Number(evt.cost_usd).toFixed(4)}</span>`;
+        } else if (evt.type === 'agent_failed') {
+            detail = `<span class="text-red-400">${(evt.error || '').substring(0, 80)}</span>`;
+        } else if (evt.type === 'decision_created') {
+            detail = `<span class="mono text-emerald-400">${evt.symbol || ''}</span> ${evt.action || ''} @ ${Math.round((evt.confidence || 0) * 100)}%`;
+        } else if (evt.type === 'thesis_conviction_changed') {
+            detail = `${evt.old_value || '?'}% → ${evt.new_value || '?'}% — ${(evt.reason || '').substring(0, 60)}`;
+        } else {
+            detail = evt.title || evt.source || JSON.stringify(evt).substring(0, 80);
+        }
+
+        return `
+        <div class="px-4 py-2 ${style.bg} fade-in">
+            <div class="flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full ${style.dot}"></span>
+                <span class="text-[10px] text-gray-500 mono">${ts}</span>
+                <span class="rounded px-1.5 py-0.5 text-[10px] bg-gray-800 text-gray-400">${style.label}</span>
+            </div>
+            <p class="text-xs text-gray-300 mt-0.5 ml-4">${detail}</p>
+        </div>`;
+    }
+
+    function connect() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+
+        ws.onopen = () => {
+            statusDot.className = 'w-2 h-2 rounded-full bg-emerald-500 pulse-green';
+            statusDot.title = 'Connected';
+        };
+
+        ws.onmessage = (e) => {
+            try {
+                const evt = JSON.parse(e.data);
+                if (evt.type === 'pong') return;
+                feed.insertAdjacentHTML('afterbegin', formatEvent(evt));
+                eventCount++;
+                feedCount.textContent = `${eventCount} events`;
+                // Trim old events
+                while (feed.children.length > maxItems) {
+                    feed.removeChild(feed.lastChild);
+                }
+            } catch (err) {}
+        };
+
+        ws.onclose = () => {
+            statusDot.className = 'w-2 h-2 rounded-full bg-red-500';
+            statusDot.title = 'Disconnected — reconnecting...';
+            setTimeout(connect, 3000);
+        };
+
+        ws.onerror = () => {
+            ws.close();
+        };
+    }
+
+    connect();
+
+    // Keepalive ping every 30s
+    setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send('ping');
+        }
+    }, 30000);
+}
+</script>

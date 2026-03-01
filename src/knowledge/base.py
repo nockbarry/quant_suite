@@ -293,7 +293,7 @@ class KnowledgeBase:
         return brief
 
     def save_company(self, brief: CompanyBrief) -> None:
-        """Save a company brief."""
+        """Save a company brief and sync to DB."""
         brief.updated = datetime.now()
         filepath = self._get_company_filepath(brief.symbol)
 
@@ -307,6 +307,13 @@ class KnowledgeBase:
 
         self._company_cache[brief.symbol] = brief
         logger.info(f"Saved company brief: {brief.symbol}")
+
+        # Sync to DB
+        try:
+            from src.db.write_api import athena_db
+            athena_db.upsert_company(brief.to_dict())
+        except Exception as e:
+            logger.warning(f"DB sync failed for company {brief.symbol}: {e}")
 
     def create_company(
         self,
@@ -374,7 +381,7 @@ class KnowledgeBase:
         return context
 
     def save_sector(self, context: SectorContext) -> None:
-        """Save a sector context."""
+        """Save a sector context and sync to DB."""
         context.updated = datetime.now()
         filepath = self._get_sector_filepath(context.sector)
 
@@ -388,6 +395,13 @@ class KnowledgeBase:
 
         self._sector_cache[context.sector.lower()] = context
         logger.info(f"Saved sector context: {context.sector}")
+
+        # Sync to DB
+        try:
+            from src.db.write_api import athena_db
+            athena_db.upsert_sector(context.to_dict())
+        except Exception as e:
+            logger.warning(f"DB sync failed for sector {context.sector}: {e}")
 
     def create_sector(
         self,

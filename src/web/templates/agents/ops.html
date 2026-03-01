@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% set active_page = "agents" %}
+{% block title %}Agent Ops Center{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Agent Operations Center</h1>
+            <p class="text-sm text-gray-500">Real-time agent monitoring, cost tracking, and event feed</p>
+        </div>
+        <a href="/agents" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition">
+            Agent List
+        </a>
+    </div>
+
+    <!-- 2-column grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Left: Active Agents (live WebSocket updates) -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg">
+            <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
+                <h2 class="text-sm font-semibold text-gray-300">Active Agents</h2>
+                <span id="active-count" class="rounded-full px-2 py-0.5 text-xs bg-blue-900/50 text-blue-400">
+                    {{ active_runs | length }} running
+                </span>
+            </div>
+            <div id="active-agents" class="divide-y divide-gray-800/50 min-h-[100px] max-h-80 overflow-y-auto">
+                {% for r in active_runs %}
+                <div class="px-4 py-3 flex items-center justify-between" data-run-id="{{ r.id }}">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+                            <span class="rounded-full px-2 py-0.5 text-xs bg-blue-900/50 text-blue-400">{{ r.agent_type }}</span>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1 max-w-xs truncate">{{ r.task[:80] if r.task else "" }}</p>
+                    </div>
+                    <span class="mono text-xs text-yellow-400">{{ r.elapsed_display | default("...") }}</span>
+                </div>
+                {% endfor %}
+                {% if not active_runs %}
+                <div class="px-4 py-8 text-center text-gray-600 text-sm">No agents currently running</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right: Daily Cost Chart -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-3">Daily Cost (14 days)</h2>
+            <div style="height: 250px;">
+                <canvas id="costChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Left: Live Event Feed -->
+        {% include "components/live_feed.html" %}
+
+        <!-- Right: Agent ROI -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-3">Agent ROI (Cost vs Signals)</h2>
+            <div style="height: 250px;">
+                <canvas id="roiChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Events Table -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <div class="px-4 py-3 border-b border-gray-800">
+            <h2 class="text-sm font-semibold text-gray-300">Recent Events (DB)</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                        <th class="px-4 py-2 text-left">Time</th>
+                        <th class="px-4 py-2 text-left">Type</th>
+                        <th class="px-4 py-2 text-left">Source</th>
+                        <th class="px-4 py-2 text-left">Title</th>
+                        <th class="px-4 py-2 text-left">Symbol</th>
+                        <th class="px-4 py-2 text-left">Severity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for evt in recent_events[:30] %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                        <td class="px-4 py-2 text-gray-400 mono text-xs">{{ evt.timestamp[:16] if evt.timestamp else "" }}</td>
+                        <td class="px-4 py-2">
+                            <span class="rounded px-1.5 py-0.5 text-[10px] bg-gray-800 text-gray-400">{{ evt.event_type }}</span>
+                        </td>
+                        <td class="px-4 py-2 text-xs text-gray-500">{{ evt.source }}</td>
+                        <td class="px-4 py-2 text-xs text-gray-300 max-w-xs truncate">{{ evt.title }}</td>
+                        <td class="px-4 py-2 mono text-xs text-emerald-400">{{ evt.symbol or "" }}</td>
+                        <td class="px-4 py-2">
+                            <span class="rounded-full px-2 py-0.5 text-[10px]
+                                {% if evt.severity == 'critical' %}bg-red-900/50 text-red-400
+                                {% elif evt.severity == 'warning' %}bg-yellow-900/50 text-yellow-400
+                                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                {{ evt.severity }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not recent_events %}
+                    <tr><td colspan="6" class="px-4 py-6 text-center text-gray-600 text-sm">No events recorded.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+// Initialize live feed WebSocket
+initLiveFeed(100);
+
+// Cost by day chart
+const costData = {{ cost_by_day_json | safe }};
+new Chart(document.getElementById('costChart'), {
+    type: 'line',
+    data: {
+        labels: costData.map(d => d.day.substring(5)),
+        datasets: [{
+            label: 'Daily Cost ($)',
+            data: costData.map(d => d.cost),
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+            pointBackgroundColor: '#10b981',
+        }, {
+            label: 'Runs',
+            data: costData.map(d => d.runs),
+            borderColor: '#6366f1',
+            backgroundColor: 'transparent',
+            tension: 0.3,
+            pointRadius: 2,
+            yAxisID: 'y1',
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#9ca3af', font: { size: 10 } } } },
+        scales: {
+            x: { ticks: { color: '#6b7280', font: { size: 9 } }, grid: { color: '#1f2937' } },
+            y: { ticks: { color: '#6b7280', font: { size: 9 }, callback: v => '$' + v.toFixed(2) }, grid: { color: '#1f2937' }, position: 'left' },
+            y1: { ticks: { color: '#6b7280', font: { size: 9 } }, grid: { display: false }, position: 'right' },
+        }
+    }
+});
+
+// Agent ROI chart
+const roiData = {{ agent_roi_json | safe }};
+new Chart(document.getElementById('roiChart'), {
+    type: 'bar',
+    data: {
+        labels: roiData.map(d => d.agent_type),
+        datasets: [{
+            label: 'Cost ($)',
+            data: roiData.map(d => d.total_cost),
+            backgroundColor: 'rgba(239, 68, 68, 0.5)',
+            borderColor: '#ef4444',
+            borderWidth: 1,
+        }, {
+            label: 'Signals',
+            data: roiData.map(d => d.signals),
+            backgroundColor: 'rgba(16, 185, 129, 0.5)',
+            borderColor: '#10b981',
+            borderWidth: 1,
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#9ca3af', font: { size: 10 } } } },
+        scales: {
+            x: { ticks: { color: '#6b7280', font: { size: 9 }, maxRotation: 45 }, grid: { color: '#1f2937' } },
+            y: { ticks: { color: '#6b7280', font: { size: 9 } }, grid: { color: '#1f2937' } },
+        }
+    }
+});
+
+// WebSocket: Update active agents panel in real-time
+(function() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+
+    ws.onmessage = (e) => {
+        try {
+            const evt = JSON.parse(e.data);
+            const panel = document.getElementById('active-agents');
+            const counter = document.getElementById('active-count');
+
+            if (evt.type === 'agent_started') {
+                // Add to active panel
+                const html = `
+                <div class="px-4 py-3 flex items-center justify-between fade-in" data-run-id="${evt.run_id}">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+                            <span class="rounded-full px-2 py-0.5 text-xs bg-blue-900/50 text-blue-400">${evt.agent_type || ''}</span>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1 max-w-xs truncate">${(evt.task || '').substring(0, 80)}</p>
+                    </div>
+                    <span class="mono text-xs text-yellow-400">0s</span>
+                </div>`;
+                // Remove "no agents" placeholder
+                const placeholder = panel.querySelector('.text-center');
+                if (placeholder) placeholder.remove();
+                panel.insertAdjacentHTML('afterbegin', html);
+                updateActiveCount(1);
+            }
+
+            if (evt.type === 'agent_completed' || evt.type === 'agent_failed') {
+                const el = panel.querySelector(`[data-run-id="${evt.run_id}"]`);
+                if (el) {
+                    el.remove();
+                    updateActiveCount(-1);
+                }
+            }
+
+            function updateActiveCount(delta) {
+                const current = parseInt(counter.textContent) || 0;
+                counter.textContent = `${current + delta} running`;
+            }
+        } catch (err) {}
+    };
+})();
+</script>
+{% endblock %}

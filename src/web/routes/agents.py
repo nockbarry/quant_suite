@@ -24,6 +24,7 @@ async def agent_list(request: Request):
         limit=limit,
     )
     metrics = agent_service.get_aggregate_metrics()
+    agent_types = agent_service.get_distinct_agent_types()
 
     return templates.TemplateResponse(
         request,
@@ -32,17 +33,35 @@ async def agent_list(request: Request):
             "active_page": "agents",
             "runs": runs,
             "metrics": metrics,
-            "filters": {
-                "agent_type": agent_type,
-                "status": status,
-            },
+            "agent_types": agent_types,
+            "filter_type": agent_type,
+            "filter_status": status,
         },
     )
 
 
+@router.post("/scan-sessions")
+async def scan_cli_sessions(request: Request):
+    """Import CLI terminal sessions as agent runs."""
+    from src.web.services.session_scanner import import_all_cli_sessions
+
+    try:
+        count = import_all_cli_sessions()
+        if count > 0:
+            return HTMLResponse(
+                f'<span class="text-emerald-400">Imported {count} CLI session{"s" if count != 1 else ""}</span>'
+            )
+        return HTMLResponse('<span class="text-gray-500">No new CLI sessions to import</span>')
+    except Exception as e:
+        return HTMLResponse(f'<span class="text-red-400">Error: {str(e)[:100]}</span>')
+
+
 @router.get("/metrics")
 async def agent_metrics_partial(request: Request):
-    """HTMX partial: aggregate agent metrics."""
+    """HTMX partial: aggregate agent metrics. Auto-scans CLI sessions."""
+    from src.web.services.session_scanner import maybe_auto_scan
+    maybe_auto_scan()
+
     metrics = agent_service.get_aggregate_metrics()
 
     def _get(key, default=0):
@@ -81,6 +100,31 @@ async def agent_metrics_partial(request: Request):
     return HTMLResponse(content=html)
 
 
+@router.get("/ops")
+async def agent_ops_center(request: Request):
+    """Agent Operations Center — real-time agent monitoring with charts."""
+    templates = request.app.state.templates
+
+    active_runs = agent_service.get_active_runs()
+    cost_by_day = agent_service.get_cost_by_day(days=14)
+    agent_roi = agent_service.get_agent_roi()
+    recent_events = agent_service.get_recent_events(limit=50)
+
+    import json
+
+    return templates.TemplateResponse(
+        request,
+        "agents/ops.html",
+        {
+            "active_page": "agents",
+            "active_runs": active_runs,
+            "cost_by_day_json": json.dumps(cost_by_day),
+            "agent_roi_json": json.dumps(agent_roi),
+            "recent_events": recent_events,
+        },
+    )
+
+
 @router.get("/{run_id}")
 async def agent_detail(request: Request, run_id: str):
     """Agent run detail with findings and child runs."""
@@ -93,6 +137,13 @@ async def agent_detail(request: Request, run_id: str):
     children = agent_service.get_child_runs(run_id)
     events = agent_service.get_run_events(run_id)
 
+    r_type = run.get("agent_type", "") if isinstance(run, dict) else getattr(run, "agent_type", "")
+    r_label = f"{r_type} — {run_id[:8]}" if r_type else run_id[:8]
+
+    # Check for stream replay log
+    from src.web.services.research_service import has_stream_log
+    _has_stream_log = has_stream_log(run_id)
+
     return templates.TemplateResponse(
         request,
         "agents/detail.html",
@@ -101,5 +152,10 @@ async def agent_detail(request: Request, run_id: str):
             "run": run,
             "children": children,
             "events": events,
+            "has_stream_log": _has_stream_log,
+            "breadcrumbs": [
+                {"label": "Agents", "url": "/agents"},
+                {"label": r_label},
+            ],
         },
     )

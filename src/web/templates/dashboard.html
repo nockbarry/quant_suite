@@ -35,6 +35,18 @@
         </div>
     </div>
 
+    <!-- Quick nav strip -->
+    <div class="flex items-center gap-2 text-xs">
+        <a href="/portfolio" class="px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:text-emerald-400 hover:border-emerald-600 border border-gray-700 transition">Portfolio</a>
+        <a href="/decisions" class="px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:text-emerald-400 hover:border-emerald-600 border border-gray-700 transition">Decisions</a>
+        <a href="/theses" class="px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:text-emerald-400 hover:border-emerald-600 border border-gray-700 transition">Theses</a>
+        <a href="/signals" class="px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:text-emerald-400 hover:border-emerald-600 border border-gray-700 transition">Signals</a>
+        <a href="/data" class="px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:text-emerald-400 hover:border-emerald-600 border border-gray-700 transition">Data Sources</a>
+        <a href="/agents" class="px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:text-emerald-400 hover:border-emerald-600 border border-gray-700 transition">Agents</a>
+        <a href="/research" class="px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:text-emerald-400 hover:border-emerald-600 border border-gray-700 transition">Research</a>
+        <a href="/learnings" class="px-3 py-1 rounded-full bg-gray-800 text-gray-400 hover:text-emerald-400 hover:border-emerald-600 border border-gray-700 transition">Learnings</a>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Positions table -->
         <div class="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-lg">
@@ -57,7 +69,9 @@
                     <tbody>
                         {% for p in portfolio.positions %}
                         <tr class="data-row border-b border-gray-800/50 hover:bg-gray-800/30">
-                            <td class="px-4 py-2 font-medium mono text-emerald-400">{{ p.symbol }}</td>
+                            <td class="px-4 py-2 font-medium mono">
+                                <a href="/knowledge/{{ p.symbol }}" class="text-emerald-400 hover:underline">{{ p.symbol }}</a>
+                            </td>
                             <td class="px-4 py-2 text-right mono">{{ p.quantity }}</td>
                             <td class="px-4 py-2 text-right mono">${{ "%.2f"|format(p.current_price | default(0)) }}</td>
                             <td class="px-4 py-2 text-right mono">${{ "%.0f"|format(p.market_value | default(0)) }}</td>
@@ -77,30 +91,23 @@
             </div>
         </div>
 
-        <!-- Activity feed -->
-        <div class="bg-gray-900 border border-gray-800 rounded-lg">
-            <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
-                <h2 class="text-sm font-semibold text-gray-300">Activity</h2>
-                <a href="/flows" class="text-xs text-emerald-400 hover:underline">View all</a>
-            </div>
-            <div id="activity-feed" class="divide-y divide-gray-800/50 max-h-96 overflow-y-auto">
-                {% for event in events %}
-                <div class="px-4 py-2 hover:bg-gray-800/30 cursor-pointer"
-                     hx-get="/flows/{{ event.id }}" hx-target="#event-detail" hx-swap="innerHTML">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full {% if event.severity == 'critical' %}bg-red-500{% elif event.severity == 'warning' %}bg-yellow-500{% else %}bg-blue-500{% endif %}"></span>
-                        <span class="text-xs text-gray-400 mono">{{ event.timestamp[:16] if event.timestamp else '' }}</span>
-                    </div>
-                    <p class="text-sm text-gray-300 mt-0.5">{{ event.title }}</p>
-                    {% if event.symbol %}
-                    <span class="text-xs text-emerald-400 mono">{{ event.symbol }}</span>
-                    {% endif %}
+        <!-- Right column: Command Panel + Allocation Chart + Live Feed -->
+        <div class="space-y-4">
+            <!-- Command Panel -->
+            {% include "components/command_panel.html" %}
+
+            <!-- Allocation doughnut chart -->
+            {% if portfolio.positions %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Allocation</h2>
+                <div style="height: 200px;">
+                    <canvas id="allocationChart"></canvas>
                 </div>
-                {% endfor %}
-                {% if not events %}
-                <div class="px-4 py-8 text-center text-gray-600 text-sm">No recent activity</div>
-                {% endif %}
             </div>
+            {% endif %}
+
+            <!-- Live feed -->
+            {% include "components/live_feed.html" %}
         </div>
     </div>
 
@@ -136,4 +143,60 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Init live feed
+initLiveFeed(50);
+
+// Allocation doughnut
+{% if portfolio.positions %}
+(function() {
+    const positions = {{ portfolio.positions | tojson | safe }};
+    if (!positions || positions.length === 0) return;
+
+    // Group by sector/thesis or just show top positions
+    const sorted = positions.slice().sort((a, b) => (b.market_value || 0) - (a.market_value || 0));
+    const top = sorted.slice(0, 10);
+    const otherValue = sorted.slice(10).reduce((s, p) => s + (p.market_value || 0), 0);
+
+    const labels = top.map(p => p.symbol);
+    const data = top.map(p => p.market_value || 0);
+    if (otherValue > 0) {
+        labels.push('Other');
+        data.push(otherValue);
+    }
+
+    const colors = [
+        '#10b981', '#6366f1', '#f59e0b', '#ef4444', '#8b5cf6',
+        '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#84cc16', '#6b7280'
+    ];
+
+    new Chart(document.getElementById('allocationChart'), {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors.slice(0, labels.length),
+                borderColor: '#111827',
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { color: '#9ca3af', font: { size: 9 }, boxWidth: 10, padding: 6 }
+                },
+            },
+            cutout: '60%',
+        }
+    });
+})();
+{% endif %}
+</script>
 {% endblock %}

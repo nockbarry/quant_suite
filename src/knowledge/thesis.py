@@ -483,7 +483,7 @@ class ThesisTracker:
         return summaries
 
     def _save_thesis(self, thesis: Thesis) -> None:
-        """Save thesis to file."""
+        """Save thesis to file and sync to DB."""
         if HAS_YAML:
             filepath = self.theses_dir / f"{thesis.id}.yaml"
             content = thesis.to_yaml()
@@ -493,6 +493,13 @@ class ThesisTracker:
 
         with open(filepath, "w") as f:
             f.write(content)
+
+        # Sync to DB
+        try:
+            from src.db.write_api import athena_db
+            athena_db.upsert_thesis(thesis.to_dict())
+        except Exception as e:
+            logger.warning(f"DB sync failed for thesis {thesis.id}: {e}")
 
     def _load_thesis(self, filepath: Path) -> Optional[Thesis]:
         """Load thesis from file."""

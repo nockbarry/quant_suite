@@ -185,7 +185,7 @@ class DecisionLogger:
         return self.daily_file
 
     def log_decision(self, decision: TradingDecision) -> str:
-        """Log a new trading decision."""
+        """Log a new trading decision and sync to DB."""
         self._ensure_daily_file()
 
         with open(self.daily_file, "r") as f:
@@ -195,6 +195,14 @@ class DecisionLogger:
 
         with open(self.daily_file, "w") as f:
             json.dump(data, f, indent=2)
+
+        # Sync to DB
+        try:
+            from src.db.write_api import athena_db
+            athena_db.upsert_decision(decision.to_dict())
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"DB sync failed for decision {decision.id}: {e}")
 
         return decision.id
 
@@ -210,6 +218,15 @@ class DecisionLogger:
                 decision.update(updates)
                 with open(self.daily_file, "w") as f:
                     json.dump(data, f, indent=2)
+
+                # Sync to DB
+                try:
+                    from src.db.write_api import athena_db
+                    athena_db.upsert_decision(decision)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"DB sync failed for decision update {decision_id}: {e}")
+
                 return True
 
         return False

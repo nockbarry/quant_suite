@@ -5,9 +5,22 @@
 {% block content %}
 <div class="p-6 space-y-6">
     <!-- Header -->
-    <div>
-        <h1 class="text-xl font-bold text-gray-100">Agent Intelligence</h1>
-        <p class="text-sm text-gray-500">Autonomous agent runs, metrics, and outputs</p>
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Agent Intelligence</h1>
+            <p class="text-sm text-gray-500">Autonomous agent runs, metrics, and outputs</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span id="scan-result"></span>
+            <a href="/agents/ops"
+               class="rounded px-3 py-1.5 text-xs bg-emerald-900/40 text-emerald-400 border border-emerald-800/50 hover:bg-emerald-900/60 transition">
+                Ops Center
+            </a>
+            <button hx-post="/agents/scan-sessions" hx-target="#scan-result" hx-swap="innerHTML"
+                    class="rounded px-3 py-1.5 text-xs bg-cyan-900/40 text-cyan-400 border border-cyan-800/50 hover:bg-cyan-900/60 transition">
+                Scan CLI Sessions
+            </button>
+        </div>
     </div>
 
     <!-- Metrics Panel -->
@@ -82,12 +95,14 @@
                         <td class="px-4 py-2">
                             <span class="rounded-full px-2 py-0.5 text-xs
                                 {% if r.agent_type == 'research' %}bg-purple-900/50 text-purple-400
+                                {% elif r.agent_type == 'api_research' %}bg-purple-900/50 text-purple-400
                                 {% elif r.agent_type == 'monitor' %}bg-blue-900/50 text-blue-400
                                 {% elif r.agent_type == 'critic' %}bg-red-900/50 text-red-400
                                 {% elif r.agent_type == 'alpha-discovery' %}bg-emerald-900/50 text-emerald-400
                                 {% elif r.agent_type == 'macro-research' %}bg-amber-900/50 text-amber-400
                                 {% elif r.agent_type == 'news-analyst' %}bg-cyan-900/50 text-cyan-400
                                 {% elif r.agent_type == 'orchestrator' %}bg-indigo-900/50 text-indigo-400
+                                {% elif r.agent_type == 'cli_session' %}bg-cyan-900/50 text-cyan-400
                                 {% else %}bg-gray-800 text-gray-400{% endif %}">
                                 {{ r.agent_type }}
                             </span>

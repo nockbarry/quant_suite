@@ -4,10 +4,11 @@
 
 {% block content %}
 <div class="p-6 space-y-6">
+    {% include "components/breadcrumbs.html" %}
+
     <!-- Header -->
     <div class="flex items-center justify-between">
         <div>
-            <a href="/theses" class="text-gray-500 hover:text-gray-300 text-sm">&larr; Theses</a>
             <h1 class="text-xl font-bold text-gray-100 mt-1">{{ thesis.name }}</h1>
             <div class="flex items-center gap-3 mt-1">
                 <span class="rounded-full px-2 py-0.5 text-xs
@@ -147,14 +148,16 @@
                 {% if thesis.positions %}
                 <div class="flex flex-wrap gap-2">
                     {% for symbol in thesis.positions %}
-                    <a href="/knowledge/{{ symbol }}" class="inline-flex items-center gap-2 rounded-lg bg-gray-800 px-3 py-1.5 hover:bg-gray-700 transition">
-                        <span class="mono text-sm text-emerald-400 font-medium">{{ symbol }}</span>
+                    <div class="inline-flex items-center gap-1 rounded-lg bg-gray-800 pl-3 pr-1 py-1.5 hover:bg-gray-700 transition">
+                        <a href="/knowledge/{{ symbol }}" class="mono text-sm text-emerald-400 font-medium hover:underline">{{ symbol }}</a>
                         {% if position_pnl and position_pnl[symbol] is defined %}
                         <span class="mono text-xs {% if position_pnl[symbol] >= 0 %}text-profit{% else %}text-loss{% endif %}">
                             {{ "%+.1f"|format(position_pnl[symbol]) }}%
                         </span>
                         {% endif %}
-                    </a>
+                        <a href="/decisions?symbol={{ symbol }}" class="ml-1 px-1.5 py-0.5 text-[10px] rounded bg-gray-700 text-gray-400 hover:text-blue-400 transition" title="Decisions for {{ symbol }}">dec</a>
+                        <a href="/signals?symbol={{ symbol }}" class="px-1.5 py-0.5 text-[10px] rounded bg-gray-700 text-gray-400 hover:text-purple-400 transition" title="Signals for {{ symbol }}">sig</a>
+                    </div>
                     {% endfor %}
                 </div>
                 {% else %}
@@ -222,6 +225,16 @@
 
         <!-- Right Column: History + Notes -->
         <div class="space-y-4">
+            <!-- Conviction Chart -->
+            {% if thesis.conviction_history %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Conviction Trend</h2>
+                <div style="height: 160px;">
+                    <canvas id="convictionChart"></canvas>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Conviction History -->
             <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
                 <h2 class="text-sm font-semibold text-gray-300 mb-3">Conviction History</h2>
@@ -282,4 +295,48 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if thesis.conviction_history %}
+<script>
+(function() {
+    const history = {{ thesis.conviction_history | tojson | safe }};
+    if (!history || history.length === 0) return;
+
+    const labels = history.map(h => (h.timestamp || '').substring(0, 10));
+    const values = history.map(h => h.new_value);
+
+    // Add initial point
+    labels.unshift(history[0].timestamp ? history[0].timestamp.substring(0, 10) : '');
+    values.unshift(history[0].old_value);
+
+    new Chart(document.getElementById('convictionChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Conviction %',
+                data: values,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointBackgroundColor: '#10b981',
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#6b7280', font: { size: 9 }, maxTicksLimit: 8 }, grid: { color: '#1f2937' } },
+                y: { min: 0, max: 100, ticks: { color: '#6b7280', font: { size: 9 }, callback: v => v + '%' }, grid: { color: '#1f2937' } },
+            }
+        }
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

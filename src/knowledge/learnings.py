@@ -166,7 +166,7 @@ class LearningLog:
 
     def add_learning(self, learning: Learning) -> str:
         """
-        Add a new learning.
+        Add a new learning and sync to DB.
 
         Args:
             learning: Learning to add.
@@ -180,6 +180,14 @@ class LearningLog:
         self._save_file(month_file, learnings)
 
         logger.info(f"Added learning: {learning.get_summary()}")
+
+        # Sync to DB
+        try:
+            from src.db.write_api import athena_db
+            athena_db.upsert_learning(learning.to_dict())
+        except Exception as e:
+            logger.warning(f"DB sync failed for learning {learning.id}: {e}")
+
         return learning.id
 
     def create_learning(

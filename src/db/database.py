@@ -4,11 +4,14 @@ Provides both sync (for daemon/scripts) and async (for FastAPI) access
 to SQLite at ~/quant_results/athena.db.
 """
 
+import logging
 import os
 from contextlib import contextmanager, asynccontextmanager
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+logger = logging.getLogger(__name__)
+
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker, Session
 
 from src.db.models import Base
@@ -62,9 +65,29 @@ def get_sync_session_factory():
 
 
 def init_db():
-    """Create all tables if they don't exist."""
+    """Create all tables if they don't exist (includes new junction tables)."""
     engine = get_sync_engine()
     Base.metadata.create_all(engine)
+    ensure_columns()
+
+
+def ensure_columns():
+    """Add new columns to existing tables (safe for repeated calls)."""
+    engine = get_sync_engine()
+    _new_columns = [
+        ("agent_runs", "artifacts", "TEXT", "'{}'"),
+        ("agent_runs", "session_id", "VARCHAR(100)", "NULL"),
+    ]
+    with engine.connect() as conn:
+        for table, col, col_type, default in _new_columns:
+            try:
+                conn.execute(text(
+                    f"ALTER TABLE {table} ADD COLUMN {col} {col_type} DEFAULT {default}"
+                ))
+                conn.commit()
+                logger.info(f"Added column {table}.{col}")
+            except Exception:
+                conn.rollback()  # Column already exists
 
 
 @contextmanager
