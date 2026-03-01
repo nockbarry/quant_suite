@@ -425,6 +425,29 @@ src/synthesis/
 └── ... (existing files)
 ```
 
+### Database Layer (`src/db/`) - Added 2026-03-01
+```
+src/db/
+├── __init__.py
+├── database.py        ──► SQLAlchemy engine, session management, get_db()
+├── models.py          ──► All ORM models (18 tables):
+│                          ├── ThesisRecord, SignpostRecord
+│                          ├── DecisionRecord, LearningRecord
+│                          ├── AgentRun, AgentRunLog
+│                          ├── DataSourceRecord
+│                          ├── Document          ──► NEW: Universal content index
+│                          ├── Insight           ──► NEW: Research insights (from session tracker)
+│                          └── Experiment        ──► NEW: Strategy experiments
+├── write_api.py       ──► AthenaWriteAPI singleton (athena_db):
+│                          ├── save_document()   ──► Index any file/content
+│                          ├── get_recent_documents()
+│                          ├── get_documents_for_symbol()
+│                          ├── search_documents()
+│                          ├── search_insights()
+│                          └── save_thesis(), save_decision(), etc.
+└── migrate.py         ──► Backfill script: scans ~/quant_results/ and indexes all files
+```
+
 ### Monitoring Layer (`src/monitoring/`) - Updated 2026-02-01
 ```
 src/monitoring/
@@ -437,6 +460,48 @@ src/monitoring/
 ├── signal_summary.py          ──► Aggregate all signals into actionable items
 ├── improvement_tracker.py     ──► Auto-generated improvement suggestions
 └── signal_quality_tracker.py  ──► Track signal hit rates over time
+```
+
+### Web Layer (`src/web/`) - Added 2026-03-01
+```
+src/web/
+├── __init__.py
+├── app.py                ──► FastAPI app, router registration, CORS, templates
+│
+├── routes/
+│   ├── dashboard.py      ──► / (main dashboard with portfolio, positions, recent docs)
+│   ├── portfolio.py      ──► /portfolio (positions, allocation, P&L)
+│   ├── decisions.py      ──► /decisions (list + detail with cross-refs)
+│   ├── theses.py         ──► /theses (CRUD, conviction, signposts)
+│   ├── signals.py        ──► /signals (live signals, convergences)
+│   ├── agents.py         ──► /agents (agent runs, logs, produced documents)
+│   ├── knowledge.py      ──► /knowledge (company + sector briefs)
+│   ├── learnings.py      ──► /learnings (trade learnings)
+│   ├── data_sources.py   ──► /data (data source freshness)
+│   ├── documents.py      ──► /documents (universal browser + insights + experiments)
+│   ├── research.py       ──► /research (run agents from web UI)
+│   ├── tasks.py          ──► /tasks (background task management)
+│   └── websocket.py      ──► /ws (WebSocket for live feed)
+│
+├── services/
+│   ├── state_service.py       ──► Read unified state, portfolio summary
+│   ├── document_service.py    ──► Document queries (list, filter, search)
+│   ├── thesis_service.py      ──► Thesis CRUD with dual-write
+│   ├── decision_service.py    ──► Decision queries
+│   ├── research_service.py    ──► Agent execution + auto-document indexing
+│   ├── portfolio_service.py   ──► Portfolio data from Alpaca
+│   ├── flow_service.py        ──► Process events for activity feed
+│   ├── system_service.py      ──► System health, autonomy status
+│   ├── stream_parser.py       ──► Parse agent output streams
+│   └── task_manager.py        ──► Background task lifecycle
+│
+└── templates/                  ──► Jinja2 templates (Tailwind + HTMX)
+    ├── base.html              ──► Layout with nav, dark theme
+    ├── dashboard.html         ──► Main dashboard
+    ├── documents/             ──► Document browser + viewer
+    ├── decisions/             ──► Decision list + detail
+    ├── portfolio/             ──► Portfolio views
+    └── ...                    ──► (theses, signals, agents, knowledge, etc.)
 ```
 
 ---
@@ -967,9 +1032,27 @@ Intraday ─── LiveDaemon (background) ────────────�
 │   ├── research_session_*.json
 │   └── ...
 │
-└── validation_reports/            *** VALIDATION REPORTS ***
-    ├── validation_*.json
-    └── ...
+├── validation_reports/            *** VALIDATION REPORTS ***
+│   ├── validation_*.json
+│   └── ...
+│
+├── research_results/              *** WEB RESEARCH OUTPUT ***
+│   ├── research_*.json            ◄── Auto-indexed in documents table
+│   └── ...
+│
+├── research_tracker/              *** SESSION TRACKER ***
+│   ├── insights.json              ◄── 112+ research insights (indexed)
+│   └── experiments.json           ◄── 61+ strategy experiments (indexed)
+│
+├── athena.db                      *** SQLITE DATABASE (18 tables) ***
+│                                  ◄── documents, insights, experiments tables
+│                                  ◄── theses, decisions, learnings
+│                                  ◄── agent_runs, data_sources
+│
+└── social/                        *** SOCIAL SIGNAL TRACKING ***
+    ├── wsb.db
+    ├── wsb_signals.json
+    └── social_timeseries.db
 ```
 
 ---

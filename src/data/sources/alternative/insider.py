@@ -324,6 +324,28 @@ class InsiderDataSource:
         if transactions:
             self._update_cache(cache_key, transactions)
 
+        # Emit events for cluster buys and large sales
+        for txn in transactions:
+            try:
+                if txn.is_cluster_buy or (txn.is_sale and txn.value > 500_000):
+                    from src.core.events import emit
+                    direction = "bullish" if txn.is_purchase else "bearish"
+                    emit(
+                        "signal_insider",
+                        source="insider",
+                        symbol=txn.symbol,
+                        title=f"Insider {'buy' if txn.is_purchase else 'sale'}: {txn.insider_name} ({txn.insider_role.value}) ${txn.value:,.0f}",
+                        detail={"insider_name": txn.insider_name, "role": txn.insider_role.value,
+                                "transaction_type": txn.transaction_type.value, "value": txn.value,
+                                "shares": txn.shares},
+                        confidence=0.7 if txn.is_cluster_buy else 0.5,
+                        direction=direction,
+                        description=f"{txn.insider_name} ({txn.insider_role.value}) {'bought' if txn.is_purchase else 'sold'} ${txn.value:,.0f}",
+                        detection_method="form4_filing",
+                    )
+            except Exception:
+                pass
+
         return transactions
 
     async def _fetch_finnhub(

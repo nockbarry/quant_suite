@@ -124,15 +124,29 @@ class Thesis:
 
     def update_conviction(self, new_value: float, reason: str) -> None:
         """Update conviction with audit trail."""
+        old_value = self.conviction
         update = ConvictionUpdate(
             timestamp=datetime.now(),
-            old_value=self.conviction,
+            old_value=old_value,
             new_value=new_value,
             reason=reason,
         )
         self.conviction_history.append(update)
         self.conviction = new_value
-        logger.info(f"Thesis '{self.name}' conviction: {update.old_value:.0f}% -> {new_value:.0f}%: {reason}")
+        logger.info(f"Thesis '{self.name}' conviction: {old_value:.0f}% -> {new_value:.0f}%: {reason}")
+
+        try:
+            from src.core.events import emit
+            emit(
+                "thesis_conviction_changed",
+                source="thesis_tracker",
+                title=f"Thesis '{self.name}' conviction: {old_value:.0f}% -> {new_value:.0f}%",
+                detail={"old_value": old_value, "new_value": new_value, "reason": reason},
+                thesis_id=self.id,
+                severity="warning" if abs(new_value - old_value) >= 15 else "info",
+            )
+        except Exception:
+            pass
 
     def add_note(self, note: str) -> None:
         """Add a timestamped note."""
@@ -147,6 +161,20 @@ class Thesis:
             signpost.triggered_at = datetime.now()
             signpost.outcome = outcome
             logger.info(f"Signpost triggered for '{self.name}': {signpost.description} -> {outcome}")
+
+            try:
+                from src.core.events import emit
+                emit(
+                    "thesis_signpost_triggered",
+                    source="thesis_tracker",
+                    title=f"Signpost triggered: {signpost.description} -> {outcome}",
+                    detail={"description": signpost.description, "outcome": outcome,
+                            "thesis_name": self.name},
+                    thesis_id=self.id,
+                    severity="warning" if outcome == "bearish" else "info",
+                )
+            except Exception:
+                pass
 
     def check_review_due(self) -> bool:
         """Check if thesis review is due."""
@@ -327,6 +355,20 @@ class ThesisTracker:
         self._cache[thesis_id] = thesis
 
         logger.info(f"Created thesis: {name} (id={thesis_id})")
+
+        try:
+            from src.core.events import emit
+            emit(
+                "thesis_created",
+                source="thesis_tracker",
+                title=f"Thesis created: {name}",
+                detail={"name": name, "conviction": conviction, "positions": positions or []},
+                thesis_id=thesis_id,
+                conviction=conviction,
+            )
+        except Exception:
+            pass
+
         return thesis
 
     def get_thesis(self, thesis_id: str) -> Optional[Thesis]:
@@ -447,6 +489,21 @@ class ThesisTracker:
         self._save_thesis(thesis)
 
         logger.info(f"Thesis '{thesis.name}' invalidated: {reason}")
+
+        try:
+            from src.core.events import emit
+            emit(
+                "thesis_invalidated",
+                source="thesis_tracker",
+                severity="critical",
+                title=f"Thesis INVALIDATED: {thesis.name}",
+                detail={"reason": reason, "thesis_name": thesis.name,
+                        "positions": thesis.positions},
+                thesis_id=thesis_id,
+            )
+        except Exception:
+            pass
+
         return True
 
     def validate_thesis(self, thesis_id: str, reason: str) -> bool:

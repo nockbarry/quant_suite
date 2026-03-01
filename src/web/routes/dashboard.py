@@ -27,6 +27,11 @@ async def index(request: Request):
     autonomy_data = system_service.get_autonomy_status()
     latest_check = autonomy_data.get("recent_checks", [None])[0] if autonomy_data.get("recent_checks") else None
 
+    # Recent documents for dashboard widget
+    from src.web.services import document_service
+
+    recent_docs, _ = document_service.list_documents(limit=8)
+
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -38,6 +43,7 @@ async def index(request: Request):
             "events": recent_events,
             "market": state.get("market", {}),
             "autonomy": latest_check,
+            "recent_docs": recent_docs,
         },
     )
 

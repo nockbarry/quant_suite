@@ -10,7 +10,9 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+
+from src.web.services.task_manager import get_task_manager
 
 router = APIRouter()
 
@@ -181,33 +183,40 @@ async def data_source_grid(request: Request):
             "active_page": "data",
             "sources": sources,
             "status_counts": status_counts,
+            "breadcrumbs": [
+                {"label": "Data Sources"},
+            ],
         },
     )
 
 
+_PERSISTENT_SOURCES = {"theses", "learnings", "knowledge", "decisions"}
+
+
 @router.post("/{source}/refresh")
 async def refresh_source(request: Request, source: str):
-    """Trigger a manual refresh of a data source.
+    """Trigger a real background refresh of a data source via task manager."""
+    if source in _PERSISTENT_SOURCES:
+        return HTMLResponse(
+            '<span class="text-xs text-gray-500">Persistent source — no refresh needed</span>'
+        )
 
-    This writes a refresh request file that the collection daemon picks up.
-    Returns JSON status for HTMX swap.
-    """
-    results = _results_dir()
-    refresh_dir = results / "live" / "refresh_requests"
-    refresh_dir.mkdir(parents=True, exist_ok=True)
+    from src.web.routes.tasks import _dispatch_action
+    try:
+        task_id = _dispatch_action(f"collect_source:{source}")
+    except ValueError:
+        task_id = _dispatch_action(f"collect_source:{source}")
 
-    request_file = refresh_dir / f"{source}.json"
-    request_data = {
-        "source": source,
-        "requested_at": datetime.utcnow().isoformat(),
-        "requested_by": "web_dashboard",
-    }
-    request_file.write_text(json.dumps(request_data, indent=2))
+    task = get_task_manager().get_task(task_id)
 
-    return JSONResponse(
-        content={
-            "status": "queued",
-            "source": source,
-            "message": f"Refresh request queued for '{source}'",
-        }
-    )
+    from src.web.routes.tasks import _render_task_status
+    return HTMLResponse(_render_task_status(task))
+
+
+@router.post("/refresh-all")
+async def refresh_all(request: Request):
+    """Trigger full data collection via task manager."""
+    from src.web.routes.tasks import _dispatch_action, _render_task_status
+    task_id = _dispatch_action("collect_data")
+    task = get_task_manager().get_task(task_id)
+    return HTMLResponse(_render_task_status(task))

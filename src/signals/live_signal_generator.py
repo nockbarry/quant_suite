@@ -601,6 +601,24 @@ class LiveSignalGenerator:
         # Store recent signals
         self.recent_signals[symbol] = signals
 
+        # Emit events for each signal
+        for sig in signals:
+            try:
+                from src.core.events import emit
+                emit(
+                    "signal_detected",
+                    source="technical",
+                    symbol=sig.symbol,
+                    title=f"{sig.direction.value.upper()} {sig.signal_type.value} on {sig.symbol}",
+                    detail={"signal_type": sig.signal_type.value, "trigger_value": sig.trigger_value},
+                    confidence=sig.historical_hit_rate,
+                    direction=sig.direction.value,
+                    description=sig.description,
+                    detection_method=sig.signal_type.value,
+                )
+            except Exception:
+                pass
+
         return signals
 
     def detect_convergence(self, signals: list[LiveSignal]) -> Optional[SignalConvergence]:
@@ -627,7 +645,7 @@ class LiveSignalGenerator:
                 s.converging_signals = signal_names
                 s.convergence_score = len(bullish)
 
-            return SignalConvergence(
+            conv = SignalConvergence(
                 timestamp=datetime.now(),
                 symbol=bullish[0].symbol,
                 direction=SignalDirection.BULLISH,
@@ -638,6 +656,24 @@ class LiveSignalGenerator:
                 recommendation=f"HIGH CONFIDENCE BUY - {len(bullish)} validated signals aligned",
             )
 
+            try:
+                from src.core.events import emit
+                emit(
+                    "signal_convergence",
+                    source="technical",
+                    symbol=conv.symbol,
+                    severity="warning",
+                    title=conv.summary,
+                    detail={"signal_types": signal_names},
+                    confidence=conv.combined_confidence,
+                    direction="bullish",
+                    signal_count=conv.convergence_score,
+                )
+            except Exception:
+                pass
+
+            return conv
+
         elif len(bearish) >= 3:
             avg_ic = np.mean([s.historical_ic for s in bearish])
             avg_hit_rate = np.mean([s.historical_hit_rate for s in bearish])
@@ -647,7 +683,7 @@ class LiveSignalGenerator:
                 s.converging_signals = signal_names
                 s.convergence_score = len(bearish)
 
-            return SignalConvergence(
+            conv = SignalConvergence(
                 timestamp=datetime.now(),
                 symbol=bearish[0].symbol,
                 direction=SignalDirection.BEARISH,
@@ -657,6 +693,24 @@ class LiveSignalGenerator:
                 summary=f"{len(bearish)} BEARISH signals converging: {', '.join(signal_names)}",
                 recommendation=f"HIGH CONFIDENCE SELL - {len(bearish)} validated signals aligned",
             )
+
+            try:
+                from src.core.events import emit
+                emit(
+                    "signal_convergence",
+                    source="technical",
+                    symbol=conv.symbol,
+                    severity="warning",
+                    title=conv.summary,
+                    detail={"signal_types": signal_names},
+                    confidence=conv.combined_confidence,
+                    direction="bearish",
+                    signal_count=conv.convergence_score,
+                )
+            except Exception:
+                pass
+
+            return conv
 
         return None
 

@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block title %}Portfolio{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    {% include "components/breadcrumbs.html" %}
+
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-lg font-bold text-gray-200">Portfolio</h1>
+            <p class="text-xs text-gray-500">Paper and live account positions from Alpaca</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button hx-get="/portfolio/paper" hx-target="#paper-account" hx-swap="innerHTML"
+                    class="px-3 py-1.5 text-xs rounded bg-gray-800 text-gray-400 hover:text-emerald-400 border border-gray-700 hover:border-emerald-600 transition">
+                Refresh Paper
+            </button>
+            <button hx-get="/portfolio/live" hx-target="#live-account" hx-swap="innerHTML"
+                    class="px-3 py-1.5 text-xs rounded bg-gray-800 text-gray-400 hover:text-emerald-400 border border-gray-700 hover:border-emerald-600 transition">
+                Refresh Live
+            </button>
+            <span class="text-[10px] text-gray-600 mono">{{ fetched_at[:19] if fetched_at else '' }}</span>
+        </div>
+    </div>
+
+    <!-- Combined metrics bar -->
+    {% set paper_acct = paper.account or {} %}
+    {% set live_acct = live.account or {} %}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Paper Equity</p>
+            <p class="text-lg font-bold mono">${{ "{:,.0f}".format(paper_acct.equity | default(0)) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Paper P&L</p>
+            <p class="text-lg font-bold mono {% if (paper.total_pnl | default(0)) >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                {{ "{:+,.0f}".format(paper.total_pnl | default(0)) }}
+                <span class="text-xs">({{ "{:+.1f}".format(paper.total_pnl_pct | default(0)) }}%)</span>
+            </p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Live Equity</p>
+            {% if live.disabled %}
+            <p class="text-lg font-bold mono text-gray-600">--</p>
+            {% else %}
+            <p class="text-lg font-bold mono">${{ "{:,.0f}".format(live_acct.equity | default(0)) }}</p>
+            {% endif %}
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Live P&L</p>
+            {% if live.disabled %}
+            <p class="text-lg font-bold mono text-gray-600">--</p>
+            {% else %}
+            <p class="text-lg font-bold mono {% if (live.total_pnl | default(0)) >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                {{ "{:+,.0f}".format(live.total_pnl | default(0)) }}
+                <span class="text-xs">({{ "{:+.1f}".format(live.total_pnl_pct | default(0)) }}%)</span>
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Dual account view -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <!-- Paper account -->
+        <div id="paper-account">
+            {% if paper.error %}
+            <div class="bg-gray-900 border border-red-900/50 rounded-lg p-6 text-center">
+                <span class="px-2 py-0.5 text-[10px] rounded-full bg-yellow-900/50 text-yellow-400">Paper</span>
+                <p class="text-red-400 text-sm mt-3">Connection Error</p>
+                <p class="text-gray-600 text-xs mt-1 mono">{{ paper.error[:100] }}</p>
+            </div>
+            {% else %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg">
+                <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 text-[10px] rounded-full bg-yellow-900/50 text-yellow-400">Paper</span>
+                        <span class="text-sm font-semibold text-gray-300">${{ "{:,.0f}".format(paper_acct.equity | default(0)) }}</span>
+                        <span class="text-xs mono {% if (paper.total_pnl | default(0)) >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                            {{ "{:+,.0f}".format(paper.total_pnl | default(0)) }} ({{ "{:+.1f}".format(paper.total_pnl_pct | default(0)) }}%)
+                        </span>
+                    </div>
+                    <span class="text-[10px] text-gray-600">{{ paper.positions | length }} positions</span>
+                </div>
+                <div class="grid grid-cols-3 gap-3 px-4 py-2 border-b border-gray-800/50">
+                    <div>
+                        <p class="text-[10px] text-gray-600">Cash</p>
+                        <p class="text-xs mono">${{ "{:,.0f}".format(paper_acct.cash | default(0)) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-gray-600">Buying Power</p>
+                        <p class="text-xs mono">${{ "{:,.0f}".format(paper_acct.buying_power | default(0)) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-gray-600">Day Trades</p>
+                        <p class="text-xs mono">{{ paper_acct.day_trade_count | default(0) }}/3</p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+                    <table class="w-full">
+                        <thead class="sticky top-0 bg-gray-900">
+                            <tr class="text-[10px] text-gray-600 uppercase border-b border-gray-800">
+                                <th class="px-3 py-1.5 text-left">Symbol</th>
+                                <th class="px-3 py-1.5 text-right">Qty</th>
+                                <th class="px-3 py-1.5 text-right">Price</th>
+                                <th class="px-3 py-1.5 text-right">Value</th>
+                                <th class="px-3 py-1.5 text-right">P&L</th>
+                                <th class="px-3 py-1.5 text-right">P&L %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in paper.positions %}
+                            <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                <td class="px-3 py-1.5 mono text-xs">
+                                    <a href="/knowledge/{{ p.symbol }}" class="text-emerald-400 hover:underline">{{ p.symbol }}</a>
+                                </td>
+                                <td class="px-3 py-1.5 text-right mono text-xs">{{ "%.0f"|format(p.quantity) }}</td>
+                                <td class="px-3 py-1.5 text-right mono text-xs">${{ "%.2f"|format(p.current_price) }}</td>
+                                <td class="px-3 py-1.5 text-right mono text-xs">${{ "%.0f"|format(p.market_value) }}</td>
+                                <td class="px-3 py-1.5 text-right mono text-xs {% if p.unrealized_pnl >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                                    {{ "%+.0f"|format(p.unrealized_pnl) }}
+                                </td>
+                                <td class="px-3 py-1.5 text-right mono text-xs {% if p.unrealized_pnl_pct >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                                    {{ "%+.1f"|format(p.unrealized_pnl_pct) }}%
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not paper.positions %}
+                            <tr><td colspan="6" class="px-3 py-6 text-center text-gray-600 text-xs">No positions</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if paper.orders %}
+                <div class="border-t border-gray-800 px-4 py-2">
+                    <p class="text-[10px] text-gray-500 uppercase mb-2">Open Orders ({{ paper.orders | length }})</p>
+                    <table class="w-full text-xs">
+                        <thead><tr class="text-[10px] text-gray-600 uppercase">
+                            <th class="px-2 py-1 text-left">Symbol</th>
+                            <th class="px-2 py-1 text-left">Side</th>
+                            <th class="px-2 py-1 text-right">Qty</th>
+                            <th class="px-2 py-1 text-left">Type</th>
+                            <th class="px-2 py-1 text-left">Status</th>
+                        </tr></thead>
+                        <tbody>
+                            {% for o in paper.orders %}
+                            <tr class="border-b border-gray-800/50">
+                                <td class="px-2 py-1 mono">{{ o.symbol }}</td>
+                                <td class="px-2 py-1 {% if o.side == 'buy' %}text-emerald-400{% else %}text-red-400{% endif %}">{{ o.side | upper }}</td>
+                                <td class="px-2 py-1 text-right mono">{{ "%.0f"|format(o.quantity) }}</td>
+                                <td class="px-2 py-1">{{ o.order_type }}</td>
+                                <td class="px-2 py-1 text-gray-500">{{ o.status }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Live account -->
+        <div id="live-account">
+            {% if live.disabled %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-6 text-center">
+                <span class="px-2 py-0.5 text-[10px] rounded-full bg-emerald-900/50 text-emerald-400">Live</span>
+                <p class="text-gray-500 text-sm mt-3">Not configured</p>
+                <p class="text-gray-600 text-xs mt-1">Set <code class="mono text-gray-500">live_trading_enabled: true</code> in credentials.yaml</p>
+                <p class="text-gray-600 text-xs mt-1">Fund your Alpaca account to begin live trading</p>
+            </div>
+            {% elif live.error %}
+            <div class="bg-gray-900 border border-red-900/50 rounded-lg p-6 text-center">
+                <span class="px-2 py-0.5 text-[10px] rounded-full bg-emerald-900/50 text-emerald-400">Live</span>
+                <p class="text-red-400 text-sm mt-3">Connection Error</p>
+                <p class="text-gray-600 text-xs mt-1 mono">{{ live.error[:100] }}</p>
+            </div>
+            {% else %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg">
+                <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 text-[10px] rounded-full bg-emerald-900/50 text-emerald-400">Live</span>
+                        <span class="text-sm font-semibold text-gray-300">${{ "{:,.0f}".format(live_acct.equity | default(0)) }}</span>
+                        <span class="text-xs mono {% if (live.total_pnl | default(0)) >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                            {{ "{:+,.0f}".format(live.total_pnl | default(0)) }} ({{ "{:+.1f}".format(live.total_pnl_pct | default(0)) }}%)
+                        </span>
+                    </div>
+                    <span class="text-[10px] text-gray-600">{{ live.positions | length }} positions</span>
+                </div>
+                <div class="grid grid-cols-3 gap-3 px-4 py-2 border-b border-gray-800/50">
+                    <div>
+                        <p class="text-[10px] text-gray-600">Cash</p>
+                        <p class="text-xs mono">${{ "{:,.0f}".format(live_acct.cash | default(0)) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-gray-600">Buying Power</p>
+                        <p class="text-xs mono">${{ "{:,.0f}".format(live_acct.buying_power | default(0)) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-gray-600">Day Trades</p>
+                        <p class="text-xs mono">{{ live_acct.day_trade_count | default(0) }}/3</p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+                    <table class="w-full">
+                        <thead class="sticky top-0 bg-gray-900">
+                            <tr class="text-[10px] text-gray-600 uppercase border-b border-gray-800">
+                                <th class="px-3 py-1.5 text-left">Symbol</th>
+                                <th class="px-3 py-1.5 text-right">Qty</th>
+                                <th class="px-3 py-1.5 text-right">Price</th>
+                                <th class="px-3 py-1.5 text-right">Value</th>
+                                <th class="px-3 py-1.5 text-right">P&L</th>
+                                <th class="px-3 py-1.5 text-right">P&L %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in live.positions %}
+                            <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                <td class="px-3 py-1.5 mono text-xs">
+                                    <a href="/knowledge/{{ p.symbol }}" class="text-emerald-400 hover:underline">{{ p.symbol }}</a>
+                                </td>
+                                <td class="px-3 py-1.5 text-right mono text-xs">{{ "%.0f"|format(p.quantity) }}</td>
+                                <td class="px-3 py-1.5 text-right mono text-xs">${{ "%.2f"|format(p.current_price) }}</td>
+                                <td class="px-3 py-1.5 text-right mono text-xs">${{ "%.0f"|format(p.market_value) }}</td>
+                                <td class="px-3 py-1.5 text-right mono text-xs {% if p.unrealized_pnl >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                                    {{ "%+.0f"|format(p.unrealized_pnl) }}
+                                </td>
+                                <td class="px-3 py-1.5 text-right mono text-xs {% if p.unrealized_pnl_pct >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                                    {{ "%+.1f"|format(p.unrealized_pnl_pct) }}%
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not live.positions %}
+                            <tr><td colspan="6" class="px-3 py-6 text-center text-gray-600 text-xs">No positions</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if live.orders %}
+                <div class="border-t border-gray-800 px-4 py-2">
+                    <p class="text-[10px] text-gray-500 uppercase mb-2">Open Orders ({{ live.orders | length }})</p>
+                    <table class="w-full text-xs">
+                        <thead><tr class="text-[10px] text-gray-600 uppercase">
+                            <th class="px-2 py-1 text-left">Symbol</th>
+                            <th class="px-2 py-1 text-left">Side</th>
+                            <th class="px-2 py-1 text-right">Qty</th>
+                            <th class="px-2 py-1 text-left">Type</th>
+                            <th class="px-2 py-1 text-left">Status</th>
+                        </tr></thead>
+                        <tbody>
+                            {% for o in live.orders %}
+                            <tr class="border-b border-gray-800/50">
+                                <td class="px-2 py-1 mono">{{ o.symbol }}</td>
+                                <td class="px-2 py-1 {% if o.side == 'buy' %}text-emerald-400{% else %}text-red-400{% endif %}">{{ o.side | upper }}</td>
+                                <td class="px-2 py-1 text-right mono">{{ "%.0f"|format(o.quantity) }}</td>
+                                <td class="px-2 py-1">{{ o.order_type }}</td>
+                                <td class="px-2 py-1 text-gray-500">{{ o.status }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -20,6 +20,9 @@ async def decision_list(request: Request):
     action = request.query_params.get("action")
     status = request.query_params.get("status")
     thesis_id = request.query_params.get("thesis_id")
+    setup_type = request.query_params.get("setup_type")
+    date_from = request.query_params.get("date_from")
+    date_to = request.query_params.get("date_to")
     limit = int(request.query_params.get("limit", 50))
 
     decisions = decision_service.list_decisions(
@@ -27,8 +30,13 @@ async def decision_list(request: Request):
         action=action,
         status=status,
         thesis_id=thesis_id,
+        setup_type=setup_type,
         limit=limit,
     )
+
+    # Get filter dropdown options
+    thesis_options = decision_service.get_thesis_options()
+    setup_types = decision_service.get_distinct_setup_types()
 
     return templates.TemplateResponse(
         request,
@@ -36,12 +44,17 @@ async def decision_list(request: Request):
         {
             "active_page": "decisions",
             "decisions": decisions,
-            "filters": {
-                "symbol": symbol,
-                "action": action,
-                "status": status,
-                "thesis_id": thesis_id,
-            },
+            "filter_status": status,
+            "filter_symbol": symbol,
+            "filter_thesis": thesis_id,
+            "filter_setup": setup_type,
+            "filter_date_from": date_from,
+            "filter_date_to": date_to,
+            "thesis_options": thesis_options,
+            "setup_types": setup_types,
+            "breadcrumbs": [
+                {"label": "Decisions"},
+            ],
         },
     )
 
@@ -57,6 +70,12 @@ async def decision_detail(request: Request, decision_id: str):
 
     lineage = decision_service.get_decision_lineage(decision_id)
 
+    from src.web.services import document_service
+    related_docs = document_service.get_documents_for_decision(decision_id)
+
+    d_symbol = decision.get("symbol", "") if isinstance(decision, dict) else getattr(decision, "symbol", "")
+    d_label = f"{d_symbol} — {decision_id[:8]}" if d_symbol else decision_id[:8]
+
     return templates.TemplateResponse(
         request,
         "decisions/detail.html",
@@ -64,6 +83,11 @@ async def decision_detail(request: Request, decision_id: str):
             "active_page": "decisions",
             "decision": decision,
             "lineage": lineage,
+            "related_docs": related_docs,
+            "breadcrumbs": [
+                {"label": "Decisions", "url": "/decisions"},
+                {"label": d_label},
+            ],
         },
     )
 

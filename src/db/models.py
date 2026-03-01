@@ -658,6 +658,10 @@ class AgentRun(Base):
     findings_summary = Column(Text, default="")
     raw_output = Column(Text, default="")
 
+    # Heartbeat and process tracking
+    heartbeat_at = Column(DateTime, nullable=True)
+    pid = Column(Integer, nullable=True)
+
     # Artifacts and provenance
     artifacts = Column(Text, default="{}")  # JSON: {canonical_path, saved_path, stream_log_path}
     session_id = Column(String(100), nullable=True)  # Claude Code session_id for CLI provenance
@@ -783,6 +787,195 @@ class LearningTag(Base):
     __table_args__ = (
         Index("ix_lt_learning_tag", "learning_id", "tag", unique=True),
     )
+
+
+class Document(Base):
+    """Universal content index for every file the system produces.
+
+    Catalogs briefings, EOD reviews, critic reports, research results,
+    validation reports, macro research, etc. Files stay where they are;
+    this table is the index.
+    """
+
+    __tablename__ = "documents"
+
+    id = Column(String(100), primary_key=True)
+    doc_type = Column(String(50), nullable=False, index=True)  # briefing, eod_review, critic_report, etc.
+    title = Column(String(500), nullable=False)
+    summary = Column(Text, default="")  # first 500 chars or LLM-generated
+    file_path = Column(Text, nullable=True)  # absolute path on disk
+    content_inline = Column(Text, nullable=True)  # for docs <10KB
+    created = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Cross-reference FKs (all optional)
+    agent_run_id = Column(String(100), ForeignKey("agent_runs.id"), nullable=True, index=True)
+    thesis_id = Column(String(100), ForeignKey("theses.id"), nullable=True, index=True)
+    decision_id = Column(String(100), ForeignKey("decisions.id"), nullable=True, index=True)
+
+    # Metadata
+    symbols = Column(Text, default="[]")  # JSON list
+    tags = Column(Text, default="[]")  # JSON list
+    source = Column(String(100), default="")  # skill:morning-briefing, agent:research, cron, etc.
+
+    __table_args__ = (
+        Index("ix_documents_type_created", "doc_type", "created"),
+        Index("ix_documents_source", "source"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "doc_type": self.doc_type,
+            "title": self.title,
+            "summary": self.summary,
+            "file_path": self.file_path,
+            "content_inline": self.content_inline,
+            "created": self.created.isoformat() if self.created else None,
+            "agent_run_id": self.agent_run_id,
+            "thesis_id": self.thesis_id,
+            "decision_id": self.decision_id,
+            "symbols": _safe_json_loads(self.symbols, []),
+            "tags": _safe_json_loads(self.tags, []),
+            "source": self.source,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Document":
+        d = dict(data)
+        if isinstance(d.get("created"), str):
+            try:
+                d["created"] = datetime.fromisoformat(d["created"])
+            except (ValueError, TypeError):
+                d["created"] = None
+        for field in ("symbols", "tags"):
+            if isinstance(d.get(field), list):
+                d[field] = json.dumps(d[field])
+        return cls(**d)
+
+
+class Insight(Base):
+    """Research insight from session tracker or agent discovery.
+
+    Absorbs the 112+ insights from workflows/research/session_tracker
+    into the DB for cross-referencing and browsing.
+    """
+
+    __tablename__ = "insights"
+
+    id = Column(String(100), primary_key=True)
+    title = Column(String(500), nullable=False)
+    description = Column(Text, default="")
+    category = Column(String(50), default="", index=True)  # feature, event, pattern, etc.
+    tags = Column(Text, default="[]")  # JSON list
+    evidence = Column(Text, default="{}")  # JSON dict
+
+    confidence = Column(Float, default=0.5)
+    validated = Column(Boolean, default=False)
+    actionable = Column(Boolean, default=True)
+    implemented = Column(Boolean, default=False)
+
+    source_session = Column(String(100), nullable=True)
+    agent_run_id = Column(String(100), ForeignKey("agent_runs.id"), nullable=True, index=True)
+    related_insights = Column(Text, default="[]")  # JSON list of insight IDs
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_insights_category_confidence", "category", "confidence"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "description": self.description,
+            "category": self.category,
+            "tags": _safe_json_loads(self.tags, []),
+            "evidence": _safe_json_loads(self.evidence, {}),
+            "confidence": self.confidence,
+            "validated": self.validated,
+            "actionable": self.actionable,
+            "implemented": self.implemented,
+            "source_session": self.source_session,
+            "agent_run_id": self.agent_run_id,
+            "related_insights": _safe_json_loads(self.related_insights, []),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Insight":
+        d = dict(data)
+        for field in ("created_at", "updated_at"):
+            if isinstance(d.get(field), str):
+                try:
+                    d[field] = datetime.fromisoformat(d[field])
+                except (ValueError, TypeError):
+                    d[field] = None
+        for field in ("tags", "related_insights"):
+            if isinstance(d.get(field), list):
+                d[field] = json.dumps(d[field])
+        if isinstance(d.get("evidence"), dict):
+            d["evidence"] = json.dumps(d["evidence"])
+        return cls(**d)
+
+
+class Experiment(Base):
+    """Research experiment from session tracker or agent research.
+
+    Absorbs the 61+ experiments from workflows/research/session_tracker
+    into the DB for cross-referencing and browsing.
+    """
+
+    __tablename__ = "experiments"
+
+    id = Column(String(100), primary_key=True)
+    strategy = Column(String(200), nullable=False, index=True)
+    symbol = Column(String(10), nullable=True, index=True)
+    params = Column(Text, default="{}")  # JSON dict
+    result = Column(Text, default="")
+    sharpe = Column(Float, nullable=True)
+    p_value = Column(Float, nullable=True)
+    notes = Column(Text, default="")
+
+    session_id = Column(String(100), nullable=True)
+    agent_run_id = Column(String(100), ForeignKey("agent_runs.id"), nullable=True, index=True)
+    insight_id = Column(String(100), ForeignKey("insights.id"), nullable=True, index=True)
+
+    run_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_experiments_strategy_symbol", "strategy", "symbol"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "strategy": self.strategy,
+            "symbol": self.symbol,
+            "params": _safe_json_loads(self.params, {}),
+            "result": self.result,
+            "sharpe": self.sharpe,
+            "p_value": self.p_value,
+            "notes": self.notes,
+            "session_id": self.session_id,
+            "agent_run_id": self.agent_run_id,
+            "insight_id": self.insight_id,
+            "run_at": self.run_at.isoformat() if self.run_at else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Experiment":
+        d = dict(data)
+        if isinstance(d.get("run_at"), str):
+            try:
+                d["run_at"] = datetime.fromisoformat(d["run_at"])
+            except (ValueError, TypeError):
+                d["run_at"] = None
+        if isinstance(d.get("params"), dict):
+            d["params"] = json.dumps(d["params"])
+        return cls(**d)
 
 
 class AutonomyCheck(Base):

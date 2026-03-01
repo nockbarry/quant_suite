@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% set active_page = "documents" %}
+{% block title %}Research Experiments{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Research Experiments</h1>
+            <p class="text-xs text-gray-500 mt-0.5">{{ experiments | length }} experiments from research sessions</p>
+        </div>
+        <a href="/documents" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition">Back to Documents</a>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+        <form method="get" action="/documents/experiments/list" class="flex flex-wrap gap-3 items-end">
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Strategy</label>
+                <input type="text" name="strategy" value="{{ filter_strategy }}" placeholder="e.g. bollinger_reversal"
+                       class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Symbol</label>
+                <input type="text" name="symbol" value="{{ filter_symbol }}" placeholder="e.g. NVDA"
+                       class="w-24 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 mono focus:border-emerald-500 focus:outline-none">
+            </div>
+            <button type="submit" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded transition">Filter</button>
+        </form>
+    </div>
+
+    <!-- Experiments table -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                    <th class="px-4 py-2 text-left">Date</th>
+                    <th class="px-4 py-2 text-left">Strategy</th>
+                    <th class="px-4 py-2 text-left">Symbol</th>
+                    <th class="px-4 py-2 text-right">Sharpe</th>
+                    <th class="px-4 py-2 text-right">p-value</th>
+                    <th class="px-4 py-2 text-left">Result</th>
+                    <th class="px-4 py-2 text-left">Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exp in experiments %}
+                <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                    <td class="px-4 py-2.5 text-gray-400 mono text-xs whitespace-nowrap">{{ exp.run_at[:10] if exp.run_at else "" }}</td>
+                    <td class="px-4 py-2.5 mono text-xs text-blue-400">{{ exp.strategy }}</td>
+                    <td class="px-4 py-2.5 mono text-xs text-emerald-400">{{ exp.symbol or "" }}</td>
+                    <td class="px-4 py-2.5 text-right mono text-xs
+                        {% if exp.sharpe and exp.sharpe > 1 %}text-emerald-400
+                        {% elif exp.sharpe and exp.sharpe > 0 %}text-yellow-400
+                        {% elif exp.sharpe %}text-red-400
+                        {% else %}text-gray-600{% endif %}">
+                        {{ "%.2f"|format(exp.sharpe) if exp.sharpe is not none else "&mdash;" }}
+                    </td>
+                    <td class="px-4 py-2.5 text-right mono text-xs
+                        {% if exp.p_value is not none and exp.p_value < 0.05 %}text-emerald-400
+                        {% elif exp.p_value is not none %}text-gray-400
+                        {% else %}text-gray-600{% endif %}">
+                        {{ "%.3f"|format(exp.p_value) if exp.p_value is not none else "&mdash;" }}
+                    </td>
+                    <td class="px-4 py-2.5 text-xs text-gray-300 max-w-xs truncate">{{ exp.result }}</td>
+                    <td class="px-4 py-2.5 text-xs text-gray-500 max-w-xs truncate">{{ exp.notes }}</td>
+                </tr>
+                {% endfor %}
+                {% if not experiments %}
+                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-600 text-sm">
+                    No experiments found. Run migration to import from session tracker.
+                </td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

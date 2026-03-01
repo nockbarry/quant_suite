@@ -104,12 +104,19 @@ async def learning_detail(request: Request, learning_id: str):
     if learning is None:
         raise HTTPException(status_code=404, detail=f"Learning '{learning_id}' not found")
 
+    l_symbol = learning.get("symbol", "") if isinstance(learning, dict) else getattr(learning, "symbol", "")
+    l_label = f"{l_symbol} — {learning_id[:8]}" if l_symbol else learning_id[:8]
+
     return templates.TemplateResponse(
         request,
         "learnings/detail.html",
         {
             "active_page": "learnings",
             "learning": learning,
+            "breadcrumbs": [
+                {"label": "Learnings", "url": "/learnings"},
+                {"label": l_label},
+            ],
         },
     )
 

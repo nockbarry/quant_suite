@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% set active_page = "documents" %}
+{% block title %}Documents{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-4">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Documents</h1>
+            <p class="text-xs text-gray-500 mt-0.5">{{ total }} indexed documents across all sources</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="/documents/insights/list" class="px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 text-sm rounded-lg border border-purple-800/50 transition">
+                Insights ({{ type_counts.values() | sum if type_counts else 0 | default(0) }})
+            </a>
+            <a href="/documents/experiments/list" class="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-sm rounded-lg border border-blue-800/50 transition">
+                Experiments
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+        <form method="get" action="/documents" class="flex flex-wrap gap-3 items-end">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Search</label>
+                <input type="text" name="q" value="{{ filter_search }}" placeholder="Search title, summary, tags..."
+                       class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Type</label>
+                <select name="type" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 focus:border-emerald-500 focus:outline-none">
+                    <option value="">All Types</option>
+                    {% for dtype, count in type_counts.items() | sort %}
+                    <option value="{{ dtype }}" {% if filter_type == dtype %}selected{% endif %}>{{ dtype | replace("_", " ") | title }} ({{ count }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] text-gray-500 uppercase mb-1">Symbol</label>
+                <input type="text" name="symbol" value="{{ filter_symbol }}" placeholder="e.g. NVDA"
+                       class="w-24 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-200 mono focus:border-emerald-500 focus:outline-none">
+            </div>
+            <button type="submit" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded transition">Filter</button>
+            {% if filter_type or filter_symbol or filter_search or filter_source %}
+            <a href="/documents" class="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded transition">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Type chips -->
+    {% if type_counts %}
+    <div class="flex flex-wrap gap-2">
+        <a href="/documents" class="rounded-full px-3 py-1 text-xs border transition
+            {% if not filter_type %}bg-emerald-900/50 text-emerald-400 border-emerald-700{% else %}bg-gray-800 text-gray-400 border-gray-700 hover:border-gray-600{% endif %}">
+            All ({{ total }})
+        </a>
+        {% for dtype, count in type_counts.items() | sort %}
+        <a href="/documents?type={{ dtype }}" class="rounded-full px-3 py-1 text-xs border transition
+            {% if filter_type == dtype %}bg-emerald-900/50 text-emerald-400 border-emerald-700{% else %}bg-gray-800 text-gray-400 border-gray-700 hover:border-gray-600{% endif %}">
+            {{ dtype | replace("_", " ") | title }} ({{ count }})
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Document grid -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                    <th class="px-4 py-2 text-left">Date</th>
+                    <th class="px-4 py-2 text-left">Type</th>
+                    <th class="px-4 py-2 text-left">Title</th>
+                    <th class="px-4 py-2 text-left">Symbols</th>
+                    <th class="px-4 py-2 text-left">Source</th>
+                    <th class="px-4 py-2 text-left">Links</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer"
+                    onclick="window.location='/documents/{{ doc.id }}'">
+                    <td class="px-4 py-2.5 text-gray-400 mono text-xs whitespace-nowrap">{{ doc.created[:10] if doc.created else "" }}</td>
+                    <td class="px-4 py-2.5">
+                        <span class="rounded-full px-2 py-0.5 text-[10px]
+                            {% if doc.doc_type == 'briefing' %}bg-blue-900/50 text-blue-400
+                            {% elif doc.doc_type == 'eod_review' %}bg-purple-900/50 text-purple-400
+                            {% elif doc.doc_type == 'critic_report' %}bg-red-900/50 text-red-400
+                            {% elif doc.doc_type == 'research_result' %}bg-emerald-900/50 text-emerald-400
+                            {% elif doc.doc_type == 'validation_report' %}bg-yellow-900/50 text-yellow-400
+                            {% elif doc.doc_type == 'decision' %}bg-orange-900/50 text-orange-400
+                            {% elif doc.doc_type == 'macro_research' %}bg-cyan-900/50 text-cyan-400
+                            {% elif doc.doc_type == 'regime_report' %}bg-indigo-900/50 text-indigo-400
+                            {% else %}bg-gray-800 text-gray-400{% endif %}">
+                            {{ doc.doc_type | replace("_", " ") }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-2.5 text-gray-200 max-w-md truncate">{{ doc.title }}</td>
+                    <td class="px-4 py-2.5">
+                        {% for sym in doc.symbols[:5] %}
+                        <span class="mono text-xs text-emerald-400">{{ sym }}{% if not loop.last %}, {% endif %}</span>
+                        {% endfor %}
+                        {% if doc.symbols | length > 5 %}
+                        <span class="text-xs text-gray-500">+{{ doc.symbols | length - 5 }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2.5 text-xs text-gray-500">{{ doc.source }}</td>
+                    <td class="px-4 py-2.5 text-xs">
+                        {% if doc.thesis_id %}
+                        <a href="/theses/{{ doc.thesis_id }}" class="text-yellow-400 hover:underline" onclick="event.stopPropagation()">thesis</a>
+                        {% endif %}
+                        {% if doc.agent_run_id %}
+                        <a href="/agents/{{ doc.agent_run_id }}" class="text-blue-400 hover:underline ml-1" onclick="event.stopPropagation()">agent</a>
+                        {% endif %}
+                        {% if doc.decision_id %}
+                        <a href="/decisions/{{ doc.decision_id }}" class="text-orange-400 hover:underline ml-1" onclick="event.stopPropagation()">decision</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not documents %}
+                <tr><td colspan="6" class="px-4 py-8 text-center text-gray-600 text-sm">
+                    No documents found. Run the migration to backfill: <code class="mono text-xs bg-gray-800 px-2 py-0.5 rounded">PYTHONPATH=. python3 -m src.db.migrate</code>
+                </td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

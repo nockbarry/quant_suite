@@ -98,6 +98,9 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     "aiosqlite>=0.19.0",
 
+    # TUI
+    "textual>=0.47.0",
+
     # Web framework
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",

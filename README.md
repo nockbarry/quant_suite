@@ -40,6 +40,13 @@ The key insight: **centralize state**. One file to read, one place to look.
    │ Signals │  │ Portfolio │ │ News  │ │ Theses    │ │ Decisions │
    │ Engine  │  │ Monitor   │ │ Daemon│ │ Tracker   │ │ Logger    │
    └─────────┘  └───────────┘ └───────┘ └───────────┘ └───────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    DOCUMENT INDEX (athena.db)                        │
+│  Every file cataloged: briefings, research, reports, reviews        │
+│  113+ documents | 112 insights | 61 experiments | Cross-referenced  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 When Claude starts a session, it reads ONE file and knows:
@@ -175,6 +182,7 @@ claude /eod-review
 
 ```
 ~/quant_results/
+├── athena.db                   # SQLite database (18 tables)
 ├── live/                       # THE source of truth
 │   ├── state.json             # Unified state (READ THIS FIRST)
 │   └── research/              # Pre-computed research files
@@ -206,13 +214,17 @@ claude /eod-review
 │   └── operator_log.jsonl
 │
 ├── decisions/                  # Trading decisions with reasoning
-├── briefings/                  # Morning briefings
-├── eod_reviews/               # End-of-day reviews
+├── briefings/                  # Morning briefings (auto-indexed)
+├── eod_reviews/               # End-of-day reviews (auto-indexed)
+├── research_results/          # Research agent output (auto-indexed)
+├── critic_reports/            # Strategy validation reports (indexed)
+├── validation_reports/        # MCPT/walk-forward results (indexed)
 ├── social/                     # Social signal tracking
 │   ├── wsb.db                 # WSB mention database
 │   ├── wsb_signals.json       # Processed WSB signals
 │   └── social_timeseries.db   # Cross-platform time-series
 ├── signal_provenance/         # Signal tracking from discovery to outcome
+├── research_tracker/          # Session tracker (insights + experiments, indexed)
 └── suggestions/               # Auto-generated thesis suggestions
 ```
 
@@ -304,6 +316,17 @@ python -m src.monitoring.swarm_visualizer --watch
 | `PromotionGates` | Automated quality gates for advancement |
 
 **Pipeline Stages**: BACKTEST → MCPT_VALIDATION → PAPER_TRADING → PAPER_REVIEW → LIVE_PENDING → LIVE_TRADING
+
+### Document Index Layer
+| Component | Purpose |
+|-----------|---------|
+| `Document` | Universal content index for every file the system produces |
+| `Insight` | Research insights from session tracker (112 indexed) |
+| `Experiment` | Strategy experiments with sharpe/p-value (61 indexed) |
+| `document_service` | Query layer: filter by type, symbol, search text |
+| `context_for_symbol` | Full context dump (docs + decisions + theses + insights) |
+
+Web UI at `/documents` with cross-references from thesis, agent, and decision detail pages.
 
 ### Monitoring Layer
 | Component | Purpose |

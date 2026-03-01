@@ -86,6 +86,9 @@ class TradingDecision:
     # Strategy tracking
     setup_type: str = ""  # e.g., "mean_reversion", "momentum", "breakout", "thesis_driven"
 
+    # Signal provenance
+    signal_ids: list[str] = field(default_factory=list)
+
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -117,6 +120,7 @@ class TradingDecision:
             "adversarial_notes": self.adversarial_notes,
             "learning_extracted": self.learning_extracted,
             "setup_type": self.setup_type,
+            "signal_ids": self.signal_ids,
         }
 
     @classmethod
@@ -151,6 +155,7 @@ class TradingDecision:
             adversarial_notes=data.get("adversarial_notes"),
             learning_extracted=data.get("learning_extracted", False),
             setup_type=data.get("setup_type", ""),
+            signal_ids=data.get("signal_ids", []),
         )
 
 
@@ -204,6 +209,39 @@ class DecisionLogger:
             import logging
             logging.getLogger(__name__).warning(f"DB sync failed for decision {decision.id}: {e}")
 
+        # Index the daily decisions file as a document
+        try:
+            from src.db.write_api import athena_db
+            athena_db.save_document(
+                doc_type="decision",
+                title=f"Decision: {decision.action.value} {decision.symbol} ({decision.confidence:.0%})",
+                file_path=str(self.daily_file),
+                source="decision_engine",
+                decision_id=decision.id,
+                thesis_id=decision.thesis_id,
+                symbols=[decision.symbol],
+                tags=[decision.action.value.lower(), decision.setup_type or "unclassified"],
+            )
+        except Exception:
+            pass
+
+        # Emit decision_created event
+        try:
+            from src.core.events import emit
+            emit(
+                "decision_created",
+                source="decision_engine",
+                symbol=decision.symbol,
+                title=f"Decision: {decision.action.value} {decision.symbol} @ {decision.confidence:.0%}",
+                detail={"action": decision.action.value, "confidence": decision.confidence,
+                        "size_pct": decision.size_pct, "setup_type": decision.setup_type},
+                decision_id=decision.id,
+                thesis_id=decision.thesis_id,
+                signal_ids=decision.signal_ids,
+            )
+        except Exception:
+            pass
+
         return decision.id
 
     def update_decision(self, decision_id: str, updates: dict) -> bool:
@@ -226,6 +264,37 @@ class DecisionLogger:
                 except Exception as e:
                     import logging
                     logging.getLogger(__name__).warning(f"DB sync failed for decision update {decision_id}: {e}")
+
+                # Emit lifecycle events
+                try:
+                    from src.core.events import emit
+                    new_status = updates.get("status", "")
+                    symbol = decision.get("symbol", "")
+                    if new_status == "executed":
+                        emit(
+                            "trade_executed",
+                            source="decision_engine",
+                            symbol=symbol,
+                            title=f"Trade executed: {decision.get('action', '')} {symbol} @ ${updates.get('execution_price', '?')}",
+                            detail={"execution_price": updates.get("execution_price")},
+                            decision_id=decision_id,
+                        )
+                    elif new_status == "closed" and updates.get("realized_pnl") is not None:
+                        emit(
+                            "trade_outcome",
+                            source="decision_engine",
+                            symbol=symbol,
+                            title=f"Trade closed: {symbol} P&L ${updates.get('realized_pnl', 0):+.2f}",
+                            detail={"exit_price": updates.get("exit_price"),
+                                    "realized_pnl": updates.get("realized_pnl"),
+                                    "realized_pnl_pct": updates.get("realized_pnl_pct")},
+                            decision_id=decision_id,
+                            signal_ids=decision.get("signal_ids", []),
+                            pnl=updates.get("realized_pnl"),
+                            pnl_pct=updates.get("realized_pnl_pct"),
+                        )
+                except Exception:
+                    pass
 
                 return True
 
@@ -480,6 +549,7 @@ def create_decision(
     pre_mortem: Optional[str] = None,
     adversarial_notes: Optional[str] = None,
     setup_type: str = "",
+    signal_ids: Optional[list[str]] = None,
 ) -> TradingDecision:
     """
     Factory function to create a new trading decision.
@@ -520,4 +590,5 @@ def create_decision(
         pre_mortem=pre_mortem,
         adversarial_notes=adversarial_notes,
         setup_type=setup_type,
+        signal_ids=signal_ids or [],
     )

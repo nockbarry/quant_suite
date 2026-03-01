@@ -1,0 +1,15 @@
+{# Breadcrumb navigation — pass breadcrumbs as a list of {label, url} dicts.
+   The last item is the current page (no link). #}
+{% if breadcrumbs %}
+<nav class="flex items-center gap-1.5 text-xs text-gray-500 mb-4">
+    <a href="/" class="hover:text-gray-300 transition">Athena</a>
+    {% for crumb in breadcrumbs %}
+    <span class="text-gray-700">/</span>
+    {% if loop.last %}
+    <span class="text-gray-300">{{ crumb.label }}</span>
+    {% else %}
+    <a href="{{ crumb.url }}" class="hover:text-gray-300 transition">{{ crumb.label }}</a>
+    {% endif %}
+    {% endfor %}
+</nav>
+{% endif %}

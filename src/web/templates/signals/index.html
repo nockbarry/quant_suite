@@ -4,6 +4,8 @@
 
 {% block content %}
 <div class="p-6 space-y-6">
+    {% include "components/breadcrumbs.html" %}
+
     <!-- Header -->
     <div>
         <h1 class="text-xl font-bold text-gray-100">Signal Provenance</h1>
@@ -63,6 +65,8 @@
                 {% if bearish_count > 0 %}
                 <span class="text-xs text-red-400">&#9660; {{ bearish_count }}</span>
                 {% endif %}
+                <a href="/decisions?symbol={{ symbol }}" class="text-[10px] text-blue-400 hover:underline ml-1">decisions</a>
+                <a href="/knowledge/{{ symbol }}" class="text-[10px] text-gray-500 hover:underline">company</a>
             </div>
         </div>
         <div class="divide-y divide-gray-800/50">

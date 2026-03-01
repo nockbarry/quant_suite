@@ -425,6 +425,28 @@ class CongressionalTradesSource:
         if trades:
             self._update_cache(cache_key, trades)
 
+        # Emit events for significant or notable-trader trades
+        for trade in trades:
+            try:
+                if trade.is_significant or trade.is_notable_trader:
+                    from src.core.events import emit
+                    direction = "bullish" if trade.trade_type == TradeType.PURCHASE else "bearish"
+                    emit(
+                        "signal_congressional",
+                        source="congressional",
+                        symbol=trade.symbol,
+                        title=f"Congressional {trade.trade_type.value}: {trade.politician} {trade.symbol} (${trade.amount_estimate:,.0f})",
+                        detail={"politician": trade.politician, "chamber": trade.chamber.value,
+                                "trade_type": trade.trade_type.value, "amount_estimate": trade.amount_estimate,
+                                "is_notable": trade.is_notable_trader},
+                        confidence=trade.signal_strength,
+                        direction=direction,
+                        description=f"{trade.politician} {trade.trade_type.value} {trade.symbol}",
+                        detection_method="congressional_filing",
+                    )
+            except Exception:
+                pass
+
         return trades
 
     async def _fetch_rss(

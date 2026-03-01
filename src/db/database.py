@@ -77,6 +77,8 @@ def ensure_columns():
     _new_columns = [
         ("agent_runs", "artifacts", "TEXT", "'{}'"),
         ("agent_runs", "session_id", "VARCHAR(100)", "NULL"),
+        ("agent_runs", "heartbeat_at", "DATETIME", "NULL"),
+        ("agent_runs", "pid", "INTEGER", "NULL"),
     ]
     with engine.connect() as conn:
         for table, col, col_type, default in _new_columns:

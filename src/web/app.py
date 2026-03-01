@@ -47,7 +47,28 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         _logger.warning(f"Stale agent recovery failed: {e}")
 
+    # Periodic recovery task (every 5 minutes)
+    async def _periodic_recovery():
+        while True:
+            await asyncio.sleep(300)  # 5 minutes
+            try:
+                from src.db.write_api import athena_db
+                recovered = athena_db.recover_stale_agents(max_age_hours=4, heartbeat_timeout_minutes=10)
+                if recovered > 0:
+                    _logger.info(f"Periodic recovery: recovered {recovered} stale agents")
+            except Exception as e:
+                _logger.debug(f"Periodic recovery check failed: {e}")
+
+    recovery_task = asyncio.create_task(_periodic_recovery())
+
     yield
+
+    # Cancel periodic task on shutdown
+    recovery_task.cancel()
+    try:
+        await recovery_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
@@ -76,6 +97,7 @@ app.state.templates = templates
 from src.web.routes import dashboard, knowledge, theses, learnings, decisions
 from src.web.routes import agents, flows, llm, signals, data_sources
 from src.web.routes import reports, system, upload, api, websocket, tasks, portfolio, research
+from src.web.routes import documents
 
 app.include_router(dashboard.router)
 app.include_router(knowledge.router, prefix="/knowledge", tags=["knowledge"])
@@ -95,3 +117,4 @@ app.include_router(websocket.router, tags=["websocket"])
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 app.include_router(portfolio.router, prefix="/portfolio", tags=["portfolio"])
 app.include_router(research.router, prefix="/research", tags=["research"])
+app.include_router(documents.router, prefix="/documents", tags=["documents"])

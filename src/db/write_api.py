@@ -19,6 +19,8 @@ Usage:
 import asyncio
 import json
 import logging
+import os
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -422,6 +424,7 @@ class AthenaWriteAPI:
 
         try:
             with get_db() as session:
+                now = datetime.utcnow()
                 run = AgentRun(
                     id=run_id,
                     agent_type=agent_type,
@@ -429,8 +432,10 @@ class AthenaWriteAPI:
                     trigger_reason=trigger_reason,
                     parent_run_id=parent_run_id,
                     session_id=session_id,
-                    started_at=datetime.utcnow(),
+                    started_at=now,
                     status="running",
+                    pid=os.getpid(),
+                    heartbeat_at=now,
                 )
                 session.add(run)
         except Exception as e:
@@ -504,37 +509,310 @@ class AthenaWriteAPI:
         })
         return True
 
-    def recover_stale_agents(self, max_age_hours: int = 4) -> int:
-        """Mark stuck 'running' agents older than max_age_hours as failed."""
+    def heartbeat_agent(self, run_id: str) -> bool:
+        """Update heartbeat timestamp for a running agent."""
         from src.db.database import get_db
         from src.db.models import AgentRun
 
-        cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+        try:
+            with get_db() as session:
+                run = session.query(AgentRun).filter(AgentRun.id == run_id).first()
+                if run and run.status == "running":
+                    run.heartbeat_at = datetime.utcnow()
+                    return True
+        except Exception as e:
+            logger.debug(f"heartbeat_agent failed for {run_id}: {e}")
+        return False
+
+    def recover_stale_agents(self, max_age_hours: int = 4, heartbeat_timeout_minutes: int = 10) -> int:
+        """Mark stuck 'running' agents as failed.
+
+        Recovery triggers:
+        1. Started more than max_age_hours ago (original behavior)
+        2. Has heartbeat but heartbeat is older than heartbeat_timeout_minutes
+        """
+        from src.db.database import get_db
+        from src.db.models import AgentRun
+
+        age_cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+        hb_cutoff = datetime.utcnow() - timedelta(minutes=heartbeat_timeout_minutes)
         count = 0
 
         try:
             with get_db() as session:
                 stale = (
                     session.query(AgentRun)
-                    .filter(
-                        AgentRun.status == "running",
-                        AgentRun.started_at < cutoff,
-                    )
+                    .filter(AgentRun.status == "running")
                     .all()
                 )
                 for run in stale:
-                    run.status = "failed"
-                    run.completed_at = datetime.utcnow()
-                    run.findings_summary = (
-                        f"AUTO-RECOVERED: Agent was running for >{max_age_hours}h. "
-                        f"Original task: {run.task[:200]}"
-                    )
-                    count += 1
-                    logger.info(f"Recovered stale agent: {run.id} ({run.agent_type})")
+                    reason = None
+                    if run.started_at < age_cutoff:
+                        reason = f"running for >{max_age_hours}h"
+                    elif run.heartbeat_at and run.heartbeat_at < hb_cutoff:
+                        reason = f"heartbeat stale (last: {run.heartbeat_at.isoformat()})"
+
+                    if reason:
+                        run.status = "failed"
+                        run.completed_at = datetime.utcnow()
+                        run.findings_summary = (
+                            f"AUTO-RECOVERED: {reason}. "
+                            f"Original task: {run.task[:200]}"
+                        )
+                        count += 1
+                        logger.info(f"Recovered stale agent: {run.id} ({run.agent_type}) — {reason}")
         except Exception as e:
             logger.warning(f"recover_stale_agents failed: {e}")
 
         return count
+
+    # ------------------------------------------------------------------
+    # Documents
+    # ------------------------------------------------------------------
+
+    def save_document(
+        self,
+        doc_type: str,
+        title: str,
+        file_path: str | None = None,
+        content_inline: str | None = None,
+        summary: str = "",
+        symbols: list[str] | None = None,
+        tags: list[str] | None = None,
+        source: str = "",
+        agent_run_id: str | None = None,
+        thesis_id: str | None = None,
+        decision_id: str | None = None,
+        doc_id: str | None = None,
+        created: datetime | None = None,
+    ) -> str:
+        """Index a document in the DB. Returns the document id."""
+        from src.db.database import get_db
+        from src.db.models import Document
+
+        if not doc_id:
+            doc_id = f"doc_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+
+        # Auto-generate summary from content if not provided
+        if not summary and content_inline:
+            summary = content_inline[:500]
+        elif not summary and file_path:
+            try:
+                text = open(file_path).read(600)
+                # Skip YAML front matter or JSON opening
+                if text.startswith("---"):
+                    lines = text.split("\n")
+                    end = next((i for i, l in enumerate(lines[1:], 1) if l.strip() == "---"), 0)
+                    summary = "\n".join(lines[end + 1:])[:500].strip()
+                elif text.startswith("{"):
+                    summary = f"JSON document: {title}"
+                else:
+                    summary = text[:500].strip()
+            except Exception:
+                summary = title
+
+        try:
+            with get_db() as session:
+                existing = session.query(Document).filter(Document.id == doc_id).first()
+                if existing:
+                    existing.title = title
+                    existing.summary = summary
+                    if file_path:
+                        existing.file_path = file_path
+                    if content_inline is not None:
+                        existing.content_inline = content_inline
+                    existing.symbols = json.dumps(symbols or [])
+                    existing.tags = json.dumps(tags or [])
+                    existing.source = source
+                    existing.agent_run_id = agent_run_id
+                    existing.thesis_id = thesis_id
+                    existing.decision_id = decision_id
+                else:
+                    doc = Document(
+                        id=doc_id,
+                        doc_type=doc_type,
+                        title=title,
+                        summary=summary,
+                        file_path=file_path,
+                        content_inline=content_inline,
+                        created=created or datetime.utcnow(),
+                        symbols=json.dumps(symbols or []),
+                        tags=json.dumps(tags or []),
+                        source=source,
+                        agent_run_id=agent_run_id,
+                        thesis_id=thesis_id,
+                        decision_id=decision_id,
+                    )
+                    session.add(doc)
+        except Exception as e:
+            logger.warning(f"DB save_document failed for {doc_id}: {e}")
+
+        self._broadcast({
+            "type": "document_indexed",
+            "doc_id": doc_id,
+            "doc_type": doc_type,
+            "title": title,
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+        return doc_id
+
+    def save_insight(self, data: dict) -> str:
+        """Upsert a research insight into the DB."""
+        from src.db.database import get_db
+        from src.db.models import Insight
+
+        insight_id = data.get("id", "")
+        if not insight_id:
+            return ""
+
+        try:
+            with get_db() as session:
+                existing = session.query(Insight).filter(Insight.id == insight_id).first()
+                if existing:
+                    for key, val in data.items():
+                        if key == "id":
+                            continue
+                        if hasattr(existing, key):
+                            if key in ("tags", "related_insights") and isinstance(val, list):
+                                val = json.dumps(val)
+                            elif key == "evidence" and isinstance(val, dict):
+                                val = json.dumps(val)
+                            elif key in ("created_at", "updated_at") and isinstance(val, str):
+                                try:
+                                    val = datetime.fromisoformat(val)
+                                except (ValueError, TypeError):
+                                    continue
+                            setattr(existing, key, val)
+                else:
+                    valid_cols = {c.key for c in Insight.__table__.columns}
+                    clean = {k: v for k, v in data.items() if k in valid_cols}
+                    record = Insight.from_dict(clean)
+                    session.add(record)
+        except Exception as e:
+            logger.warning(f"DB save_insight failed for {insight_id}: {e}")
+
+        return insight_id
+
+    def save_experiment(self, data: dict) -> str:
+        """Upsert a research experiment into the DB."""
+        from src.db.database import get_db
+        from src.db.models import Experiment
+
+        exp_id = data.get("id", "")
+        if not exp_id:
+            return ""
+
+        try:
+            with get_db() as session:
+                existing = session.query(Experiment).filter(Experiment.id == exp_id).first()
+                if existing:
+                    for key, val in data.items():
+                        if key == "id":
+                            continue
+                        if hasattr(existing, key):
+                            if key == "params" and isinstance(val, dict):
+                                val = json.dumps(val)
+                            elif key == "run_at" and isinstance(val, str):
+                                try:
+                                    val = datetime.fromisoformat(val)
+                                except (ValueError, TypeError):
+                                    continue
+                            setattr(existing, key, val)
+                else:
+                    valid_cols = {c.key for c in Experiment.__table__.columns}
+                    clean = {k: v for k, v in data.items() if k in valid_cols}
+                    record = Experiment.from_dict(clean)
+                    session.add(record)
+        except Exception as e:
+            logger.warning(f"DB save_experiment failed for {exp_id}: {e}")
+
+        return exp_id
+
+    # ------------------------------------------------------------------
+    # Document queries (read methods for agents/skills)
+    # ------------------------------------------------------------------
+
+    def get_recent_documents(self, doc_type: str | None = None, limit: int = 20) -> list[dict]:
+        """Return recent documents, optionally filtered by type."""
+        from src.db.database import get_db
+        from src.db.models import Document
+
+        try:
+            with get_db() as session:
+                q = session.query(Document)
+                if doc_type:
+                    q = q.filter(Document.doc_type == doc_type)
+                rows = q.order_by(Document.created.desc()).limit(limit).all()
+                return [r.to_dict() for r in rows]
+        except Exception as e:
+            logger.warning(f"get_recent_documents failed: {e}")
+            return []
+
+    def get_documents_for_symbol(self, symbol: str, limit: int = 20) -> list[dict]:
+        """Return documents mentioning a symbol."""
+        from src.db.database import get_db
+        from src.db.models import Document
+
+        try:
+            with get_db() as session:
+                rows = (
+                    session.query(Document)
+                    .filter(Document.symbols.contains(f'"{symbol}"'))
+                    .order_by(Document.created.desc())
+                    .limit(limit)
+                    .all()
+                )
+                return [r.to_dict() for r in rows]
+        except Exception as e:
+            logger.warning(f"get_documents_for_symbol failed: {e}")
+            return []
+
+    def search_documents(self, query: str, limit: int = 20) -> list[dict]:
+        """Search documents by title, summary, or tags."""
+        from src.db.database import get_db
+        from src.db.models import Document
+
+        try:
+            with get_db() as session:
+                pattern = f"%{query}%"
+                rows = (
+                    session.query(Document)
+                    .filter(
+                        (Document.title.ilike(pattern))
+                        | (Document.summary.ilike(pattern))
+                        | (Document.tags.ilike(pattern))
+                    )
+                    .order_by(Document.created.desc())
+                    .limit(limit)
+                    .all()
+                )
+                return [r.to_dict() for r in rows]
+        except Exception as e:
+            logger.warning(f"search_documents failed: {e}")
+            return []
+
+    def search_insights(self, query: str = "", category: str = "", limit: int = 50) -> list[dict]:
+        """Search insights by text and/or category."""
+        from src.db.database import get_db
+        from src.db.models import Insight
+
+        try:
+            with get_db() as session:
+                q = session.query(Insight)
+                if category:
+                    q = q.filter(Insight.category == category)
+                if query:
+                    pattern = f"%{query}%"
+                    q = q.filter(
+                        (Insight.title.ilike(pattern))
+                        | (Insight.description.ilike(pattern))
+                        | (Insight.tags.ilike(pattern))
+                    )
+                rows = q.order_by(Insight.created_at.desc()).limit(limit).all()
+                return [r.to_dict() for r in rows]
+        except Exception as e:
+            logger.warning(f"search_insights failed: {e}")
+            return []
 
     # ------------------------------------------------------------------
     # Events
@@ -613,16 +891,31 @@ athena_db = AthenaWriteAPI()
 
 @contextmanager
 def tracked_agent(agent_type: str, task: str, parent_run_id: str | None = None):
-    """Context manager that auto-tracks agent lifecycle.
+    """Context manager that auto-tracks agent lifecycle with heartbeat.
 
     Usage:
         with tracked_agent("research", "Analyze NVDA") as run:
             run.set_findings("Found 3 signals")
             run.set_cost(0.15)
         # Auto-completes on exit, auto-fails on exception
+        # Heartbeat thread runs every 30s while agent is active
     """
     run_id = athena_db.start_agent_run(agent_type, task, parent_run_id)
     run = _TrackedRun(run_id)
+
+    # Start heartbeat daemon thread
+    stop_event = threading.Event()
+
+    def _heartbeat_loop():
+        while not stop_event.wait(30):
+            try:
+                athena_db.heartbeat_agent(run_id)
+            except Exception:
+                pass
+
+    hb_thread = threading.Thread(target=_heartbeat_loop, daemon=True, name=f"hb-{run_id[:20]}")
+    hb_thread.start()
+
     try:
         yield run
         athena_db.complete_agent_run(
@@ -634,3 +927,5 @@ def tracked_agent(agent_type: str, task: str, parent_run_id: str | None = None):
     except Exception as e:
         athena_db.fail_agent_run(run_id, str(e))
         raise
+    finally:
+        stop_event.set()

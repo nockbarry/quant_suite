@@ -43,6 +43,9 @@ async def signal_list(request: Request):
                 "direction": direction,
                 "outcome": outcome,
             },
+            "breadcrumbs": [
+                {"label": "Signals"},
+            ],
         },
     )
 
@@ -59,6 +62,10 @@ async def signal_detail(request: Request, signal_id: str):
     # Get decisions that used this signal
     linked_decisions = signal_service.get_signal_decisions(signal_id)
 
+    s_symbol = signal.get("symbol", "") if isinstance(signal, dict) else getattr(signal, "symbol", "")
+    s_source = signal.get("source", "") if isinstance(signal, dict) else getattr(signal, "source", "")
+    s_label = f"{s_symbol} — {s_source}" if s_symbol else signal_id[:8]
+
     return templates.TemplateResponse(
         request,
         "signals/detail.html",
@@ -66,5 +73,9 @@ async def signal_detail(request: Request, signal_id: str):
             "active_page": "signals",
             "signal": signal,
             "linked_decisions": linked_decisions,
+            "breadcrumbs": [
+                {"label": "Signals", "url": "/signals"},
+                {"label": s_label},
+            ],
         },
     )

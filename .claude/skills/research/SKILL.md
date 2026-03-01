@@ -135,6 +135,50 @@ for lead in results['experiment_leads'][:5]:
     print(f"{lead['title']}: {lead['symbols']} (priority: {lead['priority']})")
 ```
 
+## Register Output as Document
+
+Research outputs from the web dashboard are auto-indexed. For CLI research, register manually:
+
+```python
+from src.db.write_api import athena_db
+
+athena_db.save_document(
+    doc_type="research_result",
+    title="Bollinger Reversal Research: Semiconductors",
+    file_path=str(output_path),
+    source="skill:research",
+    symbols=["NVDA", "AMD", "QCOM", "MU"],
+    tags=["research", "bollinger_reversal", "semiconductors"],
+)
+```
+
+Session tracker insights and experiments are also indexed — they appear at `/documents/insights/list` and `/documents/experiments/list`.
+
+## Query Historical Context
+
+Before starting research, check what's already been discovered:
+
+```python
+from src.db.write_api import athena_db
+
+# Previous research on this symbol
+docs = athena_db.get_documents_for_symbol("NVDA", limit=10)
+
+# Search insights for related work
+insights = athena_db.search_insights("bollinger semiconductor")
+for ins in insights:
+    print(f"  [{ins.category}] {ins.title} (confidence: {ins.confidence})")
+
+# Recent research documents
+recent = athena_db.get_recent_documents(limit=10)
+research = [d for d in recent if d.doc_type == "research_result"]
+```
+
+Or use the convenience script:
+```bash
+PYTHONPATH=. python3 scripts/context_for_symbol.py NVDA
+```
+
 ## Validation Requirements
 
 All strategies must pass before production:

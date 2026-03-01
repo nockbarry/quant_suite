@@ -1,0 +1,40 @@
+{# Command panel — grid of action buttons + task status results #}
+<div class="bg-gray-900 border border-gray-800 rounded-lg">
+    <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-300">Actions</h2>
+        <span class="text-[10px] text-gray-600"
+              hx-get="/tasks/badge/count" hx-trigger="every 5s" hx-swap="innerHTML">
+        </span>
+    </div>
+    <div class="p-3">
+        <div class="grid grid-cols-2 gap-2 mb-3">
+            <button hx-post="/tasks/run/refresh_state"
+                    hx-target="#task-results"
+                    hx-swap="afterbegin"
+                    class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs rounded-lg border border-gray-700 hover:border-emerald-600 transition flex items-center gap-1.5">
+                <span class="text-emerald-400">&#8635;</span> Refresh State
+            </button>
+            <button hx-post="/tasks/run/operator_check"
+                    hx-target="#task-results"
+                    hx-swap="afterbegin"
+                    class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs rounded-lg border border-gray-700 hover:border-emerald-600 transition flex items-center gap-1.5">
+                <span class="text-blue-400">&#9881;</span> Operator Check
+            </button>
+            <button hx-post="/tasks/run/collect_data"
+                    hx-target="#task-results"
+                    hx-swap="afterbegin"
+                    class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs rounded-lg border border-gray-700 hover:border-emerald-600 transition flex items-center gap-1.5">
+                <span class="text-amber-400">&#9783;</span> Collect Data
+            </button>
+            <button hx-post="/tasks/run/research_quick"
+                    hx-target="#task-results"
+                    hx-swap="afterbegin"
+                    class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs rounded-lg border border-gray-700 hover:border-emerald-600 transition flex items-center gap-1.5">
+                <span class="text-purple-400">&#9889;</span> Quick Research
+            </button>
+        </div>
+        <div id="task-results" class="divide-y divide-gray-800/50 max-h-48 overflow-y-auto">
+            {# Task status partials are inserted here via HTMX #}
+        </div>
+    </div>
+</div>

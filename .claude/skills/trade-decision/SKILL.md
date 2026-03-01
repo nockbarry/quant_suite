@@ -565,6 +565,50 @@ position limits damage."
 Run /execute-trades to execute the HAL decision.
 ```
 
+## Register Output as Document
+
+Decisions are auto-indexed via `DecisionLogger.log_decision()`. If you write a separate
+analysis file (e.g. a detailed trade rationale), register it:
+
+```python
+from src.db.write_api import athena_db
+
+athena_db.save_document(
+    doc_type="decision",
+    title=f"Trade Analysis: BUY SLB",
+    file_path=str(filepath),
+    source="skill:trade-decision",
+    decision_id=decision.id,
+    thesis_id=thesis_id,
+    symbols=["SLB"],
+    tags=["decision", "buy", "thesis_driven"],
+)
+```
+
+## Query Historical Context
+
+Before making decisions, check historical documents and insights for the symbol:
+
+```python
+from src.db.write_api import athena_db
+
+# What do we know about this symbol?
+docs = athena_db.get_documents_for_symbol("SLB", limit=10)
+for doc in docs:
+    print(f"  [{doc.doc_type}] {doc.title} ({doc.created[:10]})")
+
+# Any relevant research insights?
+insights = athena_db.search_insights("SLB")
+
+# Search all documents
+results = athena_db.search_documents("Venezuela energy")
+```
+
+Or use the convenience script:
+```bash
+PYTHONPATH=. python3 scripts/context_for_symbol.py SLB
+```
+
 ## Key Files
 
 | File | Purpose |

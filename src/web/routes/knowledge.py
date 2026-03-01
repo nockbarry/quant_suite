@@ -42,7 +42,7 @@ async def sector_detail(request: Request, name: str):
 
     return templates.TemplateResponse(
         request,
-        "knowledge/company.html",
+        "knowledge/sector.html",
         {
             "active_page": "knowledge",
             "sector": sector,
@@ -60,12 +60,18 @@ async def company_detail(request: Request, symbol: str):
     if company is None:
         raise HTTPException(status_code=404, detail=f"Company '{symbol}' not found")
 
+    c_name = company.get("name", symbol) if isinstance(company, dict) else getattr(company, "name", symbol)
+
     return templates.TemplateResponse(
         request,
         "knowledge/company.html",
         {
             "active_page": "knowledge",
             "company": company,
+            "breadcrumbs": [
+                {"label": "Companies", "url": "/knowledge"},
+                {"label": f"{symbol.upper()} — {c_name}"},
+            ],
         },
     )
 

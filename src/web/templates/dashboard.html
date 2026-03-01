@@ -111,6 +111,34 @@
         </div>
     </div>
 
+    <!-- Recent Documents -->
+    {% if recent_docs %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
+            <h2 class="text-sm font-semibold text-gray-300">Recent Documents</h2>
+            <a href="/documents" class="text-xs text-emerald-400 hover:underline">View all &rarr;</a>
+        </div>
+        <div class="divide-y divide-gray-800/50">
+            {% for doc in recent_docs %}
+            <a href="/documents/{{ doc.id }}" class="flex items-center gap-3 px-4 py-2 hover:bg-gray-800/30 transition">
+                <span class="rounded-full px-2 py-0.5 text-[10px] flex-shrink-0
+                    {% if doc.doc_type == 'briefing' %}bg-blue-900/50 text-blue-400
+                    {% elif doc.doc_type == 'eod_review' %}bg-purple-900/50 text-purple-400
+                    {% elif doc.doc_type == 'decision' %}bg-emerald-900/50 text-emerald-400
+                    {% elif doc.doc_type == 'critic_report' %}bg-red-900/50 text-red-400
+                    {% elif doc.doc_type == 'research_result' %}bg-cyan-900/50 text-cyan-400
+                    {% elif doc.doc_type == 'validation_report' %}bg-amber-900/50 text-amber-400
+                    {% else %}bg-gray-800 text-gray-400{% endif %}">
+                    {{ doc.doc_type | replace("_", " ") }}
+                </span>
+                <span class="text-sm text-gray-300 truncate flex-1">{{ doc.title }}</span>
+                <span class="text-[10px] text-gray-600 mono flex-shrink-0">{{ doc.created[:10] if doc.created else "" }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Event detail modal area -->
     <div id="event-detail"></div>
 

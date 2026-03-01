@@ -152,6 +152,52 @@ PYTHONPATH=. python scripts/quick_trade.py quote AAPL MSFT
 
 ---
 
+## AthenaWriteAPI — Document Index (src/db/write_api.py)
+
+```python
+from src.db.write_api import athena_db
+
+# Save/index a document
+athena_db.save_document(
+    doc_type="research_result",      # briefing, eod_review, decision, critic_report, etc.
+    title="Bollinger Reversal: Semiconductors",
+    file_path="/home/nock/quant_results/research_results/research_123.json",  # optional
+    content_inline="...",            # optional, for small content (<10KB)
+    source="skill:research",         # who created it
+    agent_run_id="abc123",           # optional FK
+    thesis_id="thesis_456",          # optional FK
+    decision_id="dec_789",           # optional FK
+    symbols=["NVDA", "AMD"],         # optional list
+    tags=["research", "bollinger"],   # optional list
+)
+
+# Get recent documents
+docs = athena_db.get_recent_documents(limit=10)
+# Returns: list of Document objects
+# Attributes: .id, .doc_type, .title, .summary, .file_path, .source, .symbols, .tags, .created
+
+# Get documents for a symbol
+docs = athena_db.get_documents_for_symbol("NVDA", limit=15)
+
+# Search documents by text
+docs = athena_db.search_documents(query="bollinger semiconductor", doc_type="research_result", limit=20)
+
+# Search research insights
+insights = athena_db.search_insights("momentum reversal")
+# Returns: list of Insight objects
+# Attributes: .id, .title, .description, .category, .confidence, .validated, .tags
+```
+
+### Symbol Context Script
+
+```bash
+# Full context for a symbol: documents, insights, theses, decisions
+PYTHONPATH=. python3 scripts/context_for_symbol.py NVDA
+PYTHONPATH=. python3 scripts/context_for_symbol.py NVDA AMD --json
+```
+
+---
+
 ## Scripts to Use Instead of Writing Code
 
 ```bash

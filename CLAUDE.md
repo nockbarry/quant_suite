@@ -305,13 +305,55 @@ print(f"Total P&L: ${metrics.total_pnl:.2f}, Win Rate: {metrics.win_rate:.0%}")
 print(perf_tracker.get_thesis_leaderboard())
 ```
 
+### Document Index Layer (NEW)
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **Document** | `src/db/models.py` | Universal content index for all files |
+| **Insight** | `src/db/models.py` | Research insights from session tracker |
+| **Experiment** | `src/db/models.py` | Strategy experiments with results |
+| **document_service** | `src/web/services/document_service.py` | Query layer for web UI |
+| **context_for_symbol** | `scripts/context_for_symbol.py` | Full context dump for agents |
+
+The document index catalogs every file the system produces (briefings, research, reviews, reports) without restructuring the file layout. Files stay where they are; the DB stores metadata + optional inline content.
+
+```python
+from src.db.write_api import athena_db
+
+# Index a new document
+athena_db.save_document(
+    doc_type="briefing",
+    title="Morning Briefing — 2026-03-01",
+    file_path="/home/nock/quant_results/briefings/briefing_2026-03-01.json",
+    source="skill:morning-briefing",
+    symbols=["SLB", "HAL", "GLD"],
+    tags=["briefing", "pre-market"],
+)
+
+# Query documents for a symbol
+docs = athena_db.get_documents_for_symbol("SLB", limit=10)
+
+# Search documents by text
+results = athena_db.search_documents("Venezuela energy")
+
+# Search insights
+insights = athena_db.search_insights("momentum")
+
+# Full symbol context (documents + decisions + theses + insights)
+# PYTHONPATH=. python3 scripts/context_for_symbol.py SLB
+```
+
+**Web UI**: Browse at `/documents`, `/documents/insights/list`, `/documents/experiments/list`
+
+**Auto-indexing**: Research agents, morning briefings, decisions, and EOD reviews auto-index their output files.
+
 ### Decision Layer (ENHANCED)
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| **DecisionLogger** | `src/decision/decision_logger.py` | Full records with thesis linking |
+| **DecisionLogger** | `src/decision/decision_logger.py` | Full records with thesis linking + auto document indexing |
 | **AdversarialAgent** | `src/decision/adversary.py` | Challenge every trade |
-| **MorningBriefing** | `src/decision/morning_briefing.py` | Pre-market context |
+| **MorningBriefing** | `src/decision/morning_briefing.py` | Pre-market context + auto document indexing |
 
 ```python
 # Run adversarial analysis
@@ -453,6 +495,14 @@ PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard        # Full view
 PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard --watch # Auto-refresh every 60s
 PYTHONPATH=. python -m src.monitoring.unified_dashboard              # Simpler unified view
 PYTHONPATH=. python -m src.execution.monitoring.cli_dashboard        # Portfolio only
+
+# Document Index & Context
+PYTHONPATH=. python scripts/context_for_symbol.py SLB     # Full context for a symbol
+PYTHONPATH=. python scripts/context_for_symbol.py SLB HAL --json  # Multiple symbols, JSON output
+PYTHONPATH=. python -m src.db.migrate                     # Re-index all files into documents table
+
+# Web Dashboard
+PYTHONPATH=. python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8000  # Start web UI
 
 # Day Trading Signals
 PYTHONPATH=. python scripts/run_day_trading_signals.py --scan        # Scan for signals
@@ -751,6 +801,7 @@ tail -20 ~/quant_results/logs/agent_activity.jsonl
 | Category | Path |
 |----------|------|
 | **Unified State** | `~/quant_results/live/state.json` |
+| **Database** | `~/quant_results/athena.db` |
 | **Pre-computed Research** | `~/quant_results/live/research/` |
 | **Theses** | `~/quant_results/theses/` |
 | **Learnings** | `~/quant_results/learnings/` |
@@ -763,6 +814,7 @@ tail -20 ~/quant_results/logs/agent_activity.jsonl
 | **Synthesis Layer** | `src/synthesis/` |
 | **Knowledge Layer** | `src/knowledge/` |
 | **Decision Engine** | `src/decision/` |
+| **Document Index** | `src/db/models.py`, `src/web/services/document_service.py` |
 | **Monitoring Layer** | `src/monitoring/` |
 | **Strategies** | `src/strategies/` |
 | **Alternative Data** | `src/data/sources/alternative/` |
@@ -776,6 +828,7 @@ All outputs in configurable results directory (default: `~/quant_results`):
 | Directory | Contents |
 |-----------|----------|
 | `live/state.json` | **THE source of truth** |
+| `athena.db` | SQLite database (18 tables: theses, decisions, agents, documents, insights, experiments, etc.) |
 | `live/research/` | Pre-computed features, signals, screens |
 | `theses/` | Investment thesis YAML files |
 | `learnings/` | Monthly learning JSON files |
@@ -784,6 +837,7 @@ All outputs in configurable results directory (default: `~/quant_results`):
 | `decisions/` | Trading decisions with reasoning |
 | `briefings/` | Morning briefings |
 | `eod_reviews/` | End-of-day reviews |
+| `research_results/` | Research agent output files |
 | `improvements/` | Auto-generated improvement suggestions |
 | `signal_quality/` | Signal quality metrics and outcomes |
 | `logs/operator_log.jsonl` | Operator session observations |
@@ -962,6 +1016,8 @@ crontab -l | grep QUANT_SUITE_CRON
 | **Trade daily** | `docs/WORKFLOW.md` - Daily trading workflow |
 | **Create a thesis** | `docs/TRADING_PATTERNS.md` - Meta-learnings & vehicle enumeration |
 | **Understand the system** | `docs/ARCHITECTURE_DIAGRAMS.md` - Full system architecture |
+| **Browse documents** | Web UI at `/documents` — briefings, research, reports |
+| **Get symbol context** | `PYTHONPATH=. python3 scripts/context_for_symbol.py SLB` |
 | **Run autonomous trading** | `docs/AUTONOMOUS_TRADING_ARCHITECTURE.md` - Swarm intelligence & agent frameworks |
 | **Find data sources** | `docs/FREE_DATA_SOURCES.md` - 40+ implemented sources |
 | **See hedge fund features** | `docs/ARCHITECTURE_DIAGRAMS.md` Section 14 - HF expansion modules |

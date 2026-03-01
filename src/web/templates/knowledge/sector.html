@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% set active_page = "knowledge" %}
+{% block title %}{{ sector.sector }} Sector{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    {% include "components/breadcrumbs.html" %}
+
+    <!-- Header -->
+    <div class="flex items-center gap-3">
+        <h1 class="text-xl font-bold text-gray-100">
+            <span class="text-emerald-400">{{ sector.sector | capitalize }}</span>
+            <span class="text-gray-500 text-lg ml-2">Sector</span>
+        </h1>
+        {% if sector.relative_strength %}
+        <span class="rounded-full px-2.5 py-0.5 text-xs
+            {% if sector.relative_strength == 'strong' %}bg-emerald-900/50 text-emerald-400
+            {% elif sector.relative_strength == 'weak' %}bg-red-900/50 text-red-400
+            {% else %}bg-gray-800 text-gray-400{% endif %}">
+            {{ sector.relative_strength }}
+        </span>
+        {% endif %}
+        <span class="text-xs text-gray-500">Updated {{ sector.updated[:10] if sector.updated else "N/A" }}</span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Cycle & Assessment -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-3">Cycle Position & Assessment</h2>
+            <div class="space-y-3">
+                <div>
+                    <p class="text-[10px] text-gray-500 uppercase mb-1">Current Cycle Position</p>
+                    <p class="text-sm text-gray-300">{{ sector.current_cycle_position or "Not documented" }}</p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-500 uppercase mb-1">Cycle Sensitivity</p>
+                    <p class="text-sm text-gray-300">{{ sector.cycle_sensitivity or "Not documented" }}</p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-500 uppercase mb-1">Current Assessment</p>
+                    <p class="text-sm text-gray-300">{{ sector.current_assessment or "Not documented" }}</p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-500 uppercase mb-1">Rotation Patterns</p>
+                    <p class="text-sm text-gray-300">{{ sector.rotation_patterns or "Not documented" }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Drivers & Indicators -->
+        <div class="space-y-4">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Key Drivers</h2>
+                <div class="flex flex-wrap gap-2">
+                    {% for driver in sector.key_drivers %}
+                    <span class="rounded-full px-2.5 py-1 text-xs bg-blue-900/30 text-blue-400 border border-blue-900/50">{{ driver }}</span>
+                    {% endfor %}
+                    {% if not sector.key_drivers %}
+                    <p class="text-sm text-gray-600">No drivers documented</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Leading Indicators</h2>
+                <div class="flex flex-wrap gap-2">
+                    {% for indicator in sector.leading_indicators %}
+                    <span class="rounded-full px-2.5 py-1 text-xs bg-cyan-900/30 text-cyan-400 border border-cyan-900/50">{{ indicator }}</span>
+                    {% endfor %}
+                    {% if not sector.leading_indicators %}
+                    <p class="text-sm text-gray-600">No indicators documented</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Leaders & Laggards -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-3">Leaders & Laggards</h2>
+            <div class="space-y-3">
+                <div>
+                    <p class="text-[10px] text-gray-500 uppercase mb-1">Leaders</p>
+                    <div class="flex flex-wrap gap-2">
+                        {% for leader in sector.leaders %}
+                        <a href="/knowledge/{{ leader }}" class="rounded-full px-2.5 py-1 text-xs bg-emerald-900/30 text-emerald-400 border border-emerald-900/50 hover:bg-emerald-900/50 transition">{{ leader }}</a>
+                        {% endfor %}
+                        {% if not sector.leaders %}
+                        <p class="text-sm text-gray-600">None identified</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-500 uppercase mb-1">Laggards</p>
+                    <div class="flex flex-wrap gap-2">
+                        {% for laggard in sector.laggards %}
+                        <a href="/knowledge/{{ laggard }}" class="rounded-full px-2.5 py-1 text-xs bg-red-900/30 text-red-400 border border-red-900/50 hover:bg-red-900/50 transition">{{ laggard }}</a>
+                        {% endfor %}
+                        {% if not sector.laggards %}
+                        <p class="text-sm text-gray-600">None identified</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trading Strategy -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-3">Trading Strategy</h2>
+            <div class="space-y-3">
+                <div>
+                    <p class="text-[10px] text-gray-500 uppercase mb-1">What Works Here</p>
+                    <p class="text-sm text-gray-300">{{ sector.what_works_here or "Not documented" }}</p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-500 uppercase mb-1">What to Avoid</p>
+                    <p class="text-sm text-gray-300">{{ sector.what_to_avoid or "Not documented" }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Correlations -->
+        {% if sector.correlations and sector.correlations is mapping %}
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-3">Correlations</h2>
+            <div class="space-y-2">
+                {% for key, value in sector.correlations.items() %}
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-400">{{ key }}</span>
+                    <span class="mono text-gray-300">{{ value }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Companies in Sector -->
+    {% if companies %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <div class="px-4 py-3 border-b border-gray-800">
+            <h2 class="text-sm font-semibold text-gray-300">Companies in Sector ({{ companies | length }})</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                        <th class="px-4 py-2 text-left">Symbol</th>
+                        <th class="px-4 py-2 text-left">Name</th>
+                        <th class="px-4 py-2 text-left">Market Cap</th>
+                        <th class="px-4 py-2 text-left">Moat</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in companies %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer"
+                        onclick="window.location='/knowledge/{{ c.symbol }}'">
+                        <td class="px-4 py-2 mono font-medium text-emerald-400">{{ c.symbol }}</td>
+                        <td class="px-4 py-2 text-gray-300">{{ c.name }}</td>
+                        <td class="px-4 py-2 text-gray-400 uppercase text-xs">{{ c.market_cap_tier or "N/A" }}</td>
+                        <td class="px-4 py-2 text-gray-400 text-xs truncate max-w-xs">{{ c.moat[:60] if c.moat else "—" }}{% if c.moat and c.moat|length > 60 %}...{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-6 text-center text-gray-600">
+        No companies documented for this sector.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

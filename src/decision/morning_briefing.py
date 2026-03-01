@@ -113,7 +113,7 @@ class MorningBriefing:
         }
 
     def save(self, output_dir: str | Path | None = None) -> Path:
-        """Save briefing to JSON file."""
+        """Save briefing to JSON file and index in documents table."""
         output_path = Path(output_dir) if output_dir else paths.briefings
         output_path.mkdir(parents=True, exist_ok=True)
 
@@ -122,6 +122,28 @@ class MorningBriefing:
 
         with open(filepath, "w") as f:
             json.dump(self.to_dict(), f, indent=2)
+
+        # Index in documents table
+        try:
+            from src.db.write_api import athena_db
+
+            symbols = []
+            for news in self.overnight_news:
+                symbols.extend(news.symbols_affected)
+            if self.portfolio_exposure:
+                symbols.extend(p["symbol"] for p in self.portfolio_exposure.top_positions[:5])
+            symbols = list(dict.fromkeys(symbols))[:15]
+
+            athena_db.save_document(
+                doc_type="briefing",
+                title=f"Morning Briefing — {self.date}",
+                file_path=str(filepath),
+                source="skill:morning-briefing",
+                symbols=symbols,
+                tags=["briefing", self.market_sentiment],
+            )
+        except Exception:
+            pass  # Don't fail briefing save if indexing fails
 
         return filepath
 

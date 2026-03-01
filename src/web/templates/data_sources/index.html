@@ -4,16 +4,21 @@
 
 {% block content %}
 <div class="p-6 space-y-6">
+    {% include "components/breadcrumbs.html" %}
+
     <!-- Header -->
     <div class="flex items-center justify-between">
         <div>
             <h1 class="text-xl font-bold text-gray-100">Data Sources</h1>
             <p class="text-sm text-gray-500">{{ sources | length }} configured sources</p>
         </div>
-        <button hx-post="/data/refresh-all" hx-target="#source-grid" hx-swap="innerHTML"
-                class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition">
-            Refresh All
-        </button>
+        <div class="flex items-center gap-3">
+            <div id="refresh-all-status"></div>
+            <button hx-post="/data/refresh-all" hx-target="#refresh-all-status" hx-swap="innerHTML"
+                    class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition">
+                Refresh All
+            </button>
+        </div>
     </div>
 
     <!-- Source Grid -->
@@ -27,51 +32,48 @@
                 <div class="flex items-center gap-1">
                     <div class="w-2 h-2 rounded-full
                         {% if src.status == 'fresh' %}bg-emerald-500 pulse-green
+                        {% elif src.status == 'ok' %}bg-emerald-500
                         {% elif src.status == 'stale' %}bg-yellow-500
-                        {% elif src.status == 'offline' %}bg-red-500
+                        {% elif src.status == 'critical' %}bg-red-500
+                        {% elif src.status == 'missing' %}bg-red-500
                         {% else %}bg-gray-600{% endif %}">
                     </div>
-                    <span class="text-[10px] text-gray-500">
-                        {% if src.status == 'fresh' %}Fresh
-                        {% elif src.status == 'stale' %}Stale
-                        {% elif src.status == 'offline' %}Offline
-                        {% else %}Unknown{% endif %}
-                    </span>
+                    <span class="text-[10px] text-gray-500">{{ src.status }}</span>
                 </div>
             </div>
 
             <div class="space-y-1 text-xs">
-                {% if src.category %}
                 <div class="flex justify-between">
-                    <span class="text-gray-500">Category</span>
-                    <span class="rounded-full px-1.5 py-0.5 text-[10px] bg-gray-800 text-gray-400">{{ src.category }}</span>
+                    <span class="text-gray-500">Description</span>
+                    <span class="text-gray-400 truncate ml-2">{{ src.description }}</span>
                 </div>
-                {% endif %}
                 <div class="flex justify-between">
                     <span class="text-gray-500">Last Updated</span>
-                    <span class="mono text-gray-400">{{ src.last_updated[:16] if src.last_updated else "Never" }}</span>
+                    <span class="mono text-gray-400">{{ src.age_human }}</span>
                 </div>
-                {% if src.record_count is defined %}
                 <div class="flex justify-between">
-                    <span class="text-gray-500">Records</span>
-                    <span class="mono text-gray-400">{{ "{:,}".format(src.record_count) }}</span>
+                    <span class="text-gray-500">Files</span>
+                    <span class="mono text-gray-400">{{ src.file_count }}</span>
                 </div>
-                {% endif %}
-                {% if src.update_interval %}
-                <div class="flex justify-between">
-                    <span class="text-gray-500">Interval</span>
-                    <span class="mono text-gray-400">{{ src.update_interval }}</span>
-                </div>
-                {% endif %}
             </div>
 
-            <!-- Manual Refresh -->
-            <button hx-post="/data/refresh/{{ src.id | default(src.name | lower | replace(' ', '_')) }}"
-                    hx-target="closest div.bg-gray-900"
-                    hx-swap="outerHTML"
-                    class="mt-3 w-full px-2 py-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 rounded transition">
-                Refresh
-            </button>
+            <!-- Per-source refresh -->
+            {% set src_key = src.id | default(src.name | lower | replace(' ', '_')) %}
+            {% if src.name not in ['theses', 'learnings', 'knowledge', 'decisions'] %}
+            <div class="mt-3">
+                <div id="refresh-status-{{ src_key }}"></div>
+                <button hx-post="/data/{{ src_key }}/refresh"
+                        hx-target="#refresh-status-{{ src_key }}"
+                        hx-swap="innerHTML"
+                        class="w-full px-2 py-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 rounded transition">
+                    Refresh
+                </button>
+            </div>
+            {% else %}
+            <div class="mt-3">
+                <span class="block w-full px-2 py-1 text-xs text-center text-gray-600">Persistent</span>
+            </div>
+            {% endif %}
         </div>
         {% endfor %}
 

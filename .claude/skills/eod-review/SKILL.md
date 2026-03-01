@@ -496,6 +496,46 @@ print(f"High priority pending: {summary['pending_high_priority']}")
 EOF
 ```
 
+## Register Output as Document
+
+After saving the EOD review, index it in the documents table:
+
+```python
+from src.db.write_api import athena_db
+
+athena_db.save_document(
+    doc_type="eod_review",
+    title=f"EOD Review — {date}",
+    file_path=str(filepath),
+    source="skill:eod-review",
+    symbols=symbols_discussed,
+    tags=["eod_review", "daily"],
+)
+```
+
+## Query Historical Context
+
+Before running the review, check previous reviews and learnings:
+
+```python
+from src.db.write_api import athena_db
+
+# Recent EOD reviews for comparison
+reviews = athena_db.get_recent_documents(limit=5)
+eod_reviews = [d for d in reviews if d.doc_type == "eod_review"]
+
+# Search insights related to today's positions
+insights = athena_db.search_insights("momentum")
+
+# Get documents for a specific symbol being reviewed
+docs = athena_db.get_documents_for_symbol("HAL", limit=10)
+```
+
+Or use the convenience script:
+```bash
+PYTHONPATH=. python3 scripts/context_for_symbol.py HAL
+```
+
 ## Key Files
 
 | File | Purpose |

@@ -138,6 +138,7 @@ class ClaudeClient:
 
         self._client = anthropic.Anthropic(api_key=self.api_key)
         self._async_client = anthropic.AsyncAnthropic(api_key=self.api_key)
+        self.last_usage: dict | None = None  # Populated after each generate() call
 
     async def generate(
         self,
@@ -167,6 +168,12 @@ class ClaudeClient:
             system=system or "",
             messages=messages,
         )
+
+        self.last_usage = {
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+            "model": self.model,
+        }
 
         return response.content[0].text
 

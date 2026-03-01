@@ -13,6 +13,7 @@ async def thesis_list(request: Request):
     """List all theses as a card grid."""
     templates = request.app.state.templates
 
+    filter_status = request.query_params.get("status", "all")
     theses = thesis_service.list_theses()
 
     return templates.TemplateResponse(
@@ -21,6 +22,47 @@ async def thesis_list(request: Request):
         {
             "active_page": "theses",
             "theses": theses,
+            "filter_status": filter_status,
+        },
+    )
+
+
+@router.get("/new")
+async def thesis_new(request: Request):
+    """Form for creating a new thesis."""
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        request,
+        "theses/form.html",
+        {
+            "active_page": "theses",
+            "thesis": None,
+            "breadcrumbs": [
+                {"label": "Theses", "url": "/theses"},
+                {"label": "New Thesis"},
+            ],
+        },
+    )
+
+
+@router.get("/{thesis_id}/edit")
+async def thesis_edit(request: Request, thesis_id: str):
+    """Form for editing an existing thesis."""
+    templates = request.app.state.templates
+    thesis = thesis_service.get_thesis(thesis_id)
+    if thesis is None:
+        raise HTTPException(status_code=404, detail=f"Thesis '{thesis_id}' not found")
+    return templates.TemplateResponse(
+        request,
+        "theses/form.html",
+        {
+            "active_page": "theses",
+            "thesis": thesis,
+            "breadcrumbs": [
+                {"label": "Theses", "url": "/theses"},
+                {"label": thesis.get("name", thesis_id) if isinstance(thesis, dict) else getattr(thesis, "name", thesis_id), "url": f"/theses/{thesis_id}"},
+                {"label": "Edit"},
+            ],
         },
     )
 
@@ -37,6 +79,9 @@ async def thesis_detail(request: Request, thesis_id: str):
     decisions = thesis_service.get_thesis_decisions(thesis_id)
     performance = thesis_service.get_thesis_performance(thesis_id)
 
+    from src.web.services import document_service
+    related_docs = document_service.get_documents_for_thesis(thesis_id)
+
     return templates.TemplateResponse(
         request,
         "theses/detail.html",
@@ -45,6 +90,11 @@ async def thesis_detail(request: Request, thesis_id: str):
             "thesis": thesis,
             "decisions": decisions,
             "performance": performance,
+            "related_docs": related_docs,
+            "breadcrumbs": [
+                {"label": "Theses", "url": "/theses"},
+                {"label": thesis.get("name", thesis_id) if isinstance(thesis, dict) else getattr(thesis, "name", thesis_id)},
+            ],
         },
     )
 
@@ -96,6 +146,7 @@ async def update_thesis(request: Request, thesis_id: str):
 
 
 @router.post("/{thesis_id}/conviction")
+@router.put("/{thesis_id}/conviction")
 async def update_conviction(
     request: Request,
     thesis_id: str,
@@ -136,4 +187,19 @@ async def update_conviction(
         </div>
     </div>
     """
+    return HTMLResponse(content=html)
+
+
+@router.post("/{thesis_id}/notes")
+async def add_note(
+    request: Request,
+    thesis_id: str,
+    note: str = Form(...),
+):
+    """HTMX endpoint: add a note to a thesis."""
+    updated = thesis_service.add_note(thesis_id, note)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Thesis '{thesis_id}' not found")
+
+    html = f'<p class="text-xs text-gray-400 border-l-2 border-gray-700 pl-3 py-1">{note}</p>'
     return HTMLResponse(content=html)

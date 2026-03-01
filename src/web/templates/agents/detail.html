@@ -4,20 +4,23 @@
 
 {% block content %}
 <div class="p-6 space-y-6">
+    {% include "components/breadcrumbs.html" %}
+
     <!-- Header -->
     <div>
-        <a href="/agents" class="text-gray-500 hover:text-gray-300 text-sm">&larr; Agent Runs</a>
         <div class="flex items-center gap-3 mt-1">
             <h1 class="text-xl font-bold text-gray-100">Agent Run</h1>
             <span class="rounded-full px-2.5 py-0.5 text-sm
                 {% if run.agent_type == 'research' %}bg-purple-900/50 text-purple-400
+                {% elif run.agent_type == 'api_research' %}bg-purple-900/50 text-purple-400
                 {% elif run.agent_type == 'monitor' %}bg-blue-900/50 text-blue-400
                 {% elif run.agent_type == 'critic' %}bg-red-900/50 text-red-400
                 {% elif run.agent_type == 'alpha-discovery' %}bg-emerald-900/50 text-emerald-400
+                {% elif run.agent_type == 'cli_session' %}bg-cyan-900/50 text-cyan-400
                 {% else %}bg-gray-800 text-gray-400{% endif %}">
                 {{ run.agent_type }}
             </span>
-            <span class="rounded-full px-2 py-0.5 text-xs
+            <span id="status-badge" class="rounded-full px-2 py-0.5 text-xs
                 {% if run.status == 'running' %}bg-yellow-900/50 text-yellow-400
                 {% elif run.status == 'completed' %}bg-emerald-900/50 text-emerald-400
                 {% elif run.status == 'failed' %}bg-red-900/50 text-red-400
@@ -29,6 +32,167 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    {% if is_running %}
+        {# ============================================================= #}
+        {# LIVE STREAMING VIEWER (when agent is running)                  #}
+        {# ============================================================= #}
+
+        <!-- Left Column: Live Stream -->
+        <div class="lg:col-span-2 space-y-4">
+            <!-- Task Description -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Task</h2>
+                <p class="text-sm text-gray-300 leading-relaxed">{{ run.task }}</p>
+            </div>
+
+            <!-- Live Streaming Panel -->
+            <div class="border border-gray-800 rounded-lg overflow-hidden">
+                <!-- Header bar -->
+                <div class="flex items-center gap-2 px-4 py-2 border-b border-gray-800 bg-gray-900/50">
+                    <svg id="stream-spinner" class="animate-spin w-4 h-4 text-emerald-400" xmlns="http://www.w3.org/2000/svg"
+                         fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    <span id="stream-status-dot" class="w-2 h-2 rounded-full bg-emerald-500 hidden"></span>
+                    <span class="text-sm font-medium text-emerald-400">{{ run.agent_type }}</span>
+                    <span class="mono text-xs text-gray-500">{{ run.id[:12] }}</span>
+                    <span id="stream-elapsed" class="text-xs text-gray-500 ml-auto mono">0s</span>
+                    <span class="text-gray-700 mx-1">|</span>
+                    <span id="stream-tokens" class="text-xs text-gray-500 mono">0 tokens</span>
+                    <span class="text-gray-700 mx-1">|</span>
+                    <span id="stream-cost" class="text-xs text-gray-500 mono">$0.0000</span>
+                </div>
+
+                <!-- Tab bar -->
+                <div class="flex border-b border-gray-800 bg-gray-900/30">
+                    <button onclick="switchTab('output')" id="tab-output"
+                            class="stream-tab px-4 py-1.5 text-xs font-medium text-emerald-400 border-b-2 border-emerald-500">
+                        Output
+                    </button>
+                    <button onclick="switchTab('tools')" id="tab-tools"
+                            class="stream-tab px-4 py-1.5 text-xs font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-300">
+                        Tools <span id="tools-count" class="ml-1 px-1.5 py-0.5 bg-gray-800 rounded text-[10px] text-gray-500">0</span>
+                    </button>
+                    <button onclick="switchTab('conversation')" id="tab-conversation"
+                            class="stream-tab px-4 py-1.5 text-xs font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-300">
+                        Conversation
+                    </button>
+                </div>
+
+                <!-- Content panels -->
+                <div class="relative" style="min-height: 250px; max-height: 700px;">
+                    <!-- Output tab -->
+                    <div id="panel-output" class="stream-panel p-4 overflow-y-auto" style="max-height: 660px;">
+                        <pre id="stream-output" class="text-xs text-gray-300 mono whitespace-pre-wrap leading-relaxed"></pre>
+                        <span id="stream-cursor" class="inline-block w-1.5 h-3.5 bg-emerald-400 animate-pulse align-middle"></span>
+                    </div>
+
+                    <!-- Tools tab -->
+                    <div id="panel-tools" class="stream-panel p-4 overflow-y-auto hidden" style="max-height: 660px;">
+                        <div id="tools-container" class="space-y-3">
+                            <p class="text-xs text-gray-600">Tool calls will appear here...</p>
+                        </div>
+                    </div>
+
+                    <!-- Conversation tab -->
+                    <div id="panel-conversation" class="stream-panel p-4 overflow-y-auto hidden" style="max-height: 660px;">
+                        <div id="conversation-container" class="space-y-3">
+                            <p class="text-xs text-gray-600">Turn-by-turn conversation will appear here...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Child Runs (still shown during streaming) -->
+            {% if children %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Child Runs</h2>
+                <div class="space-y-2">
+                    {% for child in children %}
+                    <a href="/agents/{{ child.id }}" class="flex items-center justify-between py-2 px-3 rounded bg-gray-800/50 hover:bg-gray-800 transition">
+                        <div class="flex items-center gap-2">
+                            <span class="rounded-full px-2 py-0.5 text-xs bg-gray-700 text-gray-300">{{ child.agent_type }}</span>
+                            <span class="text-sm text-gray-400 truncate max-w-xs">{{ child.task[:60] }}{% if child.task|length > 60 %}...{% endif %}</span>
+                        </div>
+                        <span class="rounded-full px-2 py-0.5 text-xs
+                            {% if child.status == 'completed' %}bg-emerald-900/50 text-emerald-400
+                            {% elif child.status == 'running' %}bg-yellow-900/50 text-yellow-400
+                            {% else %}bg-red-900/50 text-red-400{% endif %}">
+                            {{ child.status }}
+                        </span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column: Live Metadata -->
+        <div class="space-y-4">
+            <!-- Timing (live-updating) -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Timing</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Started</span>
+                        <span class="mono text-gray-300 text-xs">{{ run.started_at[:19] if run.started_at else "N/A" }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Elapsed</span>
+                        <span id="sidebar-elapsed" class="mono text-yellow-400 text-xs">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Token / Cost (live-updating) -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Cost Breakdown</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Input Tokens</span>
+                        <span id="sidebar-input-tokens" class="mono text-gray-300">0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Output Tokens</span>
+                        <span id="sidebar-output-tokens" class="mono text-gray-300">0</span>
+                    </div>
+                    <div class="flex justify-between border-t border-gray-800 pt-2">
+                        <span class="text-gray-500">Total Tokens</span>
+                        <span id="sidebar-total-tokens" class="mono text-gray-200 font-semibold">0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Cost</span>
+                        <span id="sidebar-cost" class="mono text-gray-200 font-semibold">$0.0000</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Parent Run -->
+            {% if run.parent_run_id %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Parent Run</h2>
+                <a href="/agents/{{ run.parent_run_id }}" class="text-sm text-emerald-400 hover:underline mono">
+                    {{ run.parent_run_id }}
+                </a>
+            </div>
+            {% endif %}
+
+            <!-- Trigger Reason -->
+            {% if run.trigger_reason %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Trigger</h2>
+                <p class="text-xs text-gray-400">{{ run.trigger_reason }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+    {% else %}
+        {# ============================================================= #}
+        {# STATIC DETAIL VIEW (completed / failed / other)                #}
+        {# ============================================================= #}
+
         <!-- Left Column -->
         <div class="lg:col-span-2 space-y-4">
             <!-- Task Description -->
@@ -49,7 +213,79 @@
             {% if run.findings_summary %}
             <div class="bg-gray-900 border border-emerald-900/30 rounded-lg p-4">
                 <h2 class="text-sm font-semibold text-emerald-400 mb-2">Findings</h2>
+                {% if run.findings_summary|length > 1000 %}
+                <div id="findings-short">
+                    <p class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{{ run.findings_summary[:1000] }}...</p>
+                    <button onclick="document.getElementById('findings-short').classList.add('hidden'); document.getElementById('findings-full').classList.remove('hidden')"
+                            class="text-xs text-emerald-400 mt-2 hover:underline">Show full findings ({{ run.findings_summary|length|filesizeformat }})</button>
+                </div>
+                <div id="findings-full" class="hidden">
+                    <p class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{{ run.findings_summary }}</p>
+                    <button onclick="document.getElementById('findings-full').classList.add('hidden'); document.getElementById('findings-short').classList.remove('hidden')"
+                            class="text-xs text-gray-500 mt-2 hover:underline">Collapse</button>
+                </div>
+                {% else %}
                 <p class="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{{ run.findings_summary }}</p>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Artifacts -->
+            {% if run.artifacts and (run.artifacts.canonical_path or run.artifacts.saved_path or run.artifacts.stream_log_path or run.artifacts.session_jsonl) %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Artifacts</h2>
+                <div class="space-y-2">
+                    {% if run.artifacts.canonical_path %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-gray-500">Report:</span>
+                        <span class="mono text-blue-400 text-xs">{{ run.artifacts.canonical_path }}</span>
+                    </div>
+                    {% endif %}
+                    {% if run.artifacts.saved_path %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-gray-500">Research copy:</span>
+                        <span class="mono text-gray-400 text-xs">{{ run.artifacts.saved_path }}</span>
+                    </div>
+                    {% endif %}
+                    {% if run.artifacts.stream_log_path %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-gray-500">Stream log:</span>
+                        <span class="mono text-gray-400 text-xs">{{ run.artifacts.stream_log_path }}</span>
+                    </div>
+                    {% endif %}
+                    {% if run.artifacts.session_jsonl %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-gray-500">Session transcript:</span>
+                        <span class="mono text-cyan-400 text-xs">{{ run.artifacts.session_jsonl }}</span>
+                    </div>
+                    {% endif %}
+                    {% if run.artifacts.model %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-gray-500">Model:</span>
+                        <span class="mono text-gray-400 text-xs">{{ run.artifacts.model }}</span>
+                    </div>
+                    {% endif %}
+                    {% if run.artifacts.message_count %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-gray-500">Messages:</span>
+                        <span class="mono text-gray-400 text-xs">{{ run.artifacts.message_count }}</span>
+                    </div>
+                    {% endif %}
+                    {% if run.artifacts.git_branch %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-gray-500">Git branch:</span>
+                        <span class="mono text-gray-400 text-xs">{{ run.artifacts.git_branch }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Session ID -->
+            {% if run.session_id %}
+            <div class="bg-gray-900 border border-cyan-900/30 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-cyan-400 mb-2">CLI Session</h2>
+                <span class="mono text-xs text-gray-400">{{ run.session_id }}</span>
             </div>
             {% endif %}
 
@@ -75,6 +311,28 @@
                     {% for dec_id in run.decisions_influenced %}
                     <a href="/decisions/{{ dec_id }}" class="block text-sm text-blue-400 hover:text-blue-300 mono">
                         &#9654; {{ dec_id }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Produced Documents -->
+            {% if produced_docs %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Produced Documents</h2>
+                <div class="space-y-2">
+                    {% for doc in produced_docs %}
+                    <a href="/documents/{{ doc.id }}" class="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-gray-800/50 transition">
+                        <span class="rounded-full px-2 py-0.5 text-[10px]
+                            {% if doc.doc_type == 'briefing' %}bg-blue-900/50 text-blue-400
+                            {% elif doc.doc_type == 'research_result' %}bg-emerald-900/50 text-emerald-400
+                            {% elif doc.doc_type == 'critic_report' %}bg-red-900/50 text-red-400
+                            {% else %}bg-gray-800 text-gray-400{% endif %}">
+                            {{ doc.doc_type | replace("_", " ") }}
+                        </span>
+                        <span class="text-sm text-gray-300 truncate flex-1">{{ doc.title }}</span>
+                        <span class="text-[10px] text-gray-600 mono">{{ doc.created[:10] if doc.created else "" }}</span>
                     </a>
                     {% endfor %}
                 </div>
@@ -115,6 +373,19 @@
                 <div id="raw-output" class="hidden px-4 pb-4">
                     <pre class="bg-gray-950 rounded p-3 text-xs text-gray-400 mono overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap">{{ run.raw_output }}</pre>
                 </div>
+            </div>
+            {% endif %}
+
+            <!-- Stream Replay Link -->
+            {% if has_stream_log %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
+                <a href="/research/replay/{{ run.id }}" class="text-sm text-emerald-400 hover:underline flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    View full session replay &rarr;
+                </a>
             </div>
             {% endif %}
         </div>
@@ -167,6 +438,324 @@
             </div>
             {% endif %}
         </div>
+    {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if is_running %}
+<script>
+(function() {
+    var runId = "{{ run.id }}";
+    var startedAt = "{{ run.started_at or '' }}";
+    var startTime = startedAt ? new Date(startedAt + (startedAt.endsWith('Z') ? '' : 'Z')).getTime() : Date.now();
+    var toolCount = 0;
+    var currentTurn = 0;
+    var evtSource = null;
+    var finished = false;
+
+    // Elapsed timer — updates both header and sidebar
+    var timerInterval = setInterval(function() {
+        if (finished) return;
+        var elapsed = Math.floor((Date.now() - startTime) / 1000);
+        var text;
+        if (elapsed < 60) text = elapsed + 's';
+        else text = Math.floor(elapsed / 60) + 'm ' + (elapsed % 60) + 's';
+        var el = document.getElementById('stream-elapsed');
+        if (el) el.textContent = text;
+        var sb = document.getElementById('sidebar-elapsed');
+        if (sb) sb.textContent = text;
+    }, 1000);
+
+    function connect() {
+        evtSource = new EventSource('/agents/' + runId + '/events');
+
+        evtSource.onmessage = function(e) {
+            var msg = JSON.parse(e.data);
+            handleEvent(msg);
+        };
+
+        evtSource.onerror = function() {
+            if (evtSource.readyState === EventSource.CLOSED && !finished) {
+                startStatusPolling();
+            }
+        };
+    }
+
+    function handleEvent(msg) {
+        var event = msg.event;
+        var data = msg.data || {};
+
+        switch (event) {
+            case 'text_delta':
+                appendOutput(data.text || '');
+                appendToTurn(data.turn, 'text', data.text || '');
+                break;
+
+            case 'tool_use_start':
+                toolCount++;
+                document.getElementById('tools-count').textContent = toolCount;
+                addToolCard(data.name, data.id);
+                appendToTurn(data.turn, 'tool_start', data.name);
+                break;
+
+            case 'tool_input_delta':
+                appendToolInput(data.id, data.partial_json || '');
+                break;
+
+            case 'tool_use_end':
+                finalizeToolCard(data.name);
+                break;
+
+            case 'thinking_delta':
+                appendToTurn(data.turn, 'thinking', data.text || '');
+                break;
+
+            case 'turn_start':
+                currentTurn = data.turn || 0;
+                addTurnHeader(currentTurn, data.model || '');
+                break;
+
+            case 'turn_end':
+                break;
+
+            case 'tokens_update':
+                updateTokens(data);
+                break;
+
+            case 'result':
+                if (data.text) {
+                    var output = document.getElementById('stream-output');
+                    if (output && !output.textContent.trim()) {
+                        output.textContent = data.text;
+                    }
+                }
+                break;
+
+            case 'completed':
+                onCompleted(data);
+                break;
+
+            case 'failed':
+                onFailed(data);
+                break;
+
+            case 'started':
+                break;
+        }
+    }
+
+    function appendOutput(text) {
+        var el = document.getElementById('stream-output');
+        if (el) {
+            el.textContent += text;
+            var panel = document.getElementById('panel-output');
+            if (panel) panel.scrollTop = panel.scrollHeight;
+        }
+    }
+
+    function addToolCard(name, toolId) {
+        var container = document.getElementById('tools-container');
+        if (!container) return;
+        var placeholder = container.querySelector('p.text-gray-600');
+        if (placeholder) placeholder.remove();
+
+        var card = document.createElement('div');
+        card.id = 'tool-' + (toolId || toolCount);
+        card.className = 'border border-gray-700 rounded-lg overflow-hidden';
+        card.innerHTML =
+            '<div class="flex items-center gap-2 px-3 py-1.5 bg-gray-800/50 border-b border-gray-700">' +
+            '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>' +
+            '<span class="text-xs font-medium text-amber-400">' + escHtml(name) + '</span>' +
+            '<span class="text-[10px] text-gray-600 ml-auto mono">#' + toolCount + '</span>' +
+            '</div>' +
+            '<pre class="tool-input px-3 py-2 text-[11px] text-gray-400 mono whitespace-pre-wrap max-h-40 overflow-y-auto"></pre>';
+        container.appendChild(card);
+        var panel = document.getElementById('panel-tools');
+        if (panel) panel.scrollTop = panel.scrollHeight;
+    }
+
+    function appendToolInput(toolId, partial) {
+        var container = document.getElementById('tools-container');
+        if (!container) return;
+        var cards = container.querySelectorAll('.tool-input');
+        var last = cards[cards.length - 1];
+        if (last) last.textContent += partial;
+    }
+
+    function finalizeToolCard(name) {
+        var container = document.getElementById('tools-container');
+        if (!container) return;
+        var indicators = container.querySelectorAll('.animate-pulse');
+        var last = indicators[indicators.length - 1];
+        if (last) {
+            last.classList.remove('animate-pulse', 'bg-amber-400');
+            last.classList.add('bg-gray-500');
+        }
+    }
+
+    function addTurnHeader(turn, model) {
+        var container = document.getElementById('conversation-container');
+        if (!container) return;
+        var placeholder = container.querySelector('p.text-gray-600');
+        if (placeholder) placeholder.remove();
+
+        var header = document.createElement('div');
+        header.className = 'flex items-center gap-2 pt-2';
+        header.innerHTML =
+            '<span class="text-xs font-semibold text-gray-400">Turn ' + turn + '</span>' +
+            (model ? '<span class="text-[10px] text-gray-600 mono">' + escHtml(model) + '</span>' : '');
+        container.appendChild(header);
+
+        var content = document.createElement('pre');
+        content.id = 'turn-content-' + turn;
+        content.className = 'text-xs text-gray-300 mono whitespace-pre-wrap leading-relaxed mt-1 pl-3 border-l border-gray-800';
+        container.appendChild(content);
+    }
+
+    function appendToTurn(turn, type, text) {
+        var el = document.getElementById('turn-content-' + turn);
+        if (!el) return;
+        if (type === 'text') {
+            el.textContent += text;
+        } else if (type === 'tool_start') {
+            var badge = document.createElement('span');
+            badge.className = 'inline-block px-1.5 py-0.5 my-1 text-[10px] bg-amber-900/30 text-amber-400 rounded';
+            badge.textContent = 'Tool: ' + text;
+            el.appendChild(badge);
+            el.appendChild(document.createTextNode('\n'));
+        } else if (type === 'thinking') {
+            var span = document.createElement('span');
+            span.className = 'text-gray-600';
+            span.textContent = text;
+            el.appendChild(span);
+        }
+        var panel = document.getElementById('panel-conversation');
+        if (panel) panel.scrollTop = panel.scrollHeight;
+    }
+
+    function updateTokens(data) {
+        var inputTokens = data.input_tokens || 0;
+        var outputTokens = data.output_tokens || 0;
+        var total = data.total_tokens || (inputTokens + outputTokens) || 0;
+        var cost = data.cost_usd;
+
+        // Header bar
+        var tokensEl = document.getElementById('stream-tokens');
+        if (tokensEl) tokensEl.textContent = total.toLocaleString() + ' tokens';
+        var costEl = document.getElementById('stream-cost');
+        if (costEl && cost !== undefined) costEl.textContent = '$' + cost.toFixed(4);
+
+        // Sidebar
+        var siInput = document.getElementById('sidebar-input-tokens');
+        if (siInput) siInput.textContent = inputTokens.toLocaleString();
+        var siOutput = document.getElementById('sidebar-output-tokens');
+        if (siOutput) siOutput.textContent = outputTokens.toLocaleString();
+        var siTotal = document.getElementById('sidebar-total-tokens');
+        if (siTotal) siTotal.textContent = total.toLocaleString();
+        var siCost = document.getElementById('sidebar-cost');
+        if (siCost && cost !== undefined) siCost.textContent = '$' + cost.toFixed(4);
+    }
+
+    function onCompleted(data) {
+        finished = true;
+        clearInterval(timerInterval);
+        if (data.elapsed_seconds) {
+            var el = document.getElementById('stream-elapsed');
+            if (el) el.textContent = data.elapsed_seconds.toFixed(1) + 's';
+        }
+        updateTokens(data);
+        // Hide spinner, show completion dot
+        var spinner = document.getElementById('stream-spinner');
+        if (spinner) spinner.classList.add('hidden');
+        var dot = document.getElementById('stream-status-dot');
+        if (dot) dot.classList.remove('hidden');
+        // Hide cursor
+        var cursor = document.getElementById('stream-cursor');
+        if (cursor) cursor.classList.add('hidden');
+        // Update status badge
+        var badge = document.getElementById('status-badge');
+        if (badge) {
+            badge.textContent = 'completed';
+            badge.className = 'rounded-full px-2 py-0.5 text-xs bg-emerald-900/50 text-emerald-400';
+        }
+        if (evtSource) evtSource.close();
+        // Reload to show full static detail with findings
+        setTimeout(function() { location.reload(); }, 2000);
+    }
+
+    function onFailed(data) {
+        finished = true;
+        clearInterval(timerInterval);
+        var spinner = document.getElementById('stream-spinner');
+        if (spinner) spinner.classList.add('hidden');
+        var dot = document.getElementById('stream-status-dot');
+        if (dot) {
+            dot.classList.remove('hidden', 'bg-emerald-500');
+            dot.classList.add('bg-red-500');
+        }
+        var cursor = document.getElementById('stream-cursor');
+        if (cursor) cursor.classList.add('hidden');
+        var output = document.getElementById('stream-output');
+        if (output) {
+            output.textContent += '\n\n--- ERROR ---\n' + (data.error || 'Unknown error');
+            output.classList.add('text-red-400');
+        }
+        var badge = document.getElementById('status-badge');
+        if (badge) {
+            badge.textContent = 'failed';
+            badge.className = 'rounded-full px-2 py-0.5 text-xs bg-red-900/50 text-red-400';
+        }
+        if (evtSource) evtSource.close();
+        // Reload to show static detail with error
+        setTimeout(function() { location.reload(); }, 2000);
+    }
+
+    function escHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // Fallback status polling if WebSocket completely fails
+    var pollInterval = null;
+    function startStatusPolling() {
+        if (pollInterval) return;
+        pollInterval = setInterval(function() {
+            fetch('/agents/' + runId + '/status')
+                .then(function(r) { return r.text(); })
+                .then(function(status) {
+                    status = status.trim();
+                    if (status === 'completed' || status === 'failed') {
+                        clearInterval(pollInterval);
+                        location.reload();
+                    }
+                })
+                .catch(function() {});
+        }, 5000);
+    }
+
+    // Tab switching
+    window.switchTab = function(tab) {
+        document.querySelectorAll('.stream-tab').forEach(function(t) {
+            t.classList.remove('text-emerald-400', 'border-emerald-500');
+            t.classList.add('text-gray-500', 'border-transparent');
+        });
+        document.querySelectorAll('.stream-panel').forEach(function(p) {
+            p.classList.add('hidden');
+        });
+        var tabBtn = document.getElementById('tab-' + tab);
+        if (tabBtn) {
+            tabBtn.classList.remove('text-gray-500', 'border-transparent');
+            tabBtn.classList.add('text-emerald-400', 'border-emerald-500');
+        }
+        var panel = document.getElementById('panel-' + tab);
+        if (panel) panel.classList.remove('hidden');
+    };
+
+    connect();
+})();
+</script>
+{% endif %}
 {% endblock %}

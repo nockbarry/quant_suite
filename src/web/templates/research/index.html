@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Research Console{% endblock %}
+
+{% block head %}
+<style>
+    .preset-btn { transition: all 0.15s ease; }
+    .preset-btn.active {
+        border-color: #10b981 !important;
+        background: rgba(16, 185, 129, 0.1) !important;
+    }
+    .preset-btn:not(.active):hover {
+        border-color: #374151;
+        background: rgba(55, 65, 81, 0.5);
+    }
+    .mode-btn { transition: all 0.15s ease; }
+    .mode-btn.active {
+        border-color: #10b981;
+        background: rgba(16, 185, 129, 0.15);
+        color: #6ee7b7;
+    }
+    .mode-btn:not(.active) {
+        border-color: #374151;
+        color: #6b7280;
+    }
+    .mode-btn:not(.active):hover {
+        border-color: #4b5563;
+        color: #9ca3af;
+    }
+    .mode-btn.disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+    .result-container pre {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        line-height: 1.6;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Research Console</h1>
+            <p class="text-xs text-gray-500 mt-0.5">Run Claude Code or API research sessions from the dashboard</p>
+        </div>
+        <button hx-get="/research/history" hx-target="#history-panel" hx-swap="innerHTML"
+                onclick="document.getElementById('history-panel').classList.toggle('hidden')"
+                class="px-3 py-1.5 text-xs bg-gray-800 text-gray-400 hover:text-gray-200 rounded-lg border border-gray-700 hover:border-gray-600 transition">
+            Past Results
+        </button>
+    </div>
+
+    <!-- History panel (hidden by default) -->
+    <div id="history-panel" class="hidden bg-gray-900 border border-gray-800 rounded-lg max-h-64 overflow-y-auto">
+        {% if history %}
+        {% for r in history %}
+        <a href="/research/view/{{ r.filename }}"
+           class="flex items-center justify-between px-4 py-2 hover:bg-gray-800/50 border-b border-gray-800/50 transition">
+            <div>
+                <span class="text-sm text-gray-300">{{ r.label }}</span>
+                <span class="text-xs text-gray-600 ml-2">{{ r.timestamp }}</span>
+            </div>
+            <span class="text-xs text-gray-600">{{ r.size_kb }}KB</span>
+        </a>
+        {% endfor %}
+        {% else %}
+        <div class="px-4 py-6 text-center text-gray-600 text-sm">No past results</div>
+        {% endif %}
+    </div>
+
+    <!-- Research form -->
+    <form hx-post="/research/run-stream" hx-target="#research-result" hx-swap="innerHTML"
+          class="bg-gray-900 border border-gray-800 rounded-lg p-5 space-y-4">
+
+        <!-- Mode toggle -->
+        <div>
+            <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold block mb-2">Execution Mode</label>
+            <input type="hidden" name="mode" id="mode-input" value="claude_code">
+            <div class="flex gap-2">
+                <button type="button" id="mode-claude_code"
+                        onclick="selectMode('claude_code')"
+                        class="mode-btn active flex items-center gap-2 px-4 py-2 rounded-lg border text-sm">
+                    <span class="text-base">&#9881;</span>
+                    <div class="text-left">
+                        <div class="font-medium">Claude Code</div>
+                        <div class="text-[10px] opacity-60">Full power, tool access, 30-120s</div>
+                    </div>
+                </button>
+                <button type="button" id="mode-api"
+                        onclick="{% if api_available %}selectMode('api'){% endif %}"
+                        class="mode-btn flex items-center gap-2 px-4 py-2 rounded-lg border text-sm {% if not api_available %}disabled{% endif %}">
+                    <span class="text-base">&#9889;</span>
+                    <div class="text-left">
+                        <div class="font-medium">API <span class="text-[10px] opacity-60">(fast)</span></div>
+                        <div class="text-[10px] opacity-60">
+                            {% if api_available %}
+                            Analysis only, ~10-30s
+                            {% else %}
+                            No API key configured
+                            {% endif %}
+                        </div>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Preset selector -->
+        <div>
+            <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold block mb-2">Research Type</label>
+            <input type="hidden" name="research_type" id="research-type-input" value="morning_briefing">
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+                {% for key, preset in presets.items() %}
+                <button type="button"
+                        onclick="selectPreset('{{ key }}')"
+                        id="preset-{{ key }}"
+                        class="preset-btn px-4 py-3 rounded-lg border border-gray-700 bg-gray-800 text-left {% if loop.first %}active{% endif %}">
+                    <div class="flex items-center gap-2">
+                        <span class="text-{{ preset.color }}-400 text-lg">{{ preset.icon | safe }}</span>
+                        <span class="text-sm font-medium text-gray-300">{{ preset.label }}</span>
+                    </div>
+                </button>
+                {% endfor %}
+                <button type="button"
+                        onclick="selectPreset('custom')"
+                        id="preset-custom"
+                        class="preset-btn px-4 py-3 rounded-lg border border-gray-700 bg-gray-800 text-left">
+                    <div class="flex items-center gap-2">
+                        <span class="text-cyan-400 text-lg">&#9998;</span>
+                        <span class="text-sm font-medium text-gray-300">Custom</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Custom prompt textarea -->
+        <div>
+            <label class="text-xs text-gray-500 uppercase tracking-wider font-semibold block mb-2"
+                   id="prompt-label">Additional Instructions <span class="text-gray-600">(optional for presets)</span></label>
+            <textarea name="custom_prompt" id="custom-prompt"
+                      rows="3"
+                      placeholder="Add extra context or instructions..."
+                      class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-sm text-gray-200 mono
+                             placeholder-gray-600 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600/50
+                             resize-y"></textarea>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex items-center justify-between">
+            <p class="text-xs text-gray-600" id="mode-hint">Claude Code: full tool access, up to 10 minutes</p>
+            <button type="submit"
+                    class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition
+                           flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                Run Research
+            </button>
+        </div>
+    </form>
+
+    <!-- Result area -->
+    <div id="research-result" class="result-container">
+        {% if viewed_content %}
+        <div class="border border-gray-800 rounded-lg">
+            <div class="flex items-center gap-2 px-4 py-2 border-b border-gray-800 bg-gray-900/50">
+                <span class="w-2 h-2 rounded-full bg-gray-500"></span>
+                <span class="text-sm font-medium text-gray-400">{{ viewed_filename }}</span>
+                <a href="/research/" class="text-xs text-emerald-400 hover:underline ml-auto">Clear</a>
+            </div>
+            <div class="p-4 max-h-[600px] overflow-y-auto">
+                <pre class="text-xs text-gray-300 mono whitespace-pre-wrap leading-relaxed">{{ viewed_content }}</pre>
+            </div>
+        </div>
+        {% elif error %}
+        <div class="px-4 py-3 text-sm text-red-400 border border-red-800 rounded-lg">{{ error }}</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function selectMode(mode) {
+    // Don't switch to disabled mode
+    var apiBtn = document.getElementById('mode-api');
+    if (mode === 'api' && apiBtn.classList.contains('disabled')) return;
+
+    document.getElementById('mode-input').value = mode;
+
+    // Toggle active class
+    document.querySelectorAll('.mode-btn').forEach(function(btn) { btn.classList.remove('active'); });
+    var btn = document.getElementById('mode-' + mode);
+    if (btn) btn.classList.add('active');
+
+    // Update hint
+    var hint = document.getElementById('mode-hint');
+    if (mode === 'api') {
+        hint.textContent = 'API mode: fast analysis (~10-30s), no file access or tool use';
+    } else {
+        hint.textContent = 'Claude Code: full tool access, up to 10 minutes';
+    }
+}
+
+function selectPreset(type) {
+    // Update hidden input
+    document.getElementById('research-type-input').value = type;
+
+    // Toggle active class
+    document.querySelectorAll('.preset-btn').forEach(function(btn) { btn.classList.remove('active'); });
+    var btn = document.getElementById('preset-' + type);
+    if (btn) btn.classList.add('active');
+
+    // Update prompt label
+    var label = document.getElementById('prompt-label');
+    var textarea = document.getElementById('custom-prompt');
+    if (type === 'custom') {
+        label.innerHTML = 'Research Prompt <span class="text-red-400">(required)</span>';
+        textarea.placeholder = 'Enter your research prompt...';
+        textarea.required = true;
+    } else {
+        label.innerHTML = 'Additional Instructions <span class="text-gray-600">(optional for presets)</span>';
+        textarea.placeholder = 'Add extra context or instructions...';
+        textarea.required = false;
+    }
+}
+</script>
+{% endblock %}

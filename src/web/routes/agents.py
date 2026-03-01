@@ -1,9 +1,14 @@
 """Agents routes — agent run list, detail, and aggregate metrics."""
 
+import asyncio
+import json
+import time
+
 from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from src.web.services import agent_service
+from src.web.services.research_service import STREAM_LOGS_DIR
 
 router = APIRouter()
 
@@ -125,6 +130,94 @@ async def agent_ops_center(request: Request):
     )
 
 
+@router.get("/{run_id}/events")
+async def agent_events_sse(run_id: str):
+    """SSE endpoint: stream JSONL events from disk for a running agent.
+
+    - Catches up late joiners by replaying all existing lines
+    - Polls for new lines every 500ms while running
+    - Checks DB status every 5s as fallback termination signal
+    - Stops on completed/failed event or 15-min timeout
+    """
+    log_path = STREAM_LOGS_DIR / f"{run_id}.jsonl"
+
+    async def event_generator():
+        lines_sent = 0
+        last_db_check = time.monotonic()
+        deadline = time.monotonic() + 15 * 60  # 15-min timeout
+
+        while time.monotonic() < deadline:
+            # Read any new lines from the JSONL file
+            new_lines = []
+            if log_path.exists():
+                try:
+                    with open(log_path, "r") as f:
+                        all_lines = f.readlines()
+                    new_lines = all_lines[lines_sent:]
+                except Exception:
+                    pass
+
+            for line in new_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                lines_sent += 1
+                yield f"data: {line}\n\n"
+
+                # Check for terminal events
+                try:
+                    msg = json.loads(line)
+                    evt = msg.get("event", "")
+                    if evt in ("completed", "failed"):
+                        return
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # DB status check every 5s as fallback
+            now = time.monotonic()
+            if now - last_db_check > 5:
+                last_db_check = now
+                run = agent_service.get_run(run_id)
+                if run:
+                    status = run.get("status", "") if isinstance(run, dict) else getattr(run, "status", "")
+                    if status in ("completed", "failed"):
+                        # Drain any remaining lines before closing
+                        if log_path.exists():
+                            try:
+                                with open(log_path, "r") as f:
+                                    all_lines = f.readlines()
+                                for line in all_lines[lines_sent:]:
+                                    line = line.strip()
+                                    if line:
+                                        lines_sent += 1
+                                        yield f"data: {line}\n\n"
+                            except Exception:
+                                pass
+                        yield f"data: {json.dumps({'event': status, 'data': {}})}\n\n"
+                        return
+
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/{run_id}/status")
+async def agent_status_partial(run_id: str):
+    """Return agent status as plain text for polling fallback."""
+    run = agent_service.get_run(run_id)
+    if run is None:
+        return HTMLResponse("unknown")
+    status = run.get("status", "") if isinstance(run, dict) else getattr(run, "status", "")
+    return HTMLResponse(status)
+
+
 @router.get("/{run_id}")
 async def agent_detail(request: Request, run_id: str):
     """Agent run detail with findings and child runs."""
@@ -140,9 +233,16 @@ async def agent_detail(request: Request, run_id: str):
     r_type = run.get("agent_type", "") if isinstance(run, dict) else getattr(run, "agent_type", "")
     r_label = f"{r_type} — {run_id[:8]}" if r_type else run_id[:8]
 
+    run_status = run.get("status", "") if isinstance(run, dict) else getattr(run, "status", "")
+    is_running = run_status == "running"
+
     # Check for stream replay log
     from src.web.services.research_service import has_stream_log
     _has_stream_log = has_stream_log(run_id)
+
+    # Related documents
+    from src.web.services import document_service
+    produced_docs = document_service.get_documents_for_agent_run(run_id)
 
     return templates.TemplateResponse(
         request,
@@ -152,7 +252,9 @@ async def agent_detail(request: Request, run_id: str):
             "run": run,
             "children": children,
             "events": events,
+            "is_running": is_running,
             "has_stream_log": _has_stream_log,
+            "produced_docs": produced_docs,
             "breadcrumbs": [
                 {"label": "Agents", "url": "/agents"},
                 {"label": r_label},

@@ -4,6 +4,8 @@
 
 {% block content %}
 <div class="p-6 space-y-6">
+    {% include "components/breadcrumbs.html" %}
+
     <!-- Header -->
     <div>
         <h1 class="text-xl font-bold text-gray-100">Trading Decisions</h1>
@@ -126,7 +128,7 @@
                         </td>
                         <td class="px-4 py-2">
                             {% if d.thesis_id %}
-                            <span class="text-xs text-blue-400 truncate max-w-[120px] inline-block">{{ d.thesis_name or d.thesis_id[:12] }}</span>
+                            <a href="/theses/{{ d.thesis_id }}" class="text-xs text-blue-400 hover:underline truncate max-w-[120px] inline-block" onclick="event.stopPropagation()">{{ d.thesis_name or d.thesis_id[:12] }}</a>
                             {% else %}
                             <span class="text-xs text-gray-600">&mdash;</span>
                             {% endif %}

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% set active_page = "documents" %}
+{% block title %}{{ doc.title[:60] }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+    .doc-content { line-height: 1.7; }
+    .doc-content h1, .doc-content h2, .doc-content h3 { color: #e5e7eb; margin-top: 1.5em; margin-bottom: 0.5em; }
+    .doc-content h1 { font-size: 1.5em; font-weight: 700; }
+    .doc-content h2 { font-size: 1.25em; font-weight: 600; }
+    .doc-content h3 { font-size: 1.1em; font-weight: 600; }
+    .doc-content p { margin-bottom: 0.75em; }
+    .doc-content ul, .doc-content ol { margin-left: 1.5em; margin-bottom: 0.75em; }
+    .doc-content li { margin-bottom: 0.25em; }
+    .doc-content code { background: #1f2937; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; }
+    .doc-content pre { background: #1f2937; padding: 1em; border-radius: 6px; overflow-x: auto; margin-bottom: 1em; }
+    .doc-content pre code { background: none; padding: 0; }
+    .doc-content table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+    .doc-content th, .doc-content td { border: 1px solid #374151; padding: 0.5em 0.75em; text-align: left; }
+    .doc-content th { background: #1f2937; font-weight: 600; }
+    .doc-content blockquote { border-left: 3px solid #4b5563; padding-left: 1em; color: #9ca3af; margin-bottom: 0.75em; }
+    .doc-content a { color: #34d399; text-decoration: underline; }
+    .doc-content strong { color: #f3f4f6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-4">
+    {% include "components/breadcrumbs.html" %}
+
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">{{ doc.title }}</h1>
+            <div class="flex items-center gap-3 mt-1">
+                <span class="rounded-full px-2 py-0.5 text-xs
+                    {% if doc.doc_type == 'briefing' %}bg-blue-900/50 text-blue-400
+                    {% elif doc.doc_type == 'eod_review' %}bg-purple-900/50 text-purple-400
+                    {% elif doc.doc_type == 'critic_report' %}bg-red-900/50 text-red-400
+                    {% elif doc.doc_type == 'research_result' %}bg-emerald-900/50 text-emerald-400
+                    {% elif doc.doc_type == 'validation_report' %}bg-yellow-900/50 text-yellow-400
+                    {% else %}bg-gray-800 text-gray-400{% endif %}">
+                    {{ doc.doc_type | replace("_", " ") }}
+                </span>
+                <span class="text-xs text-gray-500">{{ doc.created[:16] if doc.created else "N/A" }}</span>
+                {% if doc.source %}
+                <span class="text-xs text-gray-600">via {{ doc.source }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Metadata bar -->
+    <div class="flex flex-wrap gap-3">
+        {% if doc.symbols %}
+        <div class="flex items-center gap-1">
+            <span class="text-[10px] text-gray-500 uppercase">Symbols:</span>
+            {% for sym in doc.symbols %}
+            <a href="/knowledge/{{ sym }}" class="mono text-xs text-emerald-400 hover:underline">{{ sym }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if doc.tags %}
+        <div class="flex items-center gap-1">
+            <span class="text-[10px] text-gray-500 uppercase">Tags:</span>
+            {% for tag in doc.tags %}
+            <span class="rounded-full px-2 py-0.5 text-[10px] bg-gray-800 text-gray-400">{{ tag }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if doc.thesis_id %}
+        <a href="/theses/{{ doc.thesis_id }}" class="text-xs text-yellow-400 hover:underline">Linked Thesis</a>
+        {% endif %}
+        {% if doc.agent_run_id %}
+        <a href="/agents/{{ doc.agent_run_id }}" class="text-xs text-blue-400 hover:underline">Agent Run</a>
+        {% endif %}
+        {% if doc.decision_id %}
+        <a href="/decisions/{{ doc.decision_id }}" class="text-xs text-orange-400 hover:underline">Decision</a>
+        {% endif %}
+    </div>
+
+    <!-- Content -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-6">
+        {% set content = doc.content_inline or doc.get("content_loaded", "") %}
+        {% if content %}
+            {% if doc.file_path and (doc.file_path.endswith('.json') or doc.file_path.endswith('.yaml') or doc.file_path.endswith('.yml')) %}
+            <!-- Formatted code -->
+            <pre class="text-sm text-gray-300 overflow-x-auto"><code>{{ content }}</code></pre>
+            {% elif doc.file_path and doc.file_path.endswith('.md') %}
+            <!-- Markdown rendering -->
+            <div id="md-content" class="doc-content text-sm text-gray-300"></div>
+            <script>
+                document.getElementById('md-content').innerHTML = marked.parse({{ content | tojson | safe }});
+                document.querySelectorAll('#md-content pre code').forEach(el => hljs.highlightElement(el));
+            </script>
+            {% else %}
+            <!-- Plain text / auto-detect -->
+            <div id="auto-content" class="doc-content text-sm text-gray-300"></div>
+            <script>
+                const raw = {{ content | tojson | safe }};
+                const el = document.getElementById('auto-content');
+                // If it looks like markdown (has # headers or **bold** or - lists), render as markdown
+                if (/^#{1,3}\s|^\*\*|\n-\s|\n\d+\.\s/m.test(raw)) {
+                    el.innerHTML = marked.parse(raw);
+                    el.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+                } else {
+                    el.innerHTML = '<pre class="whitespace-pre-wrap text-gray-300">' + raw.replace(/</g, '&lt;') + '</pre>';
+                }
+            </script>
+            {% endif %}
+        {% else %}
+            <p class="text-gray-500 text-sm">No content available.
+            {% if doc.file_path %}File path: <code class="mono text-xs bg-gray-800 px-2 py-0.5 rounded">{{ doc.file_path }}</code>{% endif %}
+            </p>
+        {% endif %}
+    </div>
+
+    {% if doc.file_path %}
+    <div class="text-xs text-gray-600">
+        File: <code class="mono bg-gray-800 px-2 py-0.5 rounded">{{ doc.file_path }}</code>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

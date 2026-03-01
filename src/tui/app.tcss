@@ -1,0 +1,85 @@
+/* Athena TUI — Terminal CSS */
+
+Screen {
+    layout: grid;
+    grid-size: 2 3;
+    grid-columns: 1fr 1fr;
+    grid-rows: 1fr 1fr 5;
+    background: $surface;
+}
+
+#agents-panel {
+    row-span: 1;
+    column-span: 1;
+}
+
+#portfolio-panel {
+    row-span: 1;
+    column-span: 1;
+}
+
+#system-panel {
+    row-span: 1;
+    column-span: 1;
+}
+
+#signals-panel {
+    row-span: 1;
+    column-span: 1;
+}
+
+#events-panel {
+    column-span: 2;
+    height: 100%;
+}
+
+.panel {
+    border: solid $primary;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+.panel-title {
+    text-style: bold;
+    color: $text;
+    background: $primary;
+    padding: 0 1;
+    width: 100%;
+    text-align: center;
+}
+
+.status-ok {
+    color: $success;
+}
+
+.status-warn {
+    color: $warning;
+}
+
+.status-error {
+    color: $error;
+}
+
+.status-running {
+    color: $accent;
+}
+
+.conviction-high {
+    color: $success;
+}
+
+.conviction-med {
+    color: $warning;
+}
+
+.conviction-low {
+    color: $error;
+}
+
+Footer {
+    dock: bottom;
+}
+
+Header {
+    dock: top;
+}

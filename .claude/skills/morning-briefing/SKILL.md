@@ -531,6 +531,51 @@ Save briefings to: `/home/nock/quant_results/briefings/briefing_YYYYMMDD.json`
 }
 ```
 
+## Register Output as Document
+
+After saving the briefing, index it so it appears in `/documents` and cross-references work:
+
+```python
+from src.db.write_api import athena_db
+
+# This happens automatically in MorningBriefing.save(), but if you
+# write a custom briefing file (e.g. markdown), register it manually:
+athena_db.save_document(
+    doc_type="briefing",
+    title=f"Morning Briefing — {date}",
+    file_path=str(filepath),
+    source="skill:morning-briefing",
+    symbols=["SLB", "HAL", "GLD"],  # symbols discussed
+    tags=["briefing", "pre-market"],
+)
+```
+
+## Query Historical Context
+
+Before generating the briefing, check what documents and insights exist for relevant symbols:
+
+```python
+from src.db.write_api import athena_db
+
+# Get recent documents for a symbol
+recent = athena_db.get_recent_documents(limit=5)
+for doc in recent:
+    print(f"  [{doc.doc_type}] {doc.title}")
+
+# Search for relevant insights
+insights = athena_db.search_insights("energy sector")
+for ins in insights:
+    print(f"  [{ins.category}] {ins.title} (confidence: {ins.confidence})")
+
+# Get full context for a symbol (documents + decisions + theses)
+symbol_docs = athena_db.get_documents_for_symbol("SLB", limit=10)
+```
+
+Or use the convenience script:
+```bash
+PYTHONPATH=. python3 scripts/context_for_symbol.py SLB
+```
+
 ## Integration with Trade Decisions
 
 The briefing (or unified state) is consumed by `/trade-decision`:

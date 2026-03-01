@@ -9,7 +9,9 @@ Usage:
 """
 
 import json
+import logging
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -29,7 +31,12 @@ from src.db.models import (
     SignalProvenanceRecord,
     AgentRun,
     ProcessEvent,
+    Document,
+    Insight,
+    Experiment,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _results_dir() -> Path:
@@ -404,6 +411,206 @@ def migrate_operator_log(session: Session) -> int:
     return count
 
 
+# ---------------------------------------------------------------------------
+# Document index backfill
+# ---------------------------------------------------------------------------
+
+_EXCLUDES = {
+    "JSON", "YAML", "HTML", "HTTP", "HTTPS", "NULL", "TRUE", "FALSE",
+    "READ", "WRITE", "EXEC", "NOTE", "FILE", "PATH", "TEXT", "DATA",
+    "FULL", "QUICK", "START", "HERE", "INDEX", "PLAN", "SCAN",
+    "REPORT", "SUMMARY", "ANALYSIS", "MORNING", "BRIEFING", "REVIEW",
+    "TRADE", "CARD", "ACTION", "COMPLETE", "VERDICT", "SCORE",
+    "MACRO", "REGIME", "ALPHA", "MONDAY", "WEEKLY", "SCORECARD",
+}
+
+DIRECTORY_MAP = {
+    "briefings": ("briefing", "skill:morning-briefing", {".md", ".json"}),
+    "eod_reviews": ("eod_review", "skill:eod-review", {".md", ".json"}),
+    "critic_reports": ("critic_report", "agent:critic", {".md", ".json", ".txt"}),
+    "validation_reports": ("validation_report", "agent:research", {".md", ".json"}),
+    "research_results": ("research_result", "agent:research", {".md", ".json"}),
+    "macro_research": ("macro_research", "agent:macro-research", {".md", ".json", ".txt"}),
+    "regime_reports": ("regime_report", "agent:regime-detector", {".md", ".json", ".txt"}),
+    "alpha_discovery": ("alpha_discovery", "agent:alpha-discovery", {".md", ".json", ".txt"}),
+    "research_reports": ("research_report", "agent:research", {".md", ".json"}),
+    "strategy_reports": ("strategy_report", "agent:research", {".md", ".json"}),
+    "reports": ("report", "system", {".md", ".json"}),
+    "performance_reports": ("performance_report", "system", {".md", ".json"}),
+    "news_analysis": ("news_analysis", "agent:news-analyst", {".md", ".json"}),
+    "swarm_history": ("swarm_report", "skill:swarm-operator", {".json"}),
+}
+
+
+def _extract_file_date(filename: str) -> datetime | None:
+    """Try to extract a date from a filename."""
+    for pat, fmt in [
+        (r"(\d{4}-\d{2}-\d{2})", "%Y-%m-%d"),
+        (r"(\d{8}_\d{6})", "%Y%m%d_%H%M%S"),
+        (r"(\d{8})", "%Y%m%d"),
+    ]:
+        m = re.search(pat, filename)
+        if m:
+            try:
+                return datetime.strptime(m.group(1), fmt)
+            except ValueError:
+                continue
+    return None
+
+
+def _title_from_filename(filepath: Path) -> str:
+    """Generate a readable title from a filename."""
+    name = filepath.stem
+    name = re.sub(r"_?\d{8}(_\d{6})?", "", name)
+    name = re.sub(r"_?\d{4}-\d{2}-\d{2}", "", name)
+    name = name.strip("_").replace("_", " ").strip()
+    return name.title() if name else filepath.name
+
+
+def _extract_symbols(text: str) -> list[str]:
+    """Extract stock symbols from text content."""
+    symbols = set()
+    for m in re.finditer(r'\$([A-Z]{1,5})\b', text[:5000]):
+        symbols.add(m.group(1))
+    for m in re.finditer(r'\b([A-Z]{2,5})(?:_|\b)', text[:500]):
+        if m.group(1) not in _EXCLUDES:
+            symbols.add(m.group(1))
+    return sorted(symbols)[:10]
+
+
+def migrate_documents(session: Session) -> int:
+    """Scan mapped directories and index files as documents."""
+    results_dir = _results_dir()
+    count = 0
+
+    for dirname, (doc_type, source, extensions) in DIRECTORY_MAP.items():
+        dir_path = results_dir / dirname
+        if not dir_path.is_dir():
+            continue
+
+        for filepath in sorted(dir_path.iterdir()):
+            if filepath.is_dir() or filepath.suffix not in extensions:
+                continue
+
+            doc_id = f"doc_{dirname}_{filepath.stem}"
+            title = _title_from_filename(filepath)
+            created = _extract_file_date(filepath.name)
+
+            content_inline = None
+            symbols = []
+            try:
+                content = filepath.read_text(errors="replace")
+                if filepath.stat().st_size <= 10240:
+                    content_inline = content
+                symbols = _extract_symbols(content[:5000])
+                if not created:
+                    created = datetime.fromtimestamp(filepath.stat().st_mtime)
+            except Exception:
+                if not created:
+                    try:
+                        created = datetime.fromtimestamp(filepath.stat().st_mtime)
+                    except Exception:
+                        created = datetime.utcnow()
+
+            # Auto-generate summary
+            summary = title
+            if content_inline:
+                text = content_inline
+                if text.startswith("---"):
+                    lines = text.split("\n")
+                    end = next((i for i, l in enumerate(lines[1:], 1) if l.strip() == "---"), 0)
+                    summary = "\n".join(lines[end + 1:])[:500].strip() or title
+                elif not text.startswith("{"):
+                    summary = text[:500].strip()
+
+            doc = Document(
+                id=doc_id,
+                doc_type=doc_type,
+                title=title,
+                summary=summary,
+                file_path=str(filepath),
+                content_inline=content_inline,
+                created=created,
+                symbols=json.dumps(symbols),
+                tags=json.dumps([]),
+                source=source,
+            )
+            session.merge(doc)
+            count += 1
+
+    return count
+
+
+def migrate_insights(session: Session) -> int:
+    """Import insights from session tracker JSON."""
+    insights_path = _results_dir() / "research_tracker" / "insights.json"
+    if not insights_path.exists():
+        return 0
+
+    try:
+        data = json.loads(insights_path.read_text())
+    except Exception as e:
+        print(f"  WARN: Could not read insights.json: {e}")
+        return 0
+
+    count = 0
+    for key, ins in data.items():
+        insight_id = ins.get("id", key)
+        record = Insight(
+            id=insight_id,
+            title=ins.get("title", ""),
+            description=ins.get("description", ""),
+            category=ins.get("category", ""),
+            tags=json.dumps(ins.get("tags", [])),
+            evidence=json.dumps(ins.get("evidence", {})),
+            confidence=ins.get("confidence", 0.5),
+            validated=ins.get("validated", False),
+            actionable=ins.get("actionable", True),
+            implemented=ins.get("implemented", False),
+            source_session=ins.get("source_session", ""),
+            related_insights=json.dumps(ins.get("related_insights", [])),
+            created_at=_parse_datetime(ins.get("created_at")) or datetime.utcnow(),
+            updated_at=_parse_datetime(ins.get("updated_at")) or datetime.utcnow(),
+        )
+        session.merge(record)
+        count += 1
+
+    return count
+
+
+def migrate_experiments(session: Session) -> int:
+    """Import experiments from session tracker JSON."""
+    experiments_path = _results_dir() / "research_tracker" / "experiments.json"
+    if not experiments_path.exists():
+        return 0
+
+    try:
+        data = json.loads(experiments_path.read_text())
+    except Exception as e:
+        print(f"  WARN: Could not read experiments.json: {e}")
+        return 0
+
+    count = 0
+    for key, exp in data.items():
+        exp_id = exp.get("id", key)
+        record = Experiment(
+            id=exp_id,
+            strategy=exp.get("strategy", ""),
+            symbol=exp.get("symbol", ""),
+            params=json.dumps(exp.get("params", {})),
+            result=exp.get("result", ""),
+            sharpe=exp.get("sharpe"),
+            p_value=exp.get("p_value"),
+            notes=exp.get("notes", ""),
+            session_id=exp.get("session_id", ""),
+            run_at=_parse_datetime(exp.get("run_at")) or datetime.utcnow(),
+        )
+        session.merge(record)
+        count += 1
+
+    return count
+
+
 def run_migration(dry_run: bool = False):
     """Run full migration from files to SQLite."""
     print("=" * 60)
@@ -443,6 +650,27 @@ def run_migration(dry_run: bool = False):
                 print(f"  {label}: {lines} records")
             else:
                 print(f"  {label}: file not found")
+
+        # Document backfill preview
+        print("\n  --- Document Index ---")
+        doc_count = 0
+        for dirname, (doc_type, source, extensions) in DIRECTORY_MAP.items():
+            dir_path = rd / dirname
+            if dir_path.is_dir():
+                files = [f for f in dir_path.iterdir() if f.suffix in extensions and f.is_file()]
+                print(f"  {dirname}: {len(files)} files -> {doc_type}")
+                doc_count += len(files)
+        print(f"  Total documents to index: {doc_count}")
+
+        # Session tracker preview
+        insights_path = rd / "research_tracker" / "insights.json"
+        experiments_path = rd / "research_tracker" / "experiments.json"
+        if insights_path.exists():
+            data = json.loads(insights_path.read_text())
+            print(f"  Insights: {len(data)} records")
+        if experiments_path.exists():
+            data = json.loads(experiments_path.read_text())
+            print(f"  Experiments: {len(data)} records")
         return
 
     with get_db() as session:
@@ -455,6 +683,9 @@ def run_migration(dry_run: bool = False):
             ("Signal Provenance", migrate_signal_provenance),
             ("Agent Activity", migrate_agent_activity),
             ("Operator Log", migrate_operator_log),
+            ("Documents", migrate_documents),
+            ("Insights", migrate_insights),
+            ("Experiments", migrate_experiments),
         ]
 
         total = 0

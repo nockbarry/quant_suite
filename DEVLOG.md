@@ -5,6 +5,63 @@
 
 ---
 
+## 2026-03-01: Unified Data Architecture — Document Index
+
+### Summary
+- Implemented universal document index: every file the system produces is now cataloged in SQLite
+- Added 3 new tables (`documents`, `insights`, `experiments`) to athena.db
+- Built `/documents` web UI with filtering, search, and cross-references
+- Backfilled 80+ existing files from `~/quant_results/` directories
+- Migrated 112 session tracker insights + 61 experiments into the database
+- Instrumented all producers (research agents, morning briefings, decisions) to auto-index
+
+### Design Principle
+**Index, don't restructure.** Files stay on disk where they are. The database provides a metadata catalog with optional inline content for small files. This preserves all existing workflows while making everything discoverable.
+
+### New Tables
+
+| Table | Purpose | Records |
+|-------|---------|---------|
+| `documents` | Universal content index for every file | 80+ (backfilled) |
+| `insights` | Research insights from session tracker | 112 (migrated) |
+| `experiments` | Strategy experiments with Sharpe/p-value | 61 (migrated) |
+
+### New Files Created
+- `src/db/models.py` — Added Document, Insight, Experiment ORM models
+- `src/db/write_api.py` — Added save_document(), get_recent_documents(), search_documents(), search_insights(), get_documents_for_symbol()
+- `src/db/migrate.py` — Backfill script scanning all quant_results directories
+- `src/web/routes/documents.py` — /documents list + /{doc_id} detail + /insights + /experiments
+- `src/web/services/document_service.py` — Query layer for documents
+- `src/web/templates/documents/` — index.html, view.html templates
+- `scripts/context_for_symbol.py` — CLI convenience for agents/skills
+
+### Files Modified
+- `src/web/services/research_service.py` — Auto-indexes research output in documents table
+- `src/decision/morning_briefing.py` — Auto-indexes briefings in documents table
+- `src/decision/decision_logger.py` — Auto-indexes decisions in documents table
+- `src/web/routes/dashboard.py` — Added "Recent Documents" widget
+- `src/web/templates/dashboard.html` — Dashboard widget HTML
+- `src/web/templates/theses/detail.html` — "Related Documents" cross-reference
+- `src/web/templates/agents/detail.html` — "Produced Documents" cross-reference
+- `src/web/templates/decisions/detail.html` — "Related Documents" cross-reference
+- `.claude/skills/*/SKILL.md` — Added document registration + context query sections
+
+### Key Architectural Decisions
+1. **SQLite LIKE over FTS5**: Sufficient for hundreds of docs; FTS5 can be added later if needed
+2. **Dual-write preserved**: Theses still write YAML + DB; documents add a third "catalog" layer
+3. **Auto-extraction of symbols**: Regex extracts tickers from content, filters common English words
+4. **content_inline field**: Small files (<10KB) stored inline for fast display; large files referenced by path
+
+### Web Routes Added
+| Route | Purpose |
+|-------|---------|
+| `/documents` | Filterable document grid with type badges |
+| `/documents/{id}` | Document viewer with markdown rendering |
+| `/documents/insights/list` | Research insights browser |
+| `/documents/experiments/list` | Strategy experiments browser |
+
+---
+
 ## 2026-01-11: Data Pipeline Fixes & Automation
 
 ### Summary

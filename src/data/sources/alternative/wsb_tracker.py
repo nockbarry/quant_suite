@@ -319,6 +319,26 @@ class WSBTracker:
         # Store in database
         self._store_mentions(all_mentions)
 
+        # Emit events for significant mentions
+        for mention in all_mentions:
+            try:
+                if mention.is_dd or mention.upvotes >= 100:
+                    from src.core.events import emit
+                    emit(
+                        "signal_social_wsb",
+                        source="wsb",
+                        symbol=mention.symbol,
+                        title=f"WSB {'DD' if mention.is_dd else 'mention'}: {mention.symbol} ({mention.upvotes} upvotes)",
+                        detail={"post_title": mention.post_title, "upvotes": mention.upvotes,
+                                "is_dd": mention.is_dd, "post_id": mention.post_id},
+                        confidence=min(1.0, 0.3 + (mention.upvotes / 1000)),
+                        direction="bullish" if mention.sentiment > 0 else "bearish" if mention.sentiment < 0 else "neutral",
+                        description=mention.post_title[:200],
+                        detection_method="wsb_scan",
+                    )
+            except Exception:
+                pass
+
         return all_mentions
 
     def _store_mentions(self, mentions: list[WSBMention]):
@@ -482,6 +502,25 @@ class WSBTracker:
 
         # Sort by growth rate (highest first)
         early_signals.sort(key=lambda s: s.growth_rate, reverse=True)
+
+        # Emit events for early/growing signals
+        for signal in early_signals:
+            try:
+                from src.core.events import emit
+                emit(
+                    "signal_social_early",
+                    source="wsb",
+                    symbol=signal.symbol,
+                    title=f"WSB early signal: {signal.symbol} ({signal.current_phase.value}, growth {signal.growth_rate:+.0%})",
+                    detail={"phase": signal.current_phase.value, "growth_rate": signal.growth_rate,
+                            "mention_count": signal.mention_count, "vintage_days": signal.signal_vintage},
+                    confidence=min(1.0, 0.4 + signal.growth_rate * 0.3),
+                    direction="bullish" if signal.avg_sentiment > 0 else "neutral",
+                    description=f"WSB {signal.current_phase.value}: {signal.mention_count} mentions, {signal.growth_rate:+.0%} growth",
+                    detection_method="wsb_early_scan",
+                )
+            except Exception:
+                pass
 
         return early_signals
 

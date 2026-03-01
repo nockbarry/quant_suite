@@ -165,6 +165,35 @@
                 {% endif %}
             </div>
 
+            <!-- Related Documents -->
+            {% if related_docs %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-semibold text-gray-300">Related Documents</h2>
+                    <span class="text-xs text-gray-600">{{ related_docs | length }} documents</span>
+                </div>
+                <div class="space-y-2">
+                    {% for doc in related_docs[:10] %}
+                    <a href="/documents/{{ doc.id }}" class="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-gray-800/50 transition">
+                        <span class="rounded-full px-2 py-0.5 text-[10px]
+                            {% if doc.doc_type == 'briefing' %}bg-blue-900/50 text-blue-400
+                            {% elif doc.doc_type == 'eod_review' %}bg-purple-900/50 text-purple-400
+                            {% elif doc.doc_type == 'critic_report' %}bg-red-900/50 text-red-400
+                            {% elif doc.doc_type == 'research_result' %}bg-emerald-900/50 text-emerald-400
+                            {% else %}bg-gray-800 text-gray-400{% endif %}">
+                            {{ doc.doc_type | replace("_", " ") }}
+                        </span>
+                        <span class="text-sm text-gray-300 truncate flex-1">{{ doc.title }}</span>
+                        <span class="text-[10px] text-gray-600 mono">{{ doc.created[:10] if doc.created else "" }}</span>
+                    </a>
+                    {% endfor %}
+                    {% if related_docs | length > 10 %}
+                    <a href="/documents?type=&symbol=&source=&q=" class="text-xs text-emerald-400 hover:underline block mt-2">View all {{ related_docs | length }} documents &rarr;</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Linked Decisions -->
             <div class="bg-gray-900 border border-gray-800 rounded-lg">
                 <div class="px-4 py-3 border-b border-gray-800">
