@@ -729,6 +729,188 @@ class AthenaWriteAPI:
         return exp_id
 
     # ------------------------------------------------------------------
+    # Predictions
+    # ------------------------------------------------------------------
+
+    def save_prediction(self, data: dict) -> str:
+        """Upsert a prediction. Auto-generates ID and resolve_by if missing."""
+        from src.db.database import get_db
+        from src.db.models import PredictionRecord
+
+        pred_id = data.get("id", "")
+        if not pred_id:
+            pred_id = f"pred_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+            data["id"] = pred_id
+
+        # Auto-compute resolve_by from timeframe_days
+        if "resolve_by" not in data and "timeframe_days" in data:
+            created = data.get("created")
+            if isinstance(created, str):
+                try:
+                    base = datetime.fromisoformat(created)
+                except (ValueError, TypeError):
+                    base = datetime.utcnow()
+            elif isinstance(created, datetime):
+                base = created
+            else:
+                base = datetime.utcnow()
+            data["resolve_by"] = (base + timedelta(days=data["timeframe_days"])).isoformat()
+
+        data.setdefault("status", "open")
+
+        try:
+            with get_db() as session:
+                existing = session.query(PredictionRecord).filter(
+                    PredictionRecord.id == pred_id
+                ).first()
+                if existing:
+                    for key, val in data.items():
+                        if key == "id":
+                            continue
+                        if hasattr(existing, key):
+                            if key in ("created", "resolve_by", "resolved_at") and isinstance(val, str):
+                                try:
+                                    val = datetime.fromisoformat(val)
+                                except (ValueError, TypeError):
+                                    continue
+                            setattr(existing, key, val)
+                else:
+                    valid_cols = {c.key for c in PredictionRecord.__table__.columns}
+                    clean = {k: v for k, v in data.items() if k in valid_cols}
+                    record = PredictionRecord.from_dict(clean)
+                    session.add(record)
+        except Exception as e:
+            logger.warning(f"DB save_prediction failed for {pred_id}: {e}")
+
+        self._broadcast({
+            "type": "prediction_created",
+            "pred_id": pred_id,
+            "symbol": data.get("symbol", ""),
+            "prediction_type": data.get("prediction_type", ""),
+            "direction": data.get("direction", ""),
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+        return pred_id
+
+    def resolve_prediction(
+        self,
+        pred_id: str,
+        status: str,
+        actual_value: float | None = None,
+        notes: str = "",
+        brier_score: float | None = None,
+        accuracy_score: float | None = None,
+        timing_error_days: int | None = None,
+    ) -> bool:
+        """Score and close a prediction."""
+        from src.db.database import get_db
+        from src.db.models import PredictionRecord
+
+        try:
+            with get_db() as session:
+                pred = session.query(PredictionRecord).filter(
+                    PredictionRecord.id == pred_id
+                ).first()
+                if not pred:
+                    return False
+                pred.status = status
+                pred.resolved_at = datetime.utcnow()
+                if actual_value is not None:
+                    pred.actual_value = actual_value
+                pred.resolution_notes = notes
+                if brier_score is not None:
+                    pred.brier_score = brier_score
+                if accuracy_score is not None:
+                    pred.accuracy_score = accuracy_score
+                if timing_error_days is not None:
+                    pred.timing_error_days = timing_error_days
+        except Exception as e:
+            logger.warning(f"DB resolve_prediction failed for {pred_id}: {e}")
+            return False
+
+        self._broadcast({
+            "type": "prediction_resolved",
+            "pred_id": pred_id,
+            "status": status,
+            "brier_score": brier_score,
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+        return True
+
+    def get_open_predictions(self, symbol: str | None = None) -> list[dict]:
+        """Query open predictions, optionally filtered by symbol."""
+        from src.db.database import get_db
+        from src.db.models import PredictionRecord
+
+        try:
+            with get_db() as session:
+                q = session.query(PredictionRecord).filter(
+                    PredictionRecord.status == "open"
+                )
+                if symbol:
+                    q = q.filter(PredictionRecord.symbol == symbol.upper())
+                rows = q.order_by(PredictionRecord.resolve_by.asc()).all()
+                return [r.to_dict() for r in rows]
+        except Exception as e:
+            logger.warning(f"get_open_predictions failed: {e}")
+            return []
+
+    def get_prediction_scorecard(self) -> dict:
+        """Accuracy breakdown by type, category, and overall."""
+        from src.db.database import get_db
+        from src.db.models import PredictionRecord
+        from sqlalchemy import func
+
+        try:
+            with get_db() as session:
+                resolved = session.query(PredictionRecord).filter(
+                    PredictionRecord.status.in_(["hit", "miss", "expired"])
+                ).all()
+
+                if not resolved:
+                    return {"total": 0, "by_type": {}, "by_category": {}, "avg_brier": None}
+
+                total = len(resolved)
+                hits = sum(1 for r in resolved if r.status == "hit")
+                briers = [r.brier_score for r in resolved if r.brier_score is not None]
+
+                # By type
+                by_type = {}
+                for r in resolved:
+                    t = r.prediction_type or "unknown"
+                    if t not in by_type:
+                        by_type[t] = {"total": 0, "hits": 0}
+                    by_type[t]["total"] += 1
+                    if r.status == "hit":
+                        by_type[t]["hits"] += 1
+                for v in by_type.values():
+                    v["accuracy"] = v["hits"] / v["total"] if v["total"] else 0
+
+                # By category
+                by_category = {}
+                for r in resolved:
+                    c = r.reasoning_category or "unknown"
+                    if c not in by_category:
+                        by_category[c] = {"total": 0, "hits": 0}
+                    by_category[c]["total"] += 1
+                    if r.status == "hit":
+                        by_category[c]["hits"] += 1
+                for v in by_category.values():
+                    v["accuracy"] = v["hits"] / v["total"] if v["total"] else 0
+
+                return {
+                    "total": total,
+                    "hits": hits,
+                    "accuracy": hits / total if total else 0,
+                    "avg_brier": sum(briers) / len(briers) if briers else None,
+                    "by_type": by_type,
+                    "by_category": by_category,
+                }
+        except Exception as e:
+            logger.warning(f"get_prediction_scorecard failed: {e}")
+            return {"total": 0, "by_type": {}, "by_category": {}, "avg_brier": None}
+
+    # ------------------------------------------------------------------
     # Document queries (read methods for agents/skills)
     # ------------------------------------------------------------------
 

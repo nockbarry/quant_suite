@@ -347,6 +347,51 @@ insights = athena_db.search_insights("momentum")
 
 **Auto-indexing**: Research agents, morning briefings, decisions, and EOD reviews auto-index their output files.
 
+### Intelligence Layer (NEW 2026-03-01)
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **DecisionContextBuilder** | `src/intelligence/context_builder.py` | Assemble track record + calibration + learnings at decision time |
+| **SetupScorer** | `src/intelligence/setup_scorer.py` | Performance analytics by setup type (win rate, avg return) |
+| **BeliefUpdater** | `src/intelligence/belief_updater.py` | Daily signal weight updates, thesis suggestions, calibration |
+| **PredictionRecord** | `src/db/models.py` | Explicit testable predictions linked to decisions |
+| **setup_types** | `src/intelligence/setup_types.py` | 11 canonical setup types, 10 reasoning categories |
+
+The intelligence layer closes the feedback loop: decisions create predictions → predictions get scored → belief updater adjusts weights and calibration → context builder surfaces this at decision time.
+
+```python
+# Get decision context before trading
+from src.intelligence.context_builder import DecisionContextBuilder
+
+builder = DecisionContextBuilder()
+ctx = builder.build_context("SLB", setup_type="thesis_driven", scenario="trade_decision")
+print(ctx.summary)  # Track record, calibration, learnings
+
+# Log explicit predictions after deciding
+from src.db.write_api import athena_db
+
+athena_db.save_prediction({
+    "decision_id": decision_id,
+    "symbol": "SLB",
+    "prediction_type": "direction",
+    "direction": "bullish",
+    "confidence": 0.75,
+    "timeframe_days": 10,
+    "reasoning_category": "thesis_driven",
+})
+
+# Run daily belief update
+from src.intelligence.belief_updater import BeliefUpdater
+
+updater = BeliefUpdater()
+report = updater.run_daily_update()
+print(report.learning_summary)
+```
+
+**Cron automation**: Prediction scorer (5:15 PM) + Belief updater (5:30 PM) run daily on weekdays.
+
+**Web dashboard**: Browse at `/intelligence` — scorecard, calibration chart, setup type performance, prediction list.
+
 ### Decision Layer (ENHANCED)
 
 | Component | Location | Purpose |
@@ -808,10 +853,12 @@ tail -20 ~/quant_results/logs/agent_activity.jsonl
 | **Knowledge** | `~/quant_results/knowledge/` |
 | **Improvements** | `~/quant_results/improvements/` |
 | **Signal Quality** | `~/quant_results/signal_quality/` |
+| **Intelligence** | `~/quant_results/intelligence/` |
 | **Operator Logs** | `~/quant_results/logs/operator_log.jsonl` |
 | **Skills** | `.claude/skills/*/SKILL.md` |
 | **Agents** | `.claude/agents/*.md` |
 | **Synthesis Layer** | `src/synthesis/` |
+| **Intelligence Layer** | `src/intelligence/` |
 | **Knowledge Layer** | `src/knowledge/` |
 | **Decision Engine** | `src/decision/` |
 | **Document Index** | `src/db/models.py`, `src/web/services/document_service.py` |
@@ -828,7 +875,7 @@ All outputs in configurable results directory (default: `~/quant_results`):
 | Directory | Contents |
 |-----------|----------|
 | `live/state.json` | **THE source of truth** |
-| `athena.db` | SQLite database (18 tables: theses, decisions, agents, documents, insights, experiments, etc.) |
+| `athena.db` | SQLite database (19 tables: theses, decisions, predictions, agents, documents, insights, experiments, etc.) |
 | `live/research/` | Pre-computed features, signals, screens |
 | `theses/` | Investment thesis YAML files |
 | `learnings/` | Monthly learning JSON files |
@@ -840,6 +887,7 @@ All outputs in configurable results directory (default: `~/quant_results`):
 | `research_results/` | Research agent output files |
 | `improvements/` | Auto-generated improvement suggestions |
 | `signal_quality/` | Signal quality metrics and outcomes |
+| `intelligence/` | Calibration data, belief update reports, metrics history |
 | `logs/operator_log.jsonl` | Operator session observations |
 
 ---
@@ -972,6 +1020,8 @@ job_postings: 3 days
 | `cron_paper_trading_review.py` | 5:30 PM Mon-Fri | Review paper trading, advance pipeline |
 | `cron_concentration_check.py` | Every 2 hours Mon-Fri | Monitor portfolio concentration |
 | `cron_trade_wrapper.sh` | 9:31 AM Mon-Fri | Execute scheduled trades at market open |
+| `cron_prediction_scorer.py` | 5:15 PM Mon-Fri | Auto-score resolved predictions |
+| `cron_belief_update.py` | 5:30 PM Mon-Fri | Update signal weights, calibration, thesis suggestions |
 | `cron_weekly_improvement_review.py` | Sunday 6 PM | Weekly improvement analysis |
 
 ```bash
@@ -1021,6 +1071,7 @@ crontab -l | grep QUANT_SUITE_CRON
 | **Run autonomous trading** | `docs/AUTONOMOUS_TRADING_ARCHITECTURE.md` - Swarm intelligence & agent frameworks |
 | **Find data sources** | `docs/FREE_DATA_SOURCES.md` - 40+ implemented sources |
 | **See hedge fund features** | `docs/ARCHITECTURE_DIAGRAMS.md` Section 14 - HF expansion modules |
+| **Check prediction accuracy** | Web UI at `/intelligence` — scorecard, calibration, predictions |
 | **Identify opportunities** | `docs/ALTERNATIVE_DATA_OPPORTUNITIES.md` - Missed opportunities analysis |
 
 ### Reference Documentation

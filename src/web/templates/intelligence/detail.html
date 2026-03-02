@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% set active_page = "intelligence" %}
+{% block title %}Prediction: {{ prediction.symbol }} {{ prediction.prediction_type }}{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <!-- Breadcrumb -->
+    <div class="text-xs text-gray-500">
+        <a href="/intelligence" class="hover:text-gray-300">Intelligence</a>
+        <span class="mx-1">/</span>
+        <a href="/intelligence/predictions" class="hover:text-gray-300">Predictions</a>
+        <span class="mx-1">/</span>
+        <span class="text-gray-400">{{ prediction.symbol }} {{ prediction.prediction_type }}</span>
+    </div>
+
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="flex items-center gap-3">
+                <h1 class="text-xl font-bold text-gray-100">
+                    <span class="mono text-emerald-400">{{ prediction.symbol }}</span>
+                    <span class="text-gray-400 text-sm ml-2">{{ prediction.prediction_type }}</span>
+                </h1>
+                <span class="rounded-full px-2.5 py-0.5 text-xs
+                    {% if prediction.direction == 'bullish' %}bg-emerald-900/50 text-emerald-400
+                    {% elif prediction.direction == 'bearish' %}bg-red-900/50 text-red-400
+                    {% else %}bg-gray-800 text-gray-400{% endif %}">
+                    {{ prediction.direction }}
+                </span>
+                <span class="rounded-full px-2.5 py-0.5 text-xs
+                    {% if prediction.status == 'open' %}bg-yellow-900/50 text-yellow-400
+                    {% elif prediction.status == 'hit' %}bg-emerald-900/50 text-emerald-400
+                    {% elif prediction.status == 'miss' %}bg-red-900/50 text-red-400
+                    {% elif prediction.status == 'expired' %}bg-gray-800 text-gray-500
+                    {% else %}bg-gray-800 text-gray-400{% endif %}">
+                    {{ prediction.status }}
+                </span>
+            </div>
+            <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                <span class="mono">{{ prediction.created[:16] if prediction.created else "" }}</span>
+                <span>Confidence: <span class="mono font-medium
+                    {% if prediction.confidence >= 0.7 %}text-emerald-400
+                    {% elif prediction.confidence >= 0.4 %}text-yellow-400
+                    {% else %}text-red-400{% endif %}">{{ "%.0f"|format(prediction.confidence * 100) }}%</span></span>
+                <span>Timeframe: <span class="mono">{{ prediction.timeframe_days }}d</span></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column -->
+        <div class="lg:col-span-2 space-y-4">
+            <!-- Reasoning -->
+            {% if prediction.key_reasoning %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Reasoning</h2>
+                <p class="text-sm text-gray-300 leading-relaxed">{{ prediction.key_reasoning }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Target -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Prediction Target</h2>
+                <div class="space-y-2 text-sm">
+                    {% if prediction.target_value is not none %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Target Value</span>
+                        <span class="mono text-gray-300">
+                            {% if prediction.prediction_type in ['timeframe_move', 'relative_perf'] %}
+                                {{ "%+.1f"|format(prediction.target_value) }}%
+                            {% else %}
+                                ${{ "%.2f"|format(prediction.target_value) }}
+                            {% endif %}
+                        </span>
+                    </div>
+                    {% endif %}
+                    {% if prediction.target_description %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Description</span>
+                        <span class="text-gray-300">{{ prediction.target_description }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Resolve By</span>
+                        <span class="mono text-gray-300">{{ prediction.resolve_by[:10] if prediction.resolve_by else "N/A" }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resolution -->
+            {% if prediction.status != 'open' %}
+            <div class="bg-gray-900 border border-{% if prediction.status == 'hit' %}emerald{% elif prediction.status == 'miss' %}red{% else %}gray{% endif %}-900/30 rounded-lg p-4">
+                <h2 class="text-sm font-semibold {% if prediction.status == 'hit' %}text-emerald-400{% elif prediction.status == 'miss' %}text-red-400{% else %}text-gray-300{% endif %} mb-2">
+                    Resolution: {{ prediction.status | upper }}
+                </h2>
+                <div class="space-y-2 text-sm">
+                    {% if prediction.actual_value is not none %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Actual Value</span>
+                        <span class="mono text-gray-300">${{ "%.2f"|format(prediction.actual_value) }}</span>
+                    </div>
+                    {% endif %}
+                    {% if prediction.brier_score is not none %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Brier Score</span>
+                        <span class="mono text-gray-300">{{ "%.4f"|format(prediction.brier_score) }}</span>
+                    </div>
+                    {% endif %}
+                    {% if prediction.resolved_at %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Resolved At</span>
+                        <span class="mono text-gray-300">{{ prediction.resolved_at[:16] }}</span>
+                    </div>
+                    {% endif %}
+                    {% if prediction.timing_error_days is not none %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Timing Error</span>
+                        <span class="mono text-gray-300">{{ prediction.timing_error_days }} days</span>
+                    </div>
+                    {% endif %}
+                    {% if prediction.resolution_notes %}
+                    <div class="border-t border-gray-800 pt-2 mt-2">
+                        <p class="text-xs text-gray-400">{{ prediction.resolution_notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column -->
+        <div class="space-y-4">
+            <!-- Metadata -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Details</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">ID</span>
+                        <span class="mono text-xs text-gray-400">{{ prediction.id[:30] }}...</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Category</span>
+                        <span class="rounded-full px-2 py-0.5 text-xs bg-gray-800 text-gray-400">{{ prediction.reasoning_category }}</span>
+                    </div>
+                    {% if prediction.setup_type %}
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Setup Type</span>
+                        <span class="rounded-full px-2 py-0.5 text-xs bg-gray-800 text-gray-400">{{ prediction.setup_type }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Links -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Links</h2>
+                <div class="space-y-2">
+                    {% if prediction.decision_id %}
+                    <a href="/decisions/{{ prediction.decision_id }}" class="block text-sm text-emerald-400 hover:underline">
+                        Decision &rarr;
+                    </a>
+                    {% endif %}
+                    {% if prediction.thesis_id %}
+                    <a href="/theses/{{ prediction.thesis_id }}" class="block text-sm text-emerald-400 hover:underline">
+                        Thesis &rarr;
+                    </a>
+                    {% endif %}
+                    <a href="/intelligence/context/{{ prediction.symbol }}" class="block text-sm text-blue-400 hover:underline">
+                        Symbol Context &rarr;
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

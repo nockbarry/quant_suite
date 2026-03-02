@@ -99,7 +99,27 @@ Adversarial Analysis:
 - Confidence Adjustment: -5%
 ```
 
-### 3. Learning Loop
+### 3. Compounding Intelligence Loop
+
+Every decision creates **explicit, testable predictions** that are auto-scored daily:
+
+```
+=== DECISION CONTEXT: SLB ===
+SYMBOL TRACK RECORD: 12 decisions, 75% win rate, avg +3.2%
+SETUP TYPE (thesis_driven): 81% win rate — YOUR BEST SETUP TYPE
+CONFIDENCE CALIBRATION: When you say 70%, you're right 58% of the time
+PREDICTION HISTORY: 8 predictions, 63% accurate, timing 2.3 days late
+```
+
+The system closes the feedback loop:
+1. **Predict** — Every trade logs explicit direction/price predictions
+2. **Score** — Automated cron scores predictions daily at 5:15 PM
+3. **Learn** — Belief updater computes calibration, adjusts signal weights at 5:30 PM
+4. **Apply** — Context builder surfaces track record and calibration at decision time
+
+This means the system gets **measurably smarter** over time, tracked via prediction accuracy, Brier scores, and calibration error.
+
+### 4. Learning Loop
 
 Learnings are extracted from every closed position:
 
@@ -113,7 +133,7 @@ Tags: [insider, thesis, energy, confluence]
 
 These learnings persist and inform future decisions.
 
-### 4. Pre-Mortem Thinking
+### 5. Pre-Mortem Thinking
 
 Before every trade: "It's 30 days later and I lost money. What happened?"
 
@@ -149,6 +169,11 @@ Intraday ─── LiveDaemon ────────────────�
            │                                 Extract learnings, log signal outcomes
            │                                 Update thesis conviction
            │
+5:15 PM  ─── cron_prediction_scorer ─────► Auto-score resolved predictions
+           │
+5:30 PM  ─── cron_belief_update ─────────► Update signal weights, calibration
+           │                                 Generate learning summary
+           │
 Sunday   ─── cron_weekly_improvement_review ► Generate improvement suggestions
 ```
 
@@ -182,7 +207,7 @@ claude /eod-review
 
 ```
 ~/quant_results/
-├── athena.db                   # SQLite database (18 tables)
+├── athena.db                   # SQLite database (19 tables)
 ├── live/                       # THE source of truth
 │   ├── state.json             # Unified state (READ THIS FIRST)
 │   └── research/              # Pre-computed research files
@@ -205,6 +230,11 @@ claude /eod-review
 │
 ├── improvements/               # Auto-generated improvement suggestions
 │   └── suggestions.json
+│
+├── intelligence/              # Compounding intelligence loop
+│   ├── calibration.json       # Confidence calibration bins
+│   ├── metrics_history.jsonl  # Daily "getting smarter" metrics
+│   └── daily_update_*.json    # Belief update reports
 │
 ├── signal_quality/             # Signal quality metrics
 │   ├── quality.json
@@ -294,6 +324,14 @@ python -m src.monitoring.swarm_visualizer --watch
 | `AccountManager` | Multi-account support (live/paper/tracking) |
 | `AlpacaBroker` | Broker integration for paper and live trading |
 | `PDTManager` | Pattern day trading compliance |
+
+### Intelligence Layer
+| Component | Purpose |
+|-----------|---------|
+| `DecisionContextBuilder` | Assemble track record, calibration, and learnings at decision time |
+| `SetupScorer` | Performance analytics by setup type |
+| `BeliefUpdater` | Daily signal weight updates, thesis suggestions, calibration |
+| `PredictionRecord` | Explicit, testable predictions linked to decisions |
 
 ### Decision Layer
 | Component | Purpose |

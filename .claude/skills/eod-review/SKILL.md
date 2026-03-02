@@ -377,6 +377,58 @@ Review saved to: /home/nock/quant_results/eod_reviews/review_20260106.json
 Learning saved to: /home/nock/quant_results/learnings/2026-01.json
 ```
 
+## Step 6: Score Predictions & Run Belief Update (Intelligence Loop)
+
+**CRITICAL: This closes the feedback loop.** Score today's predictions and update beliefs.
+
+```bash
+# Score any predictions that have reached their resolve_by date
+PYTHONPATH=/home/nock/projects/quant_suite python3 scripts/cron_prediction_scorer.py
+```
+
+```bash
+# Run belief update — updates signal weights, suggests thesis conviction changes
+PYTHONPATH=/home/nock/projects/quant_suite python3 scripts/cron_belief_update.py
+```
+
+```bash
+# Review the belief update report
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+import json
+from pathlib import Path
+from datetime import datetime
+
+# Read today's belief update
+date_str = datetime.now().strftime("%Y%m%d")
+report_path = Path.home() / "quant_results" / "intelligence" / f"daily_update_{date_str}.json"
+
+if report_path.exists():
+    report = json.loads(report_path.read_text())
+    print(report.get("learning_summary", "No update available"))
+
+    # Show any thesis conviction suggestions
+    for s in report.get("thesis_suggestions", []):
+        print(f"\n  SUGGESTION: {s['thesis_name']}")
+        print(f"    Current: {s['current_conviction']}%, Change: {s['suggested_change']:+}%")
+        print(f"    Reason: {s['reason']}")
+else:
+    print("No belief update for today. Run the scorer and updater first.")
+EOF
+```
+
+Review the suggestions. Apply thesis conviction changes if they make sense:
+
+```python
+from src.db.write_api import athena_db
+
+# If belief update suggests increasing conviction:
+athena_db.update_conviction(
+    thesis_id="...",
+    value=80.0,
+    reason="Belief update: 78% prediction accuracy over 12 predictions"
+)
+```
+
 ## Learning Loop Integration
 
 The EOD review feeds back into tomorrow's decisions:

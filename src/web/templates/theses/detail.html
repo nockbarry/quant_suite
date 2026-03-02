@@ -194,6 +194,52 @@
             </div>
             {% endif %}
 
+            <!-- Prediction History (loaded via HTMX) -->
+            <div hx-get="/intelligence/predictions?status=&symbol=&prediction_type=" hx-trigger="none">
+                <!-- Predictions linked to this thesis are shown inline -->
+            </div>
+            {% if thesis_predictions %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-semibold text-gray-300">Linked Predictions</h2>
+                    <span class="text-xs text-gray-600">{{ thesis_predictions | length }} predictions</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                                <th class="px-3 py-2 text-left">Date</th>
+                                <th class="px-3 py-2 text-left">Symbol</th>
+                                <th class="px-3 py-2 text-left">Type</th>
+                                <th class="px-3 py-2 text-right">Conf</th>
+                                <th class="px-3 py-2 text-left">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in thesis_predictions[:10] %}
+                            <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer"
+                                onclick="window.location='/intelligence/predictions/{{ p.id }}'">
+                                <td class="px-3 py-1.5 mono text-xs text-gray-400">{{ p.created[:10] if p.created else "" }}</td>
+                                <td class="px-3 py-1.5 mono text-emerald-400 text-xs">{{ p.symbol }}</td>
+                                <td class="px-3 py-1.5 text-xs text-gray-400">{{ p.prediction_type }}</td>
+                                <td class="px-3 py-1.5 text-right mono text-xs text-gray-300">{{ "%.0f"|format(p.confidence * 100) }}%</td>
+                                <td class="px-3 py-1.5">
+                                    <span class="rounded-full px-2 py-0.5 text-[10px]
+                                        {% if p.status == 'open' %}bg-yellow-900/50 text-yellow-400
+                                        {% elif p.status == 'hit' %}bg-emerald-900/50 text-emerald-400
+                                        {% elif p.status == 'miss' %}bg-red-900/50 text-red-400
+                                        {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                        {{ p.status }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Linked Decisions -->
             <div class="bg-gray-900 border border-gray-800 rounded-lg">
                 <div class="px-4 py-3 border-b border-gray-800">

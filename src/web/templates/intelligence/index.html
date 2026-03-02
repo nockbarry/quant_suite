@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% set active_page = "intelligence" %}
+{% block title %}Intelligence Dashboard{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Intelligence Dashboard</h1>
+            <p class="text-xs text-gray-500 mt-1">Compounding intelligence loop — prediction tracking, calibration, and belief updates</p>
+        </div>
+        <a href="/intelligence/predictions" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition">
+            All Predictions &rarr;
+        </a>
+    </div>
+
+    <!-- Top Stats Bar -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Predictions</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ summary.total_predictions }}</p>
+            <p class="text-[10px] text-gray-500">{{ summary.open_predictions }} open</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Accuracy</p>
+            <p class="mono text-lg font-bold {% if summary.prediction_accuracy >= 0.6 %}text-emerald-400{% elif summary.prediction_accuracy >= 0.4 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                {{ "%.0f"|format(summary.prediction_accuracy * 100) }}%
+            </p>
+            <p class="text-[10px] text-gray-500">{{ summary.total_resolved }} resolved</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Brier Score</p>
+            <p class="mono text-lg font-bold text-gray-200">
+                {% if summary.avg_brier_score is not none %}{{ "%.3f"|format(summary.avg_brier_score) }}{% else %}&mdash;{% endif %}
+            </p>
+            <p class="text-[10px] text-gray-500">lower is better</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Calibration Err</p>
+            <p class="mono text-lg font-bold {% if calibration.calibration_error <= 0.1 %}text-emerald-400{% elif calibration.calibration_error <= 0.2 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                {{ "%.1f"|format(calibration.calibration_error * 100) }}%
+            </p>
+            <p class="text-[10px] text-gray-500">{% if calibration.overconfident %}overconfident{% else %}well calibrated{% endif %}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Decision Win Rate</p>
+            <p class="mono text-lg font-bold {% if summary.decision_win_rate_30d >= 0.6 %}text-emerald-400{% elif summary.decision_win_rate_30d >= 0.4 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                {{ "%.0f"|format(summary.decision_win_rate_30d * 100) }}%
+            </p>
+            <p class="text-[10px] text-gray-500">30d rolling ({{ summary.recent_decisions_30d }})</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Best Setup</p>
+            <p class="mono text-sm font-bold text-emerald-400 truncate">
+                {% if summary.best_setup_types %}{{ summary.best_setup_types[0] }}{% else %}&mdash;{% endif %}
+            </p>
+            <p class="text-[10px] text-gray-500">highest win rate</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left 2/3: Tables -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Prediction Scorecard -->
+            {% if scorecard.total > 0 %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg">
+                <div class="px-4 py-3 border-b border-gray-800">
+                    <h2 class="text-sm font-semibold text-gray-300">Prediction Scorecard by Type</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                                <th class="px-4 py-2 text-left">Type</th>
+                                <th class="px-4 py-2 text-right">Total</th>
+                                <th class="px-4 py-2 text-right">Hits</th>
+                                <th class="px-4 py-2 text-right">Accuracy</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for type_name, type_data in scorecard.by_type.items() %}
+                            <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                <td class="px-4 py-2 mono text-gray-300">{{ type_name }}</td>
+                                <td class="px-4 py-2 text-right mono text-gray-400">{{ type_data.total }}</td>
+                                <td class="px-4 py-2 text-right mono text-gray-400">{{ type_data.hits }}</td>
+                                <td class="px-4 py-2 text-right mono font-medium
+                                    {% if type_data.accuracy >= 0.6 %}text-emerald-400{% elif type_data.accuracy >= 0.4 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                                    {{ "%.0f"|format(type_data.accuracy * 100) }}%
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="border-t border-gray-700 font-medium">
+                                <td class="px-4 py-2 text-gray-200">Overall</td>
+                                <td class="px-4 py-2 text-right mono text-gray-300">{{ scorecard.total }}</td>
+                                <td class="px-4 py-2 text-right mono text-gray-300">{{ scorecard.hits }}</td>
+                                <td class="px-4 py-2 text-right mono
+                                    {% if scorecard.accuracy >= 0.6 %}text-emerald-400{% elif scorecard.accuracy >= 0.4 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                                    {{ "%.0f"|format(scorecard.accuracy * 100) }}%
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Setup Type Performance -->
+            {% if setup_types %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg">
+                <div class="px-4 py-3 border-b border-gray-800">
+                    <h2 class="text-sm font-semibold text-gray-300">Setup Type Performance</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                                <th class="px-4 py-2 text-left">Setup Type</th>
+                                <th class="px-4 py-2 text-right">Trades</th>
+                                <th class="px-4 py-2 text-right">W / L</th>
+                                <th class="px-4 py-2 text-right">Win Rate</th>
+                                <th class="px-4 py-2 text-right">Avg Return</th>
+                                <th class="px-4 py-2 text-right">Avg Hold</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for st in setup_types %}
+                            <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                <td class="px-4 py-2">
+                                    <span class="mono text-gray-300">{{ st.setup_type }}</span>
+                                    {% if not st.sample_adequate %}
+                                    <span class="ml-1 text-[10px] text-gray-600">(low n)</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-2 text-right mono text-gray-400">{{ st.total_decisions }}</td>
+                                <td class="px-4 py-2 text-right mono text-gray-400">{{ st.wins }} / {{ st.losses }}</td>
+                                <td class="px-4 py-2 text-right mono font-medium
+                                    {% if st.win_rate >= 0.6 %}text-emerald-400{% elif st.win_rate >= 0.4 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                                    {{ "%.0f"|format(st.win_rate * 100) }}%
+                                </td>
+                                <td class="px-4 py-2 text-right mono {% if st.avg_return_pct >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                                    {{ "%+.1f"|format(st.avg_return_pct) }}%
+                                </td>
+                                <td class="px-4 py-2 text-right mono text-gray-400">{{ "%.0f"|format(st.avg_hold_days) }}d</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Recent Predictions -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg">
+                <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                    <h2 class="text-sm font-semibold text-gray-300">Recent Predictions</h2>
+                    <a href="/intelligence/predictions" class="text-xs text-emerald-400 hover:underline">View all &rarr;</a>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                                <th class="px-4 py-2 text-left">Date</th>
+                                <th class="px-4 py-2 text-left">Symbol</th>
+                                <th class="px-4 py-2 text-left">Type</th>
+                                <th class="px-4 py-2 text-left">Direction</th>
+                                <th class="px-4 py-2 text-right">Conf</th>
+                                <th class="px-4 py-2 text-left">Status</th>
+                                <th class="px-4 py-2 text-right">Brier</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in recent_predictions %}
+                            <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer"
+                                onclick="window.location='/intelligence/predictions/{{ p.id }}'">
+                                <td class="px-4 py-2 mono text-xs text-gray-400">{{ p.created[:10] if p.created else "" }}</td>
+                                <td class="px-4 py-2 mono text-emerald-400">{{ p.symbol }}</td>
+                                <td class="px-4 py-2 text-xs text-gray-400">{{ p.prediction_type }}</td>
+                                <td class="px-4 py-2">
+                                    <span class="rounded-full px-2 py-0.5 text-[10px]
+                                        {% if p.direction == 'bullish' %}bg-emerald-900/50 text-emerald-400
+                                        {% elif p.direction == 'bearish' %}bg-red-900/50 text-red-400
+                                        {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                        {{ p.direction }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 text-right mono text-gray-300">{{ "%.0f"|format(p.confidence * 100) }}%</td>
+                                <td class="px-4 py-2">
+                                    <span class="rounded-full px-2 py-0.5 text-[10px]
+                                        {% if p.status == 'open' %}bg-yellow-900/50 text-yellow-400
+                                        {% elif p.status == 'hit' %}bg-emerald-900/50 text-emerald-400
+                                        {% elif p.status == 'miss' %}bg-red-900/50 text-red-400
+                                        {% elif p.status == 'expired' %}bg-gray-800 text-gray-500
+                                        {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                        {{ p.status }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 text-right mono text-gray-400">
+                                    {% if p.brier_score is not none %}{{ "%.3f"|format(p.brier_score) }}{% else %}&mdash;{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not recent_predictions %}
+                            <tr><td colspan="7" class="px-4 py-8 text-center text-gray-600">No predictions yet. Run /trade-decision to start logging predictions.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right 1/3: Charts and summaries -->
+        <div class="space-y-6">
+            <!-- Calibration Chart -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Confidence Calibration</h2>
+                {% if calibration.bins %}
+                <div style="height: 200px;">
+                    <canvas id="calibrationChart"></canvas>
+                </div>
+                <p class="text-[10px] text-gray-500 mt-2">Diagonal = perfect calibration. Points above = overconfident.</p>
+                {% else %}
+                <p class="text-sm text-gray-600">No resolved predictions yet.</p>
+                {% endif %}
+            </div>
+
+            <!-- Scorecard by Category -->
+            {% if scorecard.by_category %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Accuracy by Reasoning</h2>
+                <div class="space-y-2">
+                    {% for cat_name, cat_data in scorecard.by_category.items() %}
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-gray-400">{{ cat_name }}</span>
+                        <div class="flex items-center gap-2">
+                            <div class="w-20 bg-gray-800 rounded-full h-1.5">
+                                <div class="h-1.5 rounded-full {% if cat_data.accuracy >= 0.6 %}bg-emerald-500{% elif cat_data.accuracy >= 0.4 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
+                                     style="width: {{ (cat_data.accuracy * 100) | int }}%;"></div>
+                            </div>
+                            <span class="mono text-xs font-medium w-8 text-right
+                                {% if cat_data.accuracy >= 0.6 %}text-emerald-400{% elif cat_data.accuracy >= 0.4 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                                {{ "%.0f"|format(cat_data.accuracy * 100) }}%
+                            </span>
+                            <span class="text-[10px] text-gray-600 w-6 text-right">{{ cat_data.total }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Signal Quality Leaderboard -->
+            {% if signal_quality %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Signal Quality</h2>
+                <div class="space-y-2">
+                    {% for sq in signal_quality[:8] %}
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-gray-400">{{ sq.signal_type }}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="mono text-xs {% if sq.hit_rate >= 0.6 %}text-emerald-400{% elif sq.hit_rate >= 0.4 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                                {{ "%.0f"|format(sq.hit_rate * 100) }}%
+                            </span>
+                            <span class="text-[10px]
+                                {% if sq.trend == 'improving' %}text-emerald-500
+                                {% elif sq.trend == 'declining' %}text-red-500
+                                {% else %}text-gray-600{% endif %}">
+                                {% if sq.trend == 'improving' %}&#9650;{% elif sq.trend == 'declining' %}&#9660;{% else %}&#9644;{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if calibration.bins %}
+<script>
+(function() {
+    const bins = {{ calibration.bins | tojson | safe }};
+    if (!bins || bins.length === 0) return;
+
+    const predicted = bins.map(b => b.predicted);
+    const actual = bins.map(b => b.actual);
+    const labels = bins.map(b => b.range);
+
+    new Chart(document.getElementById('calibrationChart'), {
+        type: 'scatter',
+        data: {
+            datasets: [
+                {
+                    label: 'Calibration',
+                    data: predicted.map((p, i) => ({x: p * 100, y: actual[i] * 100})),
+                    backgroundColor: '#10b981',
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
+                },
+                {
+                    label: 'Perfect',
+                    data: [{x: 0, y: 0}, {x: 100, y: 100}],
+                    type: 'line',
+                    borderColor: '#4b5563',
+                    borderDash: [5, 5],
+                    borderWidth: 1,
+                    pointRadius: 0,
+                    fill: false,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            if (ctx.datasetIndex === 0) {
+                                const idx = ctx.dataIndex;
+                                return `${labels[idx]}: predicted ${ctx.parsed.x}%, actual ${ctx.parsed.y}% (n=${bins[idx].n})`;
+                            }
+                            return '';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    min: 0, max: 100,
+                    title: { display: true, text: 'Predicted %', color: '#6b7280', font: { size: 10 } },
+                    ticks: { color: '#6b7280', font: { size: 9 } },
+                    grid: { color: '#1f2937' },
+                },
+                y: {
+                    min: 0, max: 100,
+                    title: { display: true, text: 'Actual %', color: '#6b7280', font: { size: 10 } },
+                    ticks: { color: '#6b7280', font: { size: 9 } },
+                    grid: { color: '#1f2937' },
+                },
+            }
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

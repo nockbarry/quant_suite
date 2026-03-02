@@ -72,6 +72,54 @@ asyncio.run(main())
 EOF
 ```
 
+## Belief Update Review (Intelligence Loop)
+
+Read yesterday's belief update report and calibration data to start the day informed:
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+import json
+from pathlib import Path
+from datetime import datetime, timedelta
+
+results = Path.home() / "quant_results" / "intelligence"
+
+# Find most recent belief update
+yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+report_path = results / f"daily_update_{yesterday}.json"
+
+if report_path.exists():
+    report = json.loads(report_path.read_text())
+    print("=== YESTERDAY'S BELIEF UPDATE ===")
+    print(report.get("learning_summary", "No summary"))
+
+    # Thesis conviction suggestions to consider
+    for s in report.get("thesis_suggestions", []):
+        print(f"\n  ACTION: {s['thesis_name']}: {'increase' if s['suggested_change'] > 0 else 'decrease'} "
+              f"by {abs(s['suggested_change'])}% (currently {s['current_conviction']}%)")
+        print(f"    Reason: {s['reason']}")
+else:
+    print("No belief update from yesterday.")
+
+# Read calibration data
+cal_path = results / "calibration.json"
+if cal_path.exists():
+    cal = json.loads(cal_path.read_text())
+    if cal.get("overconfident"):
+        print(f"\n  WARNING: You are overconfident by ~{cal.get('calibration_error', 0):.0%}")
+        print("  Discount your confidence levels accordingly.")
+
+# Check open predictions
+from src.db.write_api import athena_db
+open_preds = athena_db.get_open_predictions()
+if open_preds:
+    print(f"\n=== {len(open_preds)} OPEN PREDICTIONS ===")
+    for p in open_preds[:5]:
+        print(f"  {p['symbol']} {p['direction']} ({p['prediction_type']}) "
+              f"conf={p['confidence']:.0%}, resolve by {p.get('resolve_by', 'N/A')[:10]}")
+EOF
+```
+
 ## What's in Unified State
 
 When you read `~/quant_results/live/state.json`, you get:

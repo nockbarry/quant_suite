@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% set active_page = "intelligence" %}
+{% block title %}Predictions{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Predictions</h1>
+            <p class="text-xs text-gray-500 mt-1">Explicit, testable predictions linked to decisions</p>
+        </div>
+        <a href="/intelligence" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition">
+            &larr; Dashboard
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-2">
+        <form class="flex flex-wrap gap-2" method="get" action="/intelligence/predictions">
+            <input type="text" name="symbol" value="{{ filter_symbol }}" placeholder="Symbol..."
+                   class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 w-24 focus:border-emerald-500 focus:outline-none">
+            <select name="status" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none">
+                <option value="">All Status</option>
+                {% for s in statuses %}
+                <option value="{{ s }}" {% if filter_status == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+            <select name="prediction_type" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-xs text-gray-200 focus:border-emerald-500 focus:outline-none">
+                <option value="">All Types</option>
+                {% for t in prediction_types %}
+                <option value="{{ t }}" {% if filter_type == t %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded transition">Filter</button>
+            {% if filter_symbol or filter_status or filter_type %}
+            <a href="/intelligence/predictions" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-400 text-xs rounded transition">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Prediction Table -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-[10px] text-gray-500 uppercase border-b border-gray-800">
+                        <th class="px-4 py-2 text-left">Date</th>
+                        <th class="px-4 py-2 text-left">Symbol</th>
+                        <th class="px-4 py-2 text-left">Type</th>
+                        <th class="px-4 py-2 text-left">Direction</th>
+                        <th class="px-4 py-2 text-right">Confidence</th>
+                        <th class="px-4 py-2 text-left">Description</th>
+                        <th class="px-4 py-2 text-left">Status</th>
+                        <th class="px-4 py-2 text-right">Brier</th>
+                        <th class="px-4 py-2 text-left">Resolve By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in predictions %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer"
+                        onclick="window.location='/intelligence/predictions/{{ p.id }}'">
+                        <td class="px-4 py-2 mono text-xs text-gray-400">{{ p.created[:10] if p.created else "" }}</td>
+                        <td class="px-4 py-2 mono text-emerald-400">{{ p.symbol }}</td>
+                        <td class="px-4 py-2 text-xs text-gray-400">{{ p.prediction_type }}</td>
+                        <td class="px-4 py-2">
+                            <span class="rounded-full px-2 py-0.5 text-[10px]
+                                {% if p.direction == 'bullish' %}bg-emerald-900/50 text-emerald-400
+                                {% elif p.direction == 'bearish' %}bg-red-900/50 text-red-400
+                                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                {{ p.direction }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-right mono text-gray-300">{{ "%.0f"|format(p.confidence * 100) }}%</td>
+                        <td class="px-4 py-2 text-xs text-gray-400 max-w-xs truncate">
+                            {% if p.target_description %}{{ p.target_description[:60] }}{% elif p.target_value %}Target: {{ p.target_value }}{% else %}&mdash;{% endif %}
+                        </td>
+                        <td class="px-4 py-2">
+                            <span class="rounded-full px-2 py-0.5 text-[10px]
+                                {% if p.status == 'open' %}bg-yellow-900/50 text-yellow-400
+                                {% elif p.status == 'hit' %}bg-emerald-900/50 text-emerald-400
+                                {% elif p.status == 'miss' %}bg-red-900/50 text-red-400
+                                {% elif p.status == 'expired' %}bg-gray-800 text-gray-500
+                                {% else %}bg-gray-800 text-gray-400{% endif %}">
+                                {{ p.status }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-right mono text-gray-400">
+                            {% if p.brier_score is not none %}{{ "%.3f"|format(p.brier_score) }}{% else %}&mdash;{% endif %}
+                        </td>
+                        <td class="px-4 py-2 mono text-xs text-gray-500">{{ p.resolve_by[:10] if p.resolve_by else "" }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if not predictions %}
+                    <tr><td colspan="9" class="px-4 py-8 text-center text-gray-600">No predictions match filters.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -82,6 +82,14 @@ async def thesis_detail(request: Request, thesis_id: str):
     from src.web.services import document_service
     related_docs = document_service.get_documents_for_thesis(thesis_id)
 
+    # Linked predictions
+    try:
+        from src.web.services import intelligence_service
+        all_preds = intelligence_service.list_predictions(limit=50)
+        thesis_predictions = [p for p in all_preds if p.get("thesis_id") == thesis_id]
+    except Exception:
+        thesis_predictions = []
+
     return templates.TemplateResponse(
         request,
         "theses/detail.html",
@@ -91,6 +99,7 @@ async def thesis_detail(request: Request, thesis_id: str):
             "decisions": decisions,
             "performance": performance,
             "related_docs": related_docs,
+            "thesis_predictions": thesis_predictions,
             "breadcrumbs": [
                 {"label": "Theses", "url": "/theses"},
                 {"label": thesis.get("name", thesis_id) if isinstance(thesis, dict) else getattr(thesis, "name", thesis_id)},

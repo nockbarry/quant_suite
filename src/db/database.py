@@ -67,7 +67,19 @@ def get_sync_session_factory():
 def init_db():
     """Create all tables if they don't exist (includes new junction tables)."""
     engine = get_sync_engine()
-    Base.metadata.create_all(engine)
+    try:
+        Base.metadata.create_all(engine)
+    except Exception as e:
+        if "already exists" in str(e):
+            # Handle pre-existing indexes from partial creates — create tables one by one
+            logger.warning(f"create_all hit conflict ({e}), creating tables individually")
+            for table in Base.metadata.sorted_tables:
+                try:
+                    table.create(engine, checkfirst=True)
+                except Exception:
+                    pass  # Table/index already exists
+        else:
+            raise
     ensure_columns()
 
 

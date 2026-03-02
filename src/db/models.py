@@ -351,6 +351,97 @@ class LearningRecord(Base):
         return cls(**d)
 
 
+class PredictionRecord(Base):
+    """Explicit, testable predictions linked to decisions and theses.
+
+    Closes the feedback loop: every decision implies predictions,
+    this table makes them explicit and scoreable.
+    """
+
+    __tablename__ = "predictions"
+
+    id = Column(String(100), primary_key=True)
+    created = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Linkage
+    decision_id = Column(String(100), ForeignKey("decisions.id"), nullable=True)
+    thesis_id = Column(String(100), ForeignKey("theses.id"), nullable=True)
+    symbol = Column(String(10), nullable=False, index=True)
+
+    # Prediction content
+    prediction_type = Column(String(30), nullable=False, index=True)
+    # price_target, direction, relative_perf, timeframe_move, event_outcome, thesis_validation
+    direction = Column(String(10), default="bullish")  # bullish, bearish, neutral
+    target_value = Column(Float, nullable=True)  # price target or % move
+    target_description = Column(Text, default="")  # free-text for complex predictions
+    confidence = Column(Float, default=0.5)  # 0-1 predicted probability
+    timeframe_days = Column(Integer, default=10)
+    resolve_by = Column(DateTime, nullable=True, index=True)
+
+    # Reasoning metadata
+    reasoning_category = Column(String(50), default="thesis_driven", index=True)
+    # thesis_driven, technical, geopolitical, earnings, momentum, mean_reversion,
+    # event_driven, sentiment, insider_following, congressional
+    setup_type = Column(String(50), default="")
+    key_reasoning = Column(Text, default="")
+
+    # Resolution
+    status = Column(String(20), default="open", index=True)
+    # open, hit, miss, expired, cancelled
+    resolved_at = Column(DateTime, nullable=True)
+    actual_value = Column(Float, nullable=True)
+    resolution_notes = Column(Text, default="")
+
+    # Scoring
+    brier_score = Column(Float, nullable=True)  # (confidence - outcome)^2
+    accuracy_score = Column(Float, nullable=True)  # 1.0=hit, 0.0=miss
+    timing_error_days = Column(Integer, nullable=True)
+
+    __table_args__ = (
+        Index("ix_predictions_type_status", "prediction_type", "status"),
+        Index("ix_predictions_reasoning_cat", "reasoning_category"),
+        Index("ix_predictions_resolve_by", "resolve_by"),
+        Index("ix_predictions_symbol_status", "symbol", "status"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "created": self.created.isoformat() if self.created else None,
+            "decision_id": self.decision_id,
+            "thesis_id": self.thesis_id,
+            "symbol": self.symbol,
+            "prediction_type": self.prediction_type,
+            "direction": self.direction,
+            "target_value": self.target_value,
+            "target_description": self.target_description,
+            "confidence": self.confidence,
+            "timeframe_days": self.timeframe_days,
+            "resolve_by": self.resolve_by.isoformat() if self.resolve_by else None,
+            "reasoning_category": self.reasoning_category,
+            "setup_type": self.setup_type,
+            "key_reasoning": self.key_reasoning,
+            "status": self.status,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "actual_value": self.actual_value,
+            "resolution_notes": self.resolution_notes,
+            "brier_score": self.brier_score,
+            "accuracy_score": self.accuracy_score,
+            "timing_error_days": self.timing_error_days,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PredictionRecord":
+        d = dict(data)
+        for field in ("created", "resolve_by", "resolved_at"):
+            if isinstance(d.get(field), str):
+                try:
+                    d[field] = datetime.fromisoformat(d[field])
+                except (ValueError, TypeError):
+                    d[field] = None
+        return cls(**d)
+
+
 class DecisionRecord(Base):
     """Mirrors TradingDecision dataclass with provenance extensions."""
 

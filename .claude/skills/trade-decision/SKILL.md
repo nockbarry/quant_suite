@@ -24,6 +24,25 @@ Run `/morning-briefing` first or ensure unified state is fresh.
 
 ## Quick Start
 
+### Step 0: Get Decision Context (Intelligence Loop)
+
+**CRITICAL: Run this BEFORE making any trade decision.** Surfaces your track record,
+calibration data, and relevant learnings for the symbol.
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.intelligence.context_builder import DecisionContextBuilder
+
+# Build context for the symbol you're considering
+builder = DecisionContextBuilder()
+ctx = builder.build_context("SLB", setup_type="thesis_driven", thesis_id=None)
+print(ctx.summary)
+EOF
+```
+
+Review this context and factor it into your confidence level. If the calibration
+data says you're overconfident by 12%, discount your confidence accordingly.
+
 ### Step 1: Load Context
 
 ```bash
@@ -280,6 +299,49 @@ log_signal_outcome(
     acted_on=True,
 )
 ```
+
+## Step 7: Log Predictions (Intelligence Loop)
+
+**After every decision, log explicit predictions.** This is what makes the system
+get smarter over time.
+
+```python
+from src.db.write_api import athena_db
+
+# Log a direction prediction for every BUY/SELL
+athena_db.save_prediction({
+    "decision_id": decision.id,
+    "thesis_id": thesis_id,
+    "symbol": "SLB",
+    "prediction_type": "direction",  # or price_target, timeframe_move, event_outcome
+    "direction": "bullish",          # or bearish
+    "confidence": 0.70,              # Your adjusted confidence
+    "timeframe_days": 10,            # Expected resolution window
+    "reasoning_category": "thesis_driven",  # thesis_driven, technical, geopolitical, etc.
+    "setup_type": "thesis_driven",
+    "key_reasoning": "Venezuela thesis + pre-market strength. Adversary cleared at medium concern.",
+})
+
+# Optional: Log a more specific prediction
+athena_db.save_prediction({
+    "decision_id": decision.id,
+    "symbol": "SLB",
+    "prediction_type": "timeframe_move",
+    "direction": "bullish",
+    "target_value": 5.0,            # Expected +5% move
+    "confidence": 0.55,
+    "timeframe_days": 20,
+    "reasoning_category": "thesis_driven",
+    "key_reasoning": "SLB should hit $48 as Venezuela contracts are announced",
+})
+```
+
+**Prediction types:**
+- `direction` — stock goes up/down (most common)
+- `price_target` — stock reaches specific price
+- `timeframe_move` — stock moves X% within N days
+- `event_outcome` — binary event (earnings beat, FDA approval)
+- `thesis_validation` — thesis plays out as expected
 
 ## Signal Quality Tracking
 

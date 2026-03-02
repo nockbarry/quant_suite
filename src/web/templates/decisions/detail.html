@@ -139,6 +139,13 @@
             </div>
             {% endif %}
 
+            <!-- Decision Context (loaded via HTMX) -->
+            <div hx-get="/intelligence/context/{{ decision.symbol }}" hx-trigger="load" hx-swap="innerHTML">
+                <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                    <p class="text-sm text-gray-600 htmx-indicator">Loading decision context...</p>
+                </div>
+            </div>
+
             <!-- Related Documents -->
             {% if related_docs %}
             <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">

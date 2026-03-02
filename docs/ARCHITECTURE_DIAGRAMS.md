@@ -123,6 +123,16 @@ src/knowledge/
 └── base.py                ──► KnowledgeBase, CompanyBrief, SectorContext
 ```
 
+### Intelligence Layer (`src/intelligence/`) - NEW 2026-03-01
+```
+src/intelligence/
+├── __init__.py            ──► Convenience imports
+├── context_builder.py     ──► DecisionContextBuilder — assembles track record, calibration, learnings
+├── setup_types.py         ──► Canonical setup type taxonomy (11 types, 10 reasoning categories)
+├── setup_scorer.py        ──► SetupScorer — performance by setup type from DecisionRecord
+└── belief_updater.py      ──► BeliefUpdater — daily signal weight updates, thesis suggestions, calibration
+```
+
 ### Decision Layer (`src/decision/`)
 ```
 src/decision/
@@ -1744,9 +1754,174 @@ Sunday ──── cron_weekly_improvement_review.py ────────�
 
 ---
 
+## 16. Compounding Intelligence Layer (Added 2026-03-01)
+
+**Reason**: Close the feedback loop so the system gets measurably smarter over time. Predictions are made explicit, scored automatically, and learnings flow back into future decisions.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                        COMPOUNDING INTELLIGENCE LOOP                                     │
+│                            src/intelligence/                                              │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
+    │  /trade-     │────►│  DecisionContext  │────►│  Better Decision │
+    │  decision    │     │  Builder          │     │  (calibrated)    │
+    └──────────────┘     └──────────────────┘     └────────┬─────────┘
+                              ▲                            │
+                              │                            ▼
+                    ┌─────────┴──────────┐     ┌──────────────────┐
+                    │   Belief Updater   │     │  Log Predictions │
+                    │   (5:30 PM daily)  │     │  (explicit,      │
+                    │                    │     │   testable)      │
+                    │ • Signal weights   │     └────────┬─────────┘
+                    │ • Thesis suggestions│             │
+                    │ • Calibration      │             ▼
+                    │ • Learning summary │  ┌──────────────────┐
+                    └────────────────────┘  │  Auto-Score      │
+                              ▲            │  (5:15 PM daily)  │
+                              │            │                    │
+                              └────────────┤ • Direction check  │
+                                           │ • Price comparison │
+                                           │ • Brier score      │
+                                           └──────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                           PREDICTION TRACKING                                          │
+│                        DB: predictions table (PredictionRecord)                        │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  Prediction Types:                                                                     │
+│    direction | price_target | relative_perf | timeframe_move | event_outcome           │
+│    thesis_validation                                                                   │
+│                                                                                        │
+│  Reasoning Categories:                                                                 │
+│    thesis_driven | technical | geopolitical | earnings | momentum | mean_reversion     │
+│    event_driven | sentiment | insider_following | congressional                        │
+│                                                                                        │
+│  Setup Types (11 canonical):                                                           │
+│    thesis_driven | signal_convergence | technical_breakout | mean_reversion            │
+│    momentum | event_driven | insider_following | congressional | squeeze               │
+│    sector_rotation | rebalance                                                         │
+│                                                                                        │
+│  Lifecycle: open → hit | miss | expired | cancelled                                   │
+│  Scoring: Brier = (confidence - outcome)²                                             │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                           DECISION CONTEXT BUILDER                                     │
+│                        context_builder.py                                               │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  build_context(symbol, setup_type, thesis_id, scenario) → DecisionContext              │
+│                                                                                        │
+│  Scenarios:                                                                            │
+│  ┌──────────────────┬───────────────────────────────────────────────────────────────┐  │
+│  │ trade_decision   │ Full: track record + learnings + signals + calibration        │  │
+│  │ morning_briefing │ Light: thesis status + overnight predictions + belief updates │  │
+│  │ eod_review       │ Outcome: prediction scores + learning extraction prompts     │  │
+│  │ thesis_review    │ Thesis: conviction history + linked predictions + signposts   │  │
+│  └──────────────────┴───────────────────────────────────────────────────────────────┘  │
+│                                                                                        │
+│  DecisionContext contains:                                                             │
+│    symbol_track_record  ─── from DecisionRecord WHERE symbol=X                        │
+│    setup_type_track_record ─── from DecisionRecord WHERE setup_type=X                 │
+│    relevant_learnings   ─── from LearningRecord by symbol/tags                        │
+│    signal_quality       ─── from signal_quality/quality.json                          │
+│    prediction_history   ─── from PredictionRecord                                     │
+│    calibration          ─── from resolved PredictionRecord by confidence bin           │
+│    thesis_context       ─── from ThesisRecord + linked decisions                      │
+│    summary              ─── Pre-formatted text for Claude to read                     │
+│                                                                                        │
+│  Example output:                                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐   │
+│  │  === DECISION CONTEXT: SLB ===                                                  │   │
+│  │  SYMBOL TRACK RECORD: 12 decisions, 75% win rate, avg +3.2%                     │   │
+│  │  SETUP TYPE (thesis_driven): 81% win rate — YOUR BEST SETUP TYPE                │   │
+│  │  CONFIDENCE CALIBRATION: When you say 70%, you're right 58% of the time         │   │
+│  │  PREDICTION HISTORY: 8 predictions, 63% accurate, timing 2.3 days late          │   │
+│  └─────────────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                           BELIEF UPDATE SYSTEM                                         │
+│                        belief_updater.py + cron scripts                                │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  Daily automated pipeline (weekdays):                                                  │
+│                                                                                        │
+│  5:15 PM ─── cron_prediction_scorer.py ─────────────────────────────────────────────  │
+│    1. Query open predictions past resolve_by                                           │
+│    2. Fetch current prices (yfinance)                                                  │
+│    3. Score by type (direction, price_target, timeframe_move)                          │
+│    4. Calculate Brier score: (confidence - outcome)²                                  │
+│    5. Expire predictions >5 days past deadline                                        │
+│                                                                                        │
+│  5:30 PM ─── cron_belief_update.py ─────────────────────────────────────────────────  │
+│    1. Update signal weights (hit_rate × IC)                                            │
+│    2. Suggest thesis conviction changes from prediction accuracy                       │
+│    3. Compute calibration bins and error                                               │
+│    4. Generate learning summary (natural language)                                     │
+│    5. Persist report → intelligence/daily_update_YYYYMMDD.json                        │
+│    6. Append metrics → intelligence/metrics_history.jsonl                              │
+│                                                                                        │
+│  "Getting Smarter" Metrics (tracked daily):                                            │
+│    • Prediction accuracy (rolling 30d)                                                 │
+│    • Average Brier score (rolling 30d)                                                 │
+│    • Calibration error                                                                 │
+│    • Decision win rate (rolling 30d)                                                   │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                           WEB DASHBOARD                                                │
+│                        /intelligence routes + templates                                │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  GET /intelligence/            ─── Main dashboard (scorecard, calibration, setup perf) │
+│  GET /intelligence/predictions ─── Prediction list with filters                        │
+│  GET /intelligence/predictions/{id} ─── Prediction detail with resolution timeline    │
+│  GET /intelligence/context/{symbol}  ─── Decision context (page + HTMX partial)       │
+│  GET /intelligence/calibration ─── JSON calibration data for Chart.js                 │
+│  GET /intelligence/setup-types ─── JSON setup type performance                        │
+│                                                                                        │
+│  HTMX Integration:                                                                    │
+│    decisions/detail.html ─── loads /intelligence/context/{symbol} partial              │
+│    theses/detail.html ─── shows linked prediction history table                       │
+│                                                                                        │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Module Summary Table
+
+| Module | Location | Purpose |
+|--------|----------|---------|
+| `context_builder.py` | `src/intelligence/` | Assemble decision context from DB tables |
+| `setup_types.py` | `src/intelligence/` | Canonical setup type and reasoning taxonomies |
+| `setup_scorer.py` | `src/intelligence/` | Setup type performance from DecisionRecord |
+| `belief_updater.py` | `src/intelligence/` | Daily signal weights, calibration, thesis suggestions |
+| `intelligence_service.py` | `src/web/services/` | DB queries for intelligence dashboard |
+| `intelligence.py` | `src/web/routes/` | 6 FastAPI routes for intelligence UI |
+| `cron_prediction_scorer.py` | `scripts/` | Automated prediction scoring (5:15 PM) |
+| `cron_belief_update.py` | `scripts/` | Automated belief updates (5:30 PM) |
+| `backfill_predictions.py` | `scripts/` | One-time backfill from existing decisions |
+
+### Skill Integration
+
+| Skill | Change |
+|-------|--------|
+| `/trade-decision` | Step 0: Get decision context before deciding. Step 7: Log explicit predictions. |
+| `/eod-review` | Step 6: Score predictions and run belief update. |
+| `/morning-briefing` | Read yesterday's belief update report and calibration data. |
+
+---
+
 *Generated: 2026-01-07*
 *Updated: 2026-01-10 - Added Data Collection Daemon and 20+ free data sources*
 *Updated: 2026-01-11 - Added Promotion Pipeline, Thesis Performance, Strategy Dashboard, Holiday Calendar*
 *Updated: 2026-01-20 - Added Hedge Fund Expansion (15 modules, 5,700 lines)*
 *Updated: 2026-01-20 - Added Monitoring & Operator Layer (6 modules, 3,100+ lines)*
+*Updated: 2026-03-01 - Added Compounding Intelligence Layer (predictions, context builder, belief updater)*
 *This document should be updated when major architectural changes are made.*
