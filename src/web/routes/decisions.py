@@ -1,6 +1,7 @@
 """Decisions routes — trade decision list and full lineage view."""
 
 import html as html_mod
+import json
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse
@@ -224,3 +225,209 @@ async def decision_lineage_partial(request: Request, decision_id: str):
 
     parts.append("</div>")
     return HTMLResponse(content="".join(parts))
+
+
+@router.get("/{decision_id}/context/{panel_type}")
+async def decision_context_panel(request: Request, decision_id: str, panel_type: str):
+    """HTMX partial for decision context panels.
+
+    Panel types: market_snapshot, web_search, news_item, operator_obs, agent_output, reasoning, all
+    """
+    valid_panels = {"market_snapshot", "web_search", "news_item", "operator_obs", "agent_output", "reasoning", "all"}
+    if panel_type not in valid_panels:
+        raise HTTPException(status_code=400, detail=f"Invalid panel type: {panel_type}")
+
+    ctx_data = decision_service.get_decision_context(
+        decision_id,
+        panel_type=None if panel_type == "all" else panel_type,
+    )
+
+    events = ctx_data.get("events", [])
+    embedded = ctx_data.get("embedded_context", {})
+
+    def _esc(val):
+        return html_mod.escape(str(val)) if val else ""
+
+    parts = []
+
+    if not events and not embedded:
+        parts.append('<p class="text-sm text-gray-600">No context data captured for this decision.</p>')
+        return HTMLResponse(content="".join(parts))
+
+    # Market snapshot panel
+    if panel_type in ("market_snapshot", "all"):
+        snap = embedded.get("market_snapshot")
+        if isinstance(snap, dict) and not snap.get("error"):
+            parts.append(_render_market_snapshot(snap, _esc))
+        # Also render from ProcessEvent rows
+        for evt in events:
+            if evt.get("event_type") == "market_snapshot":
+                detail = evt.get("detail", "")
+                if isinstance(detail, str):
+                    try:
+                        detail = json.loads(detail)
+                    except (json.JSONDecodeError, TypeError):
+                        detail = {}
+                if isinstance(detail, dict):
+                    parts.append(_render_market_snapshot(detail, _esc))
+
+    # Web searches
+    if panel_type in ("web_search", "all"):
+        items = embedded.get("web_searches", [])
+        ws_events = [e for e in events if e.get("event_type") == "web_search"]
+        all_ws = items + ws_events
+        if all_ws:
+            parts.append('<div class="space-y-2">')
+            parts.append('<h3 class="text-xs font-semibold text-cyan-400 mb-1">Web Searches</h3>')
+            for item in all_ws:
+                summary = _esc(item.get("summary") or item.get("title", ""))
+                detail = _esc(str(item.get("detail", ""))[:300])
+                ts = str(item.get("timestamp", ""))[:16]
+                parts.append(f"""
+                <div class="bg-gray-800/30 border border-gray-800 rounded p-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-cyan-500 text-xs">&#128269;</span>
+                        <span class="text-xs text-gray-300">{summary}</span>
+                        <span class="text-[10px] text-gray-600 mono ml-auto">{ts}</span>
+                    </div>
+                    <p class="text-[11px] text-gray-500 mt-1 truncate">{detail}</p>
+                </div>""")
+            parts.append("</div>")
+
+    # News items
+    if panel_type in ("news_item", "all"):
+        items = embedded.get("news_items", [])
+        ni_events = [e for e in events if e.get("event_type") == "news_item"]
+        all_ni = items + ni_events
+        if all_ni:
+            parts.append('<div class="space-y-2 mt-3">')
+            parts.append('<h3 class="text-xs font-semibold text-amber-400 mb-1">News Items</h3>')
+            for item in all_ni:
+                summary = _esc(item.get("summary") or item.get("title", ""))
+                source = _esc(item.get("source", ""))
+                ts = str(item.get("timestamp", ""))[:16]
+                parts.append(f"""
+                <div class="bg-gray-800/30 border border-gray-800 rounded p-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-amber-500 text-xs">&#128240;</span>
+                        <span class="text-xs text-gray-300 flex-1 truncate">{summary}</span>
+                        <span class="text-[10px] text-gray-600">{source}</span>
+                        <span class="text-[10px] text-gray-600 mono">{ts}</span>
+                    </div>
+                </div>""")
+            parts.append("</div>")
+
+    # Operator observations
+    if panel_type in ("operator_obs", "all"):
+        items = embedded.get("operator_observations", [])
+        oo_events = [e for e in events if e.get("event_type") == "operator_obs"]
+        all_oo = items + oo_events
+        if all_oo:
+            parts.append('<div class="space-y-2 mt-3">')
+            parts.append('<h3 class="text-xs font-semibold text-blue-400 mb-1">Operator Observations</h3>')
+            for item in all_oo:
+                summary = _esc(item.get("summary") or item.get("title", ""))
+                ts = str(item.get("timestamp", ""))[:16]
+                parts.append(f"""
+                <div class="bg-gray-800/30 border border-gray-800 rounded p-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-blue-500 text-xs">&#128065;</span>
+                        <span class="text-xs text-gray-300">{summary}</span>
+                        <span class="text-[10px] text-gray-600 mono ml-auto">{ts}</span>
+                    </div>
+                </div>""")
+            parts.append("</div>")
+
+    # Agent outputs
+    if panel_type in ("agent_output", "all"):
+        items = embedded.get("agent_outputs", [])
+        ao_events = [e for e in events if e.get("event_type") == "agent_output"]
+        all_ao = items + ao_events
+        if all_ao:
+            parts.append('<div class="space-y-2 mt-3">')
+            parts.append('<h3 class="text-xs font-semibold text-purple-400 mb-1">Agent Outputs</h3>')
+            for item in all_ao:
+                summary = _esc(item.get("summary") or item.get("title", ""))
+                source = _esc(item.get("source", ""))
+                ts = str(item.get("timestamp", ""))[:16]
+                parts.append(f"""
+                <div class="bg-gray-800/30 border border-gray-800 rounded p-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-purple-500 text-xs">&#129302;</span>
+                        <span class="text-[10px] text-purple-400">{source}</span>
+                        <span class="text-xs text-gray-300 flex-1 truncate">{summary}</span>
+                        <span class="text-[10px] text-gray-600 mono">{ts}</span>
+                    </div>
+                </div>""")
+            parts.append("</div>")
+
+    # Reasoning steps
+    if panel_type in ("reasoning", "all"):
+        items = embedded.get("reasoning_steps", [])
+        rs_events = [e for e in events if e.get("event_type") == "reasoning"]
+        all_rs = items + rs_events
+        if all_rs:
+            parts.append('<div class="space-y-2 mt-3">')
+            parts.append('<h3 class="text-xs font-semibold text-emerald-400 mb-1">Reasoning Chain</h3>')
+            for item in all_rs:
+                summary = _esc(item.get("summary") or item.get("title", ""))
+                detail = _esc(str(item.get("detail", ""))[:500])
+                ts = str(item.get("timestamp", ""))[:16]
+                parts.append(f"""
+                <div class="bg-gray-800/30 border border-gray-800 rounded p-2">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-emerald-500 text-xs">&#9881;</span>
+                        <span class="text-xs text-gray-300">{summary}</span>
+                        <span class="text-[10px] text-gray-600 mono ml-auto">{ts}</span>
+                    </div>
+                    <p class="text-[11px] text-gray-500">{detail}</p>
+                </div>""")
+            parts.append("</div>")
+
+    return HTMLResponse(content="".join(parts))
+
+
+def _render_market_snapshot(snap: dict, _esc) -> str:
+    """Render a market snapshot as an HTML panel."""
+    spy = snap.get("spy_price")
+    spy_pct = snap.get("spy_change_pct")
+    vix = snap.get("vix")
+    vix_pct = snap.get("vix_change_pct")
+    equity = snap.get("portfolio_equity")
+    day_pnl_pct = snap.get("portfolio_day_pnl_pct")
+    ts = str(snap.get("timestamp", ""))[:16]
+
+    spy_html = ""
+    if spy is not None:
+        cls = "text-profit" if (spy_pct or 0) >= 0 else "text-loss"
+        spy_html = f'<span class="text-gray-400">SPY</span> <span class="mono {cls}">${spy:.2f} ({spy_pct:+.1f}%)</span>'
+
+    vix_html = ""
+    if vix is not None:
+        cls = "text-red-400" if (vix or 0) > 25 else "text-gray-300"
+        vix_html = f'<span class="text-gray-400 ml-3">VIX</span> <span class="mono {cls}">{vix:.1f}</span>'
+
+    equity_html = ""
+    if equity is not None:
+        cls = "text-profit" if (day_pnl_pct or 0) >= 0 else "text-loss"
+        equity_html = f'<span class="text-gray-400 ml-3">Equity</span> <span class="mono {cls}">${equity:,.0f} ({day_pnl_pct:+.1f}%)</span>'
+
+    sectors = snap.get("sector_etfs", {})
+    sector_html = ""
+    if sectors:
+        sector_parts = []
+        for sym, data in sorted(sectors.items()):
+            p = data.get("day_pnl_pct", 0) if isinstance(data, dict) else 0
+            cls = "text-profit" if p >= 0 else "text-loss"
+            sector_parts.append(f'<span class="text-gray-500">{sym}</span> <span class="mono text-[10px] {cls}">{p:+.1f}%</span>')
+        sector_html = f'<div class="flex flex-wrap gap-x-3 gap-y-1 mt-1">{" ".join(sector_parts)}</div>'
+
+    return f"""
+    <div class="bg-gray-800/30 border border-gray-800 rounded p-3 mb-3">
+        <div class="flex items-center gap-2 mb-1">
+            <h3 class="text-xs font-semibold text-emerald-400">Market at Decision Time</h3>
+            <span class="text-[10px] text-gray-600 mono ml-auto">{_esc(ts)}</span>
+        </div>
+        <div class="text-xs">{spy_html}{vix_html}{equity_html}</div>
+        {sector_html}
+    </div>"""

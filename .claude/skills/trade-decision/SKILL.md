@@ -131,6 +131,34 @@ print(f"\nWorst Case: {analysis.worst_case}")
 EOF
 ```
 
+## Context Preservation
+
+**IMPORTANT:** Push context to SessionContext so it's automatically attached to decisions.
+
+```python
+from src.context.session_context import SessionContext
+from src.context.market_snapshot import capture_market_snapshot
+
+ctx = SessionContext.get()
+
+# At start of trade decision session
+ctx.add_market_snapshot(capture_market_snapshot())
+
+# After web searches for news/research
+ctx.add_web_search(query="...", results_summary="...", symbols=["SLB"])
+
+# After adversarial analysis
+ctx.add_reasoning_step("adversarial", "Concern level: MEDIUM. Key issue: ...", symbols=["SLB"])
+
+# After pre-mortem
+ctx.add_reasoning_step("pre_mortem", "If thesis fails, HAL correlates with SLB loss.", symbols=["HAL"])
+
+# After agent outputs (research, critic)
+ctx.add_agent_output(agent_type="critic", agent_id="...", summary="...", key_findings=["..."])
+```
+
+This context is **automatically merged** into `DecisionRecord.context` when `create_decision()` is called.
+
 ## Decision Framework
 
 When making trading decisions, I (Claude) should systematically consider:

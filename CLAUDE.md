@@ -200,6 +200,36 @@ await broker.close_position(symbol)
 
 ## Core Architecture
 
+### Context Preservation Layer (NEW)
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **SessionContext** | `src/context/session_context.py` | Singleton accumulator for session context events |
+| **ContextEvent** | `src/context/session_context.py` | Dataclass for web searches, news, observations, etc. |
+| **capture_market_snapshot** | `src/context/market_snapshot.py` | Snapshot SPY, VIX, sectors, portfolio from state.json |
+| **extract_session_context** | `scripts/extract_session_context.py` | Retroactive transcript parser |
+
+The context preservation layer captures Claude's full reasoning chain (web searches, news, agent outputs, operator observations, market snapshots) and automatically attaches it to trading decisions.
+
+```python
+from src.context.session_context import SessionContext
+from src.context.market_snapshot import capture_market_snapshot
+
+ctx = SessionContext.get()
+ctx.add_web_search("Iran oil news", "Hormuz disrupted...", ["XLE", "USO"])
+ctx.add_market_snapshot(capture_market_snapshot())
+ctx.add_reasoning_step("adversarial", "Low concern level", ["SLB"])
+
+# Context is auto-merged into DecisionRecord.context by create_decision()
+# Context events are auto-persisted as ProcessEvent rows linked to decision_id
+```
+
+**Integration points:**
+- `create_decision()` auto-enriches context and persists events
+- `operator_check()` auto-pushes observations to SessionContext
+- Web UI shows context panels at `/decisions/{id}/context/{panel_type}`
+- Transcript extractor backfills context retroactively
+
 ### Synthesis Layer (NEW)
 
 | Component | Location | Purpose |
@@ -857,6 +887,7 @@ tail -20 ~/quant_results/logs/agent_activity.jsonl
 | **Operator Logs** | `~/quant_results/logs/operator_log.jsonl` |
 | **Skills** | `.claude/skills/*/SKILL.md` |
 | **Agents** | `.claude/agents/*.md` |
+| **Context Layer** | `src/context/` |
 | **Synthesis Layer** | `src/synthesis/` |
 | **Intelligence Layer** | `src/intelligence/` |
 | **Knowledge Layer** | `src/knowledge/` |

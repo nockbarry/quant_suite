@@ -571,7 +571,23 @@ def create_decision(
             setup_type="thesis_driven",
         )
     """
-    return TradingDecision(
+    # Enrich context with session context (web searches, news, market snapshot, etc.)
+    enriched_context = {**context}
+    try:
+        from src.context.session_context import SessionContext
+        from src.context.market_snapshot import capture_market_snapshot
+
+        session_ctx = SessionContext.get()
+        if session_ctx.event_count() > 0:
+            enriched_context.update(session_ctx.snapshot_for_decision(symbol))
+
+        # Always capture market snapshot at decision time
+        if "market_snapshot" not in enriched_context or not enriched_context["market_snapshot"]:
+            enriched_context["market_snapshot"] = capture_market_snapshot()
+    except Exception:
+        pass  # Don't block decision creation if context enrichment fails
+
+    decision = TradingDecision(
         id=str(uuid.uuid4())[:8],
         timestamp=datetime.now(),
         symbol=symbol,
@@ -585,10 +601,19 @@ def create_decision(
         reasoning=reasoning,
         key_factors=key_factors,
         risks=risks,
-        context=context,
+        context=enriched_context,
         thesis_id=thesis_id,
         pre_mortem=pre_mortem,
         adversarial_notes=adversarial_notes,
-        setup_type=setup_type,
+        setup_type=setup_type or context.get("setup_type", ""),
         signal_ids=signal_ids or [],
     )
+
+    # Persist context events as ProcessEvent records linked to this decision
+    try:
+        from src.context.session_context import SessionContext
+        SessionContext.get().persist_to_db(decision_id=decision.id, symbol=symbol)
+    except Exception:
+        pass
+
+    return decision

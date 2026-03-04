@@ -646,6 +646,35 @@ state = UnifiedState.load(paths.live_state)
 | 7:00 AM | Review briefing output |
 | 7:30 AM | Feed to /trade-decision |
 
+## Context Preservation
+
+**IMPORTANT:** Push findings to SessionContext so they're linked to any subsequent decisions.
+
+```python
+from src.context.session_context import SessionContext
+from src.context.market_snapshot import capture_market_snapshot
+
+ctx = SessionContext.get()
+
+# After each web search, push results
+ctx.add_web_search(
+    query="the search query you used",
+    results_summary="key findings from the search",
+    symbols=["SLB", "HAL"],  # relevant symbols
+)
+
+# After reading news, push each important item
+ctx.add_news_item(
+    headline="Oil spikes 5% on Hormuz disruption",
+    source="reuters",
+    symbols=["USO", "XLE"],
+    sentiment="bullish",
+)
+
+# Capture market snapshot at start of briefing
+ctx.add_market_snapshot(capture_market_snapshot())
+```
+
 ## Key Files
 
 | File | Purpose |

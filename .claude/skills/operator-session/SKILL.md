@@ -42,6 +42,24 @@ claude "/operator-session --interval 2"
 6. **Check data freshness**: Flag stale data sources
 7. **Generate action items**: Prioritized recommendations
 8. **Log observation** to `~/quant_results/logs/operator_log.jsonl`
+9. **Push to SessionContext** — observations are automatically pushed to SessionContext for decision linking
+
+## Context Preservation
+
+Operator observations are **automatically pushed** to SessionContext by `operator_check()`.
+When you perform additional research during the session, push it manually:
+
+```python
+from src.context.session_context import SessionContext
+
+ctx = SessionContext.get()
+
+# After web searches during operator session
+ctx.add_web_search("Iran oil news", "Hormuz 70% disrupted...", ["XLE", "USO"])
+
+# After spawning agent research
+ctx.add_agent_output("macro-research", "agent_123", "Insurance sector analysis", ["AIG", "MET"])
+```
 
 ## Operator Check Code
 

@@ -11,6 +11,7 @@ from src.db.models import (
     DecisionSignalLink,
     DecisionConvergence,
     LLMInteraction,
+    ProcessEvent,
     SignalProvenanceRecord,
     ThesisRecord,
 )
@@ -114,11 +115,26 @@ def get_decision_lineage(decision_id: str) -> dict | None:
             )
             llm_interaction = llm_row.to_dict() if llm_row else None
 
+        # Context events (from SessionContext persistence)
+        context_events = (
+            session.query(ProcessEvent)
+            .filter(ProcessEvent.decision_id == decision_id)
+            .order_by(ProcessEvent.timestamp)
+            .all()
+        )
+
+        context_by_type: dict[str, list[dict]] = {}
+        for evt in context_events:
+            evt_dict = evt.to_dict()
+            et = evt.event_type or "other"
+            context_by_type.setdefault(et, []).append(evt_dict)
+
         return {
             "decision": decision.to_dict(),
             "signal_links": signal_links,
             "convergence": convergence,
             "llm_interaction": llm_interaction,
+            "context_events": context_by_type,
         }
 
 
@@ -182,3 +198,62 @@ def get_distinct_setup_types() -> list[str]:
     with get_db() as session:
         rows = session.query(DecisionRecord.setup_type).distinct().all()
         return sorted([r[0] for r in rows if r[0]])
+
+
+def get_decision_context(decision_id: str, panel_type: str | None = None) -> dict:
+    """Get context events for a decision, optionally filtered by panel type.
+
+    Panel types map to ProcessEvent.event_type:
+      - market_snapshot
+      - web_search
+      - news_item
+      - operator_obs
+      - agent_output
+      - reasoning
+
+    Also checks DecisionRecord.context JSON for embedded context data.
+    """
+    with get_db() as session:
+        decision = session.query(DecisionRecord).filter(DecisionRecord.id == decision_id).first()
+        if decision is None:
+            return {"events": [], "embedded_context": {}}
+
+        # Query ProcessEvent rows linked to this decision
+        q = session.query(ProcessEvent).filter(ProcessEvent.decision_id == decision_id)
+        if panel_type:
+            q = q.filter(ProcessEvent.event_type == panel_type)
+        events = q.order_by(ProcessEvent.timestamp).all()
+
+        # Also extract embedded context from DecisionRecord.context JSON
+        embedded = {}
+        if decision.context:
+            try:
+                ctx = json.loads(decision.context) if isinstance(decision.context, str) else decision.context
+            except (json.JSONDecodeError, TypeError):
+                ctx = {}
+
+            if panel_type:
+                # Map panel_type to context keys
+                key_map = {
+                    "market_snapshot": "market_snapshot",
+                    "web_search": "web_searches",
+                    "news_item": "news_items",
+                    "operator_obs": "operator_observations",
+                    "agent_output": "agent_outputs",
+                    "reasoning": "reasoning_steps",
+                }
+                key = key_map.get(panel_type)
+                if key and key in ctx:
+                    embedded[key] = ctx[key]
+            else:
+                # Return all embedded context
+                for key in ("market_snapshot", "web_searches", "news_items",
+                            "operator_observations", "agent_outputs", "reasoning_steps",
+                            "session_id", "context_captured_at"):
+                    if key in ctx:
+                        embedded[key] = ctx[key]
+
+        return {
+            "events": [e.to_dict() for e in events],
+            "embedded_context": embedded,
+        }

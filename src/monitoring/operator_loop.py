@@ -231,6 +231,26 @@ class OperatorLoop:
         # Log the observation
         self._log_observation(observation)
 
+        # Push to SessionContext for decision context preservation
+        try:
+            from src.context.session_context import SessionContext
+            summary_parts = []
+            if observation.alerts:
+                summary_parts.append(f"{len(observation.alerts)} alerts")
+            if observation.convergences:
+                summary_parts.append(f"{len(observation.convergences)} convergences")
+            if observation.action_items:
+                summary_parts.append(f"{len(observation.action_items)} action items")
+            obs_summary = f"Check #{observation.check_num}: " + (", ".join(summary_parts) or "all clear")
+
+            SessionContext.get().add_operator_observation(
+                observation_summary=obs_summary,
+                portfolio_snapshot=portfolio_status,
+                alerts=[a.title for a in observation.alerts],
+            )
+        except Exception:
+            pass  # Don't break operator loop if context push fails
+
         return observation
 
     def _load_state(self) -> dict:
