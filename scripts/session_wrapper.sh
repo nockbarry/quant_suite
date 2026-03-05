@@ -18,7 +18,8 @@
 #   research          — One-shot, uses -p with /research --quick
 #   thesis            — One-shot, uses -p with /thesis
 #   brainstorm        — One-shot, uses -p with /brainstorm
-#   operator          — Long-running, interactive (no -p flag)
+#   operator          — Long-running, persistent loop
+#   research-theory   — One-shot, thesis suggestions + theory generation
 
 set -uo pipefail
 
@@ -83,7 +84,7 @@ is_market_day() {
     return 0
 }
 
-# Skip non-market days for trading sessions (allow research/thesis on any day)
+# Skip non-market days for trading sessions (allow research/thesis/brainstorm/research-theory on any day)
 case "$SESSION_TYPE" in
     morning-briefing|trade-decision|eod-review|operator)
         if ! is_market_day; then
@@ -210,9 +211,19 @@ cleanup() {
     if [ $EXIT_CODE -eq 0 ]; then
         write_completion "True" "$EXIT_CODE"
         update_state "completed"
+        # Log success to ProcessEvent
+        PYTHONPATH="$PROJECT_DIR" python3 -c "
+from src.autonomy.provenance import log_event
+log_event('session_completed', source='scheduler:$SESSION_TYPE', title='Session completed: $SESSION_TYPE')
+" 2>/dev/null || true
     else
         write_completion "False" "$EXIT_CODE"
         update_state "failed"
+        # Log failure to ProcessEvent
+        PYTHONPATH="$PROJECT_DIR" python3 -c "
+from src.autonomy.provenance import log_event
+log_event('session_failed', source='scheduler:$SESSION_TYPE', severity='warning', title='Session failed: $SESSION_TYPE (exit $EXIT_CODE)')
+" 2>/dev/null || true
     fi
 
     log "Cleanup complete"
@@ -226,7 +237,8 @@ build_autonomous_prompt() {
     local SESSION_TYPE="$1"
     local TIMEOUT="${2:-15}"
 
-    cat <<PROMPT
+    local BASE_PROMPT
+    BASE_PROMPT=$(cat <<BASEPROMPT
 AUTONOMOUS MODE: You are running as a scheduled autonomous session.
 Do NOT ask the user questions — there is no human present.
 Complete all steps independently. Save outputs to standard paths.
@@ -234,47 +246,89 @@ Log errors and continue with remaining steps.
 Execution authority: THESIS_ONLY (only thesis-linked trades).
 Max runtime: ${TIMEOUT} minutes. Be efficient with tokens.
 If you encounter errors reading files or connecting to services, log the error and continue.
-Write a completion summary to stdout when done.
-PROMPT
+BASEPROMPT
+)
+
+    # Session-specific instructions
+    local SESSION_PROMPT=""
+    case "$SESSION_TYPE" in
+        operator)
+            SESSION_PROMPT=$(cat <<OPPROMPT
+
+OPERATOR LOOP: You MUST implement a persistent monitoring loop.
+1. Run operator_check() immediately
+2. Review state.news_events and state.news_urgency_alerts for thesis-matched news
+3. Check for auto-generated thesis suggestions via ThesisSuggester
+4. Sleep for the configured interval (1-5 minutes)
+5. REPEAT from step 1 until timeout or market close (4:05 PM ET)
+Do NOT exit after a single check. Keep looping. Use bash sleep between checks.
+Write trade triggers to scheduler/trade_triggers.json when 4+ signals converge.
+OPPROMPT
+)
+            ;;
+    esac
+
+    # All sessions should write enriched completion records
+    local COMPLETION_PROMPT
+    COMPLETION_PROMPT=$(cat <<COMPPROMPT
+
+COMPLETION LOGGING: Before exiting, write an enriched completion record:
+\`\`\`python
+from src.monitoring.autonomous_mode import write_session_completion
+write_session_completion(
+    session_type="${SESSION_TYPE}",
+    success=True,
+    summary="<2-3 sentence summary of what you did>",
+    key_findings=["<finding 1>", "<finding 2>"],
+    symbols=["<symbols you analyzed>"],
+)
+\`\`\`
+COMPPROMPT
+)
+
+    echo "${BASE_PROMPT}${SESSION_PROMPT}${COMPLETION_PROMPT}"
 }
 
 # --- Session Type Configuration ---
 
 get_timeout() {
     case "$SESSION_TYPE" in
-        morning-briefing) echo 15 ;;
-        trade-decision)   echo 10 ;;
-        eod-review)       echo 15 ;;
-        research)         echo 20 ;;
-        thesis)           echo 10 ;;
-        brainstorm)       echo 15 ;;
-        operator)         echo 480 ;;  # 8 hours
-        *)                echo 15 ;;
+        morning-briefing)  echo 15 ;;
+        trade-decision)    echo 10 ;;
+        eod-review)        echo 15 ;;
+        research)          echo 20 ;;
+        thesis)            echo 10 ;;
+        brainstorm)        echo 15 ;;
+        research-theory)   echo 20 ;;
+        operator)          echo 480 ;;  # 8 hours
+        *)                 echo 15 ;;
     esac
 }
 
 get_model() {
     case "$SESSION_TYPE" in
-        morning-briefing) echo "opus" ;;
-        trade-decision)   echo "opus" ;;
-        eod-review)       echo "opus" ;;
-        research)         echo "sonnet" ;;
-        thesis)           echo "sonnet" ;;
-        brainstorm)       echo "sonnet" ;;
-        operator)         echo "opus" ;;
-        *)                echo "sonnet" ;;
+        morning-briefing)  echo "opus" ;;
+        trade-decision)    echo "opus" ;;
+        eod-review)        echo "opus" ;;
+        research)          echo "sonnet" ;;
+        thesis)            echo "sonnet" ;;
+        brainstorm)        echo "sonnet" ;;
+        research-theory)   echo "sonnet" ;;
+        operator)          echo "opus" ;;
+        *)                 echo "sonnet" ;;
     esac
 }
 
 get_skill_prompt() {
     case "$SESSION_TYPE" in
-        morning-briefing) echo "/morning-briefing" ;;
-        trade-decision)   echo "/trade-decision" ;;
-        eod-review)       echo "/eod-review" ;;
-        research)         echo "/research --quick" ;;
-        thesis)           echo "/thesis" ;;
-        brainstorm)       echo "/brainstorm" ;;
-        *)                echo "" ;;
+        morning-briefing)  echo "/morning-briefing" ;;
+        trade-decision)    echo "/trade-decision" ;;
+        eod-review)        echo "/eod-review" ;;
+        research)          echo "/research --quick" ;;
+        thesis)            echo "/thesis" ;;
+        brainstorm)        echo "/brainstorm" ;;
+        research-theory)   echo "Run a combined research-theory-thesis cycle: 1) Load unified state and check news_events for thesis-matched headlines. 2) Run /research --quick to scan for new signals and strategies. 3) Check ThesisSuggester for auto-generated thesis ideas from converging signals. 4) Review active theses — update conviction for any with new signpost triggers. 5) Generate 2-3 new hypothesis ideas based on current market conditions. Write all findings to completion record." ;;
+        *)                 echo "" ;;
     esac
 }
 
@@ -283,6 +337,12 @@ get_skill_prompt() {
 acquire_lock
 set_autonomous_mode
 update_state "running"
+
+# Log session start to ProcessEvent audit trail
+PYTHONPATH="$PROJECT_DIR" python3 -c "
+from src.autonomy.provenance import log_event
+log_event('session_started', source='scheduler:$SESSION_TYPE', title='Session started: $SESSION_TYPE')
+" 2>/dev/null || true
 
 TIMEOUT=$(get_timeout)
 MODEL=$(get_model)
@@ -299,11 +359,11 @@ export PYTHONPATH="$PROJECT_DIR"
 unset CLAUDECODE 2>/dev/null || true
 
 if [ "$SESSION_TYPE" = "operator" ]; then
-    # Operator is long-running — use interactive mode with system prompt injection
-    log "Launching interactive operator session"
+    # Operator is long-running — runs with -p but the autonomous prompt
+    # instructs Claude to implement a persistent monitoring loop with sleep
+    # between checks. The 8-hour timeout acts as the outer boundary.
+    log "Launching operator session (persistent loop via autonomous prompt)"
 
-    # The operator session uses --append-system-prompt for autonomous behavior
-    # It runs interactively in tmux (no -p flag)
     timeout "${TIMEOUT}m" claude \
         --model "$MODEL" \
         --dangerously-skip-permissions \

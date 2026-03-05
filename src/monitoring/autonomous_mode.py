@@ -278,6 +278,25 @@ def write_trade_trigger(
     except Exception as e:
         logger.error(f"Error writing trade trigger: {e}")
 
+    # Log to ProcessEvent audit trail
+    try:
+        from src.autonomy.provenance import log_event
+        log_event(
+            event_type="trade_trigger",
+            source=f"scheduler:{source}",
+            symbol=symbol,
+            severity="warning",
+            title=f"Trade trigger: {signal_count} {direction} signals on {symbol}",
+            detail={
+                "direction": direction,
+                "signal_count": signal_count,
+                "signals": signals,
+                "source": source,
+            },
+        )
+    except Exception:
+        pass
+
 
 def write_session_completion(
     session_type: str,
@@ -312,3 +331,23 @@ def write_session_completion(
             json.dump(record, f, indent=2)
     except Exception as e:
         logger.error(f"Error writing session completion: {e}")
+
+    # Log to ProcessEvent audit trail
+    try:
+        from src.autonomy.provenance import log_event
+        log_event(
+            event_type="session_completed",
+            source=f"scheduler:{session_type}",
+            severity="info" if success else "warning",
+            title=f"Session {session_type}: {'completed' if success else 'failed'}",
+            detail={
+                "session_type": session_type,
+                "success": success,
+                "summary": summary[:500],
+                "key_findings": key_findings or [],
+                "symbols": symbols or [],
+                "duration_seconds": duration_seconds,
+            },
+        )
+    except Exception:
+        pass

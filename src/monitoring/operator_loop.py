@@ -662,7 +662,7 @@ class OperatorLoop:
         return suggestions[:5]  # Limit suggestions
 
     def _log_observation(self, obs: OperatorObservation) -> None:
-        """Log observation to operator log file."""
+        """Log observation to operator log file and ProcessEvent audit trail."""
         log_file = self.logs_dir / "operator_log.jsonl"
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -671,6 +671,55 @@ class OperatorLoop:
                 f.write(json.dumps(obs.to_dict()) + "\n")
         except Exception as e:
             logger.error(f"Error logging observation: {e}")
+
+        # Log to ProcessEvent for web UI visibility
+        try:
+            from src.autonomy.provenance import log_event
+
+            summary_parts = []
+            if obs.alerts:
+                summary_parts.append(f"{len(obs.alerts)} alerts")
+            if obs.convergences:
+                summary_parts.append(f"{len(obs.convergences)} convergences")
+            if obs.action_items:
+                summary_parts.append(f"{len(obs.action_items)} actions")
+            if obs.session_updates:
+                summary_parts.append(f"{len(obs.session_updates)} session updates")
+            if obs.thesis_changes:
+                summary_parts.append(f"{len(obs.thesis_changes)} thesis changes")
+            obs_summary = ", ".join(summary_parts) or "all clear"
+
+            parent_id = log_event(
+                event_type="operator_check",
+                source="scheduler:operator",
+                severity="warning" if obs.has_urgent_items() else "info",
+                title=f"Operator check #{obs.check_num}: {obs_summary}",
+                detail={
+                    "check_num": obs.check_num,
+                    "market_regime": obs.market_regime,
+                    "regime_change": obs.regime_change,
+                    "alert_count": len(obs.alerts),
+                    "convergence_count": len(obs.convergences),
+                    "action_count": len(obs.action_items),
+                    "session_updates": len(obs.session_updates),
+                    "thesis_changes": len(obs.thesis_changes),
+                    "portfolio": obs.portfolio_status,
+                },
+            )
+
+            # Log thesis changes as child events
+            for change in obs.thesis_changes:
+                log_event(
+                    event_type="thesis_change",
+                    source="scheduler:operator",
+                    title=f"Thesis {change.get('type', 'change')}: {change.get('name', '')}",
+                    detail=change,
+                    parent_event_id=parent_id,
+                    thesis_id=change.get("thesis_id"),
+                )
+
+        except Exception:
+            pass  # Don't break operator loop if provenance logging fails
 
     def get_session_summary(self) -> dict:
         """Get summary of current operator session."""

@@ -1,0 +1,46 @@
+{% if news %}
+<div class="space-y-2 max-h-[600px] overflow-y-auto">
+    {% for item in news %}
+    {% set detail = item.detail if item.detail is mapping else {} %}
+    <div class="bg-gray-800/30 rounded-lg p-2.5 hover:bg-gray-800/50 transition">
+        <div class="flex items-center gap-1.5 mb-1">
+            <span class="text-[10px] text-gray-500 mono">{{ item.timestamp[11:16] if item.timestamp else '' }}</span>
+            {% if detail.direction is defined %}
+            <span class="rounded-full px-1.5 py-0.5 text-[9px]
+                {% if detail.direction == 'bullish' %}bg-emerald-900/50 text-emerald-400
+                {% elif detail.direction == 'bearish' %}bg-red-900/50 text-red-400
+                {% else %}bg-gray-800 text-gray-500{% endif %}">
+                {{ detail.direction | default('neutral') }}
+            </span>
+            {% endif %}
+            {% if detail.relevance is defined %}
+            <span class="text-[10px] text-gray-500">{{ "%.0f"|format((detail.relevance | default(0)) * 100) }}% match</span>
+            {% endif %}
+            {% if detail.news_source is defined %}
+            <span class="text-[10px] text-gray-600 ml-auto">{{ detail.news_source }}</span>
+            {% endif %}
+        </div>
+
+        <p class="text-xs text-gray-300 leading-relaxed">
+            {{ detail.headline | default(item.title) | truncate(120) }}
+        </p>
+
+        {% if detail.keywords is defined and detail.keywords %}
+        <div class="flex flex-wrap gap-1 mt-1.5">
+            {% for kw in detail.keywords[:4] %}
+            <span class="rounded px-1.5 py-0.5 text-[9px] bg-gray-800 text-gray-400 mono">{{ kw }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if item.thesis_id %}
+        <a href="/theses/{{ item.thesis_id }}" class="text-[10px] text-amber-400 hover:underline mt-1 inline-block">
+            {{ item.title | replace('News matches ', '') | truncate(40) }}
+        </a>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-sm text-gray-500 py-4 text-center">No thesis-matched news in last 24h</div>
+{% endif %}

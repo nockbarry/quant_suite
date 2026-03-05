@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% set active_page = "sessions" %}
+{% block title %}Sessions — {{ date }}{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <a href="/sessions" class="text-gray-500 hover:text-gray-300 text-sm">&larr; Sessions Dashboard</a>
+            <h1 class="text-xl font-bold text-gray-100 mt-1">Session Detail: {{ date }}</h1>
+            <p class="text-xs text-gray-500 mt-1">{{ events | length }} events across {{ grouped | length }} session types</p>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Total Events</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ events | length }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Session Types</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ grouped | length }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Sessions Run</p>
+            <p class="mono text-lg font-bold text-emerald-400">{{ stats.sessions_completed }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Operator Checks</p>
+            <p class="mono text-lg font-bold text-cyan-400">{{ stats.operator_checks }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">News Matches</p>
+            <p class="mono text-lg font-bold text-purple-400">{{ stats.news_matches }}</p>
+        </div>
+    </div>
+
+    <!-- Grouped by session type -->
+    {% for session_type, type_events in grouped.items() %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg">
+        <button class="w-full flex items-center justify-between p-4 hover:bg-gray-800/30 transition"
+                onclick="this.nextElementSibling.classList.toggle('hidden')">
+            <div class="flex items-center gap-3">
+                <span class="rounded-full px-2 py-0.5 text-[10px]
+                    {% if 'operator' in session_type %}bg-cyan-900/50 text-cyan-400
+                    {% elif 'news' in session_type or 'cron' in session_type %}bg-purple-900/50 text-purple-400
+                    {% else %}bg-blue-900/50 text-blue-400{% endif %}">
+                    {{ session_type }}
+                </span>
+                <span class="text-sm text-gray-300">{{ type_events | length }} events</span>
+            </div>
+            <span class="text-gray-500 text-xs">click to expand</span>
+        </button>
+
+        <div class="hidden border-t border-gray-800">
+            <div class="divide-y divide-gray-800/50">
+                {% for evt in type_events %}
+                <div class="px-4 py-2.5 hover:bg-gray-800/20 transition">
+                    <div class="flex items-center gap-3">
+                        <span class="text-[10px] text-gray-500 mono w-14 flex-shrink-0">
+                            {{ evt.timestamp[11:16] if evt.timestamp else '' }}
+                        </span>
+
+                        {% if evt.severity == 'critical' %}
+                        <div class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></div>
+                        {% elif evt.severity == 'warning' %}
+                        <div class="w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0"></div>
+                        {% else %}
+                        <div class="w-2 h-2 rounded-full bg-gray-600 flex-shrink-0"></div>
+                        {% endif %}
+
+                        <span class="rounded-full px-1.5 py-0.5 text-[9px] bg-gray-800 text-gray-400">
+                            {{ evt.event_type | replace('_', ' ') }}
+                        </span>
+
+                        <span class="text-xs text-gray-400 flex-1 truncate">{{ evt.title }}</span>
+
+                        {% if evt.symbol %}
+                        <a href="/knowledge/{{ evt.symbol }}" class="text-[10px] text-emerald-400 mono hover:underline">{{ evt.symbol }}</a>
+                        {% endif %}
+                        {% if evt.thesis_id %}
+                        <a href="/theses/{{ evt.thesis_id }}" class="text-[10px] text-amber-400 hover:underline">thesis</a>
+                        {% endif %}
+
+                        <a href="/flows/{{ evt.id }}" class="text-[10px] text-gray-600 hover:text-gray-400" title="View in activity stream">
+                            &#8599;
+                        </a>
+                    </div>
+
+                    {% if evt.detail and evt.detail is mapping %}
+                    <div class="ml-[74px] mt-1">
+                        {% if evt.detail.summary is defined %}
+                        <p class="text-[10px] text-gray-500">{{ evt.detail.summary[:200] }}</p>
+                        {% endif %}
+                        {% if evt.detail.headline is defined %}
+                        <p class="text-[10px] text-gray-500">{{ evt.detail.headline[:150] }}</p>
+                        {% endif %}
+                        {% if evt.detail.key_findings is defined and evt.detail.key_findings %}
+                        <div class="mt-1">
+                            {% for finding in evt.detail.key_findings[:3] %}
+                            <p class="text-[10px] text-gray-600">&bull; {{ finding[:100] }}</p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if not grouped %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-8 text-center">
+        <p class="text-gray-500">No autonomous events recorded for {{ date }}</p>
+        <p class="text-xs text-gray-600 mt-2">Events appear when autonomous sessions run via the scheduler</p>
+    </div>
+    {% endif %}
+
+    <!-- Full Timeline -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Full Timeline</h2>
+        <div class="max-h-[500px] overflow-y-auto">
+            {% include "sessions/timeline_partial.html" %}
+        </div>
+    </div>
+</div>
+{% endblock %}

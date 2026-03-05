@@ -97,7 +97,7 @@ app.state.templates = templates
 from src.web.routes import dashboard, knowledge, theses, learnings, decisions
 from src.web.routes import agents, flows, llm, signals, data_sources
 from src.web.routes import reports, system, upload, api, websocket, tasks, portfolio, research
-from src.web.routes import documents, intelligence
+from src.web.routes import documents, intelligence, sessions
 
 app.include_router(dashboard.router)
 app.include_router(knowledge.router, prefix="/knowledge", tags=["knowledge"])
@@ -119,3 +119,4 @@ app.include_router(portfolio.router, prefix="/portfolio", tags=["portfolio"])
 app.include_router(research.router, prefix="/research", tags=["research"])
 app.include_router(documents.router, prefix="/documents", tags=["documents"])
 app.include_router(intelligence.router, prefix="/intelligence", tags=["intelligence"])
+app.include_router(sessions.router, prefix="/sessions", tags=["sessions"])

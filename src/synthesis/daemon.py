@@ -252,6 +252,9 @@ class LiveDaemon:
         # NEW: Alternative signals from disconnected data sources (Added 2026-01-19)
         alternative_signals = await self._get_alternative_signals()
 
+        # NEW: Thesis-matched news events for Claude session consumption
+        news_events = self._get_thesis_matched_news(limit=20)
+
         # Build state
         state = UnifiedState(
             timestamp=now,
@@ -284,6 +287,8 @@ class LiveDaemon:
             portfolio_history=portfolio_history,
             # NEW: Alternative signals (Added 2026-01-19)
             alternative_signals=alternative_signals,
+            # NEW: Thesis-matched news events
+            news_events=news_events,
         )
 
         # Generate summaries
@@ -1602,7 +1607,12 @@ class LiveDaemon:
         positions: list[PositionSnapshot],
         theses: list[ThesisSummary],
     ) -> list[NewsUrgencyAlert]:
-        """Check for urgent news affecting positions or theses."""
+        """Check for urgent news affecting positions or theses.
+
+        Uses thesis_matches from enriched news items (populated by
+        cron_news_collect_fast.py via thesis keyword index) as primary
+        matching method, falling back to symbol regex for unmatched items.
+        """
         alerts = []
 
         # Urgent keywords that trigger immediate review
@@ -1613,100 +1623,160 @@ class LiveDaemon:
         }
 
         try:
-            # Check news daemon output if available
             news_path = paths.live / "news_cache.json"
-            if news_path.exists():
-                with open(news_path) as f:
-                    news_data = json.load(f)
+            if not news_path.exists():
+                return alerts
 
-                position_symbols = {p.symbol for p in positions}
-                thesis_symbols = set()
-                thesis_names = {}
-                for t in theses:
-                    thesis_symbols.update(t.positions)
-                    for sym in t.positions:
-                        thesis_names[sym] = t.name
+            with open(news_path) as f:
+                news_data = json.load(f)
 
-                # Check recent news (last 4 hours)
-                cutoff = datetime.now() - timedelta(hours=4)
+            position_symbols = {p.symbol for p in positions}
+            thesis_names_by_id = {t.id: t.name for t in theses}
+            thesis_symbols = set()
+            thesis_names_by_sym = {}
+            for t in theses:
+                thesis_symbols.update(t.positions)
+                for sym in t.positions:
+                    thesis_names_by_sym[sym] = t.name
 
-                for item in news_data.get("items", []):
-                    item_time = datetime.fromisoformat(item.get("timestamp", "2000-01-01"))
-                    if item_time < cutoff:
-                        continue
+            cutoff = datetime.now() - timedelta(hours=4)
 
-                    headline = item.get("headline", "").lower()
-                    symbols = item.get("symbols", [])
+            for item in news_data.get("items", []):
+                item_time = datetime.fromisoformat(item.get("timestamp", "2000-01-01"))
+                if item_time < cutoff:
+                    continue
 
-                    # Check if this news affects our positions or theses
-                    affected_pos = [s for s in symbols if s in position_symbols]
-                    affected_theses = [thesis_names.get(s, "") for s in symbols if s in thesis_symbols]
-                    affected_theses = [t for t in affected_theses if t]
+                headline = item.get("headline", "").lower()
+                symbols = item.get("symbols", [])
+                thesis_matches = item.get("thesis_matches", {})
 
-                    if not affected_pos and not affected_theses:
-                        continue
+                # Primary: use thesis_matches from enriched news
+                affected_theses_from_matches = []
+                if thesis_matches:
+                    for tid, match in thesis_matches.items():
+                        if match.get("relevance", 0) >= 0.3:
+                            name = match.get("name") or thesis_names_by_id.get(tid, "")
+                            if name:
+                                affected_theses_from_matches.append(name)
 
-                    # Determine urgency
-                    urgency = None
-                    category = "other"
+                # Fallback: symbol-based matching
+                affected_pos = [s for s in symbols if s in position_symbols]
+                affected_theses_from_sym = [
+                    thesis_names_by_sym[s] for s in symbols if s in thesis_symbols
+                ]
 
-                    for level, keywords in urgent_keywords.items():
-                        for kw in keywords:
-                            if kw in headline:
-                                urgency = level
-                                if kw in ["acquisition", "merger"]:
-                                    category = "acquisition"
-                                elif kw in ["earnings", "guidance"]:
-                                    category = "earnings"
-                                elif kw in ["fda approval"]:
-                                    category = "fda"
-                                elif kw in ["contract win"]:
-                                    category = "contract"
-                                elif kw in ["regulation", "lawsuit", "investigation"]:
-                                    category = "policy"
-                                break
-                        if urgency:
+                # Merge thesis matches
+                affected_theses = list(set(
+                    affected_theses_from_matches + [t for t in affected_theses_from_sym if t]
+                ))
+
+                if not affected_pos and not affected_theses:
+                    continue
+
+                # Determine urgency
+                urgency = None
+                category = "other"
+                for level, keywords in urgent_keywords.items():
+                    for kw in keywords:
+                        if kw in headline:
+                            urgency = level
+                            if kw in ["acquisition", "merger"]:
+                                category = "acquisition"
+                            elif kw in ["earnings", "guidance"]:
+                                category = "earnings"
+                            elif kw in ["fda approval"]:
+                                category = "fda"
+                            elif kw in ["contract win"]:
+                                category = "contract"
+                            elif kw in ["regulation", "lawsuit", "investigation"]:
+                                category = "policy"
+                            break
+                    if urgency:
+                        break
+
+                # Items with thesis matches but no urgent keyword get "medium"
+                if not urgency and affected_theses:
+                    urgency = "medium"
+                    category = "thesis_related"
+
+                if urgency:
+                    sentiment = "neutral"
+                    positive_words = ["win", "approval", "beat", "upgrade", "growth"]
+                    negative_words = ["miss", "downgrade", "lawsuit", "resign", "bankruptcy"]
+                    for pw in positive_words:
+                        if pw in headline:
+                            sentiment = "bullish"
+                            break
+                    for nw in negative_words:
+                        if nw in headline:
+                            sentiment = "bearish"
                             break
 
-                    if urgency:
-                        # Determine sentiment from headline
-                        sentiment = "neutral"
-                        positive_words = ["win", "approval", "beat", "upgrade", "growth"]
-                        negative_words = ["miss", "downgrade", "lawsuit", "resign", "bankruptcy"]
-
-                        for pw in positive_words:
-                            if pw in headline:
-                                sentiment = "bullish"
-                                break
-                        for nw in negative_words:
-                            if nw in headline:
-                                sentiment = "bearish"
+                    # Use direction from thesis match if available
+                    if sentiment == "neutral" and thesis_matches:
+                        for match in thesis_matches.values():
+                            d = match.get("direction", "neutral")
+                            if d in ("bullish", "bearish"):
+                                sentiment = d
                                 break
 
-                        # Determine action
-                        if sentiment == "bullish":
-                            action = f"Review for adding to affected positions"
-                        elif sentiment == "bearish":
-                            action = f"Review risk exposure, consider reducing"
-                        else:
-                            action = "Monitor for price action"
+                    if sentiment == "bullish":
+                        action = "Review for adding to affected positions"
+                    elif sentiment == "bearish":
+                        action = "Review risk exposure, consider reducing"
+                    else:
+                        action = "Monitor for price action"
 
-                        alerts.append(NewsUrgencyAlert(
-                            timestamp=item.get("timestamp", ""),
-                            headline=item.get("headline", ""),
-                            source=item.get("source", "unknown"),
-                            urgency=urgency,
-                            affected_symbols=affected_pos,
-                            affected_theses=list(set(affected_theses)),
-                            category=category,
-                            sentiment=sentiment,
-                            recommended_action=action,
-                        ))
+                    alerts.append(NewsUrgencyAlert(
+                        timestamp=item.get("timestamp", ""),
+                        headline=item.get("headline", ""),
+                        source=item.get("source", "unknown"),
+                        urgency=urgency,
+                        affected_symbols=affected_pos,
+                        affected_theses=affected_theses,
+                        category=category,
+                        sentiment=sentiment,
+                        recommended_action=action,
+                    ))
 
         except Exception as e:
             logger.warning(f"Could not check news urgency: {e}")
 
         return alerts
+
+    def _get_thesis_matched_news(self, limit: int = 20) -> list[dict]:
+        """Get recent thesis-matched news items for state.json consumption.
+
+        Returns the last N news items that have thesis_matches populated,
+        for direct reading by Claude sessions.
+        """
+        try:
+            news_path = paths.live / "news_cache.json"
+            if not news_path.exists():
+                return []
+
+            with open(news_path) as f:
+                news_data = json.load(f)
+
+            matched = []
+            for item in news_data.get("items", []):
+                thesis_matches = item.get("thesis_matches", {})
+                if thesis_matches:
+                    matched.append({
+                        "timestamp": item.get("timestamp", ""),
+                        "headline": item.get("headline", ""),
+                        "source": item.get("source", ""),
+                        "thesis_matches": thesis_matches,
+                        "is_urgent": item.get("is_urgent", False),
+                    })
+                if len(matched) >= limit:
+                    break
+
+            return matched
+
+        except Exception as e:
+            logger.debug(f"Could not get thesis matched news: {e}")
+            return []
 
     async def _compute_conviction_decay(self, theses: list[ThesisSummary]) -> list[ConvictionDecayResult]:
         """Compute conviction decay for theses based on age and activity."""

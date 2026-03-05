@@ -1193,6 +1193,9 @@ class UnifiedState:
     # Includes: weather→energy, FDA calendar, squeeze scanner, research insights
     alternative_signals: Optional[dict] = None
 
+    # NEW: Thesis-matched news events for Claude session consumption
+    news_events: list[dict] = field(default_factory=list)
+
     def to_dict(self) -> dict:
         """Serialize to dictionary for JSON."""
         result = {
@@ -1228,6 +1231,8 @@ class UnifiedState:
             "portfolio_history": self.portfolio_history.to_dict() if self.portfolio_history else None,
             # NEW: Alternative signals
             "alternative_signals": self.alternative_signals,
+            # NEW: Thesis-matched news events
+            "news_events": self.news_events,
         }
         return result
 
@@ -1296,6 +1301,8 @@ class UnifiedState:
             portfolio_history=PortfolioHistory.from_dict(data["portfolio_history"]) if data.get("portfolio_history") else None,
             # NEW: Alternative signals
             alternative_signals=data.get("alternative_signals"),
+            # NEW: Thesis-matched news events
+            news_events=data.get("news_events", []),
         )
 
     def to_file(self, path: Path) -> None:

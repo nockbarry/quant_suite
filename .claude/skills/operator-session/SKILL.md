@@ -35,14 +35,58 @@ claude "/operator-session --interval 2"
 ## What Each Check Does
 
 1. **Read unified state** (`~/quant_results/live/state.json`)
-2. **Check alerts**: Portfolio drawdown, VIX spikes, position moves
-3. **Check signpost triggers**: Thesis signposts that fired
-4. **Review agent completions**: Research findings since last check
-5. **Detect convergences**: 3+ signals aligned on same symbol
-6. **Check data freshness**: Flag stale data sources
-7. **Generate action items**: Prioritized recommendations
-8. **Log observation** to `~/quant_results/logs/operator_log.jsonl`
-9. **Push to SessionContext** — observations are automatically pushed to SessionContext for decision linking
+2. **Check thesis-matched news** (`state.news_events` and `state.news_urgency_alerts`)
+3. **Check alerts**: Portfolio drawdown, VIX spikes, position moves
+4. **Check signpost triggers**: Thesis signposts that fired
+5. **Review agent completions**: Research findings since last check
+6. **Detect convergences**: 3+ signals aligned on same symbol
+7. **Check thesis suggestions**: Auto-generated thesis ideas from converging signals
+8. **Check data freshness**: Flag stale data sources
+9. **Generate action items**: Prioritized recommendations
+10. **Log observation** to `~/quant_results/logs/operator_log.jsonl`
+11. **Push to SessionContext** — observations are automatically pushed to SessionContext for decision linking
+
+## News & Thesis Intelligence
+
+**CRITICAL: Check these fields every cycle.** They are populated by the news pipeline
+and contain thesis-matched headlines that may require action.
+
+```python
+from src.synthesis.state import UnifiedState
+from src.core.paths import paths
+
+state = UnifiedState.load(paths.live_state)
+
+# News items matched to active theses (last 20)
+for news in state.news_events:
+    print(f"[{news['source']}] {news['headline']}")
+    for tid, match in news.get('thesis_matches', {}).items():
+        print(f"  → {match['name']} ({match['direction']}, {match['relevance']:.0%})")
+
+# Urgent news alerts (thesis-matched + breaking keywords)
+for alert in state.news_urgency_alerts:
+    print(f"[{alert.get('urgency', 'medium')}] {alert.get('headline', '')}")
+    if alert.get('thesis_matches'):
+        print(f"  Theses: {[m['name'] for m in alert['thesis_matches'].values()]}")
+```
+
+**When news matches a thesis with relevance > 0.5:**
+- Flag it as a potential trade trigger
+- Check if signposts should be updated
+- Consider spawning research agent for deeper analysis
+
+### Auto-Generated Thesis Suggestions
+
+Check for thesis suggestions from converging signals:
+
+```python
+from src.knowledge.thesis_suggester import get_thesis_suggester
+
+suggester = get_thesis_suggester()
+suggestions = suggester.generate_suggestions()
+for s in suggestions:
+    print(f"Suggested thesis: {s.name} (signals: {s.signal_count})")
+```
 
 ## Context Preservation
 

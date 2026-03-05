@@ -161,13 +161,43 @@ async def collect_fast_news():
             seen_titles.add(title)
             unique_items.append(item)
 
+    # Build thesis keyword index for enrichment
+    thesis_index = {}
+    try:
+        from src.intelligence.thesis_keywords import build_keyword_index, match_headline
+        thesis_index = build_keyword_index()
+        logger.info(f"Loaded thesis keyword index: {len(thesis_index)} keywords")
+    except Exception as e:
+        logger.warning(f"Could not build thesis keyword index: {e}")
+
     # Process and categorize
     urgent_items = []
     regular_items = []
+    thesis_match_count = 0
 
     for item in unique_items:
         is_urgent, keyword = check_urgent(item["title"])
         symbols = extract_symbols(item["title"])
+
+        # Thesis enrichment: match headline against thesis keywords
+        thesis_matches = {}
+        if thesis_index:
+            try:
+                raw_matches = match_headline(item["title"], thesis_index)
+                thesis_matches = {
+                    tid: {
+                        "name": m.thesis_name,
+                        "relevance": round(m.relevance, 2),
+                        "keywords": m.matched_keywords[:5],
+                        "direction": m.directions[0] if m.directions else "neutral",
+                    }
+                    for tid, m in raw_matches.items()
+                    if m.relevance >= 0.4
+                }
+                if thesis_matches:
+                    thesis_match_count += 1
+            except Exception:
+                pass
 
         processed = {
             "timestamp": datetime.now().isoformat(),
@@ -178,6 +208,7 @@ async def collect_fast_news():
             "symbols": symbols,
             "is_urgent": is_urgent,
             "urgent_keyword": keyword,
+            "thesis_matches": thesis_matches,
         }
 
         if is_urgent:
@@ -232,8 +263,30 @@ async def collect_fast_news():
     logger.info(
         f"News collection complete. "
         f"New urgent: {len(new_urgent)}, New regular: {len(new_regular)}, "
-        f"Total cached: {len(all_news)}"
+        f"Total cached: {len(all_news)}, Thesis matches: {thesis_match_count}"
     )
+
+    # Log thesis-matched news as ProcessEvents
+    try:
+        from src.autonomy.provenance import log_event
+        for item in (new_urgent + new_regular):
+            if item.get("thesis_matches"):
+                for tid, match in item["thesis_matches"].items():
+                    log_event(
+                        event_type="news_thesis_match",
+                        source="cron:news_collect",
+                        title=f"News matches {match['name']}: {item['headline'][:80]}",
+                        detail={
+                            "headline": item["headline"],
+                            "news_source": item["source"],
+                            "relevance": match["relevance"],
+                            "keywords": match["keywords"],
+                            "direction": match["direction"],
+                        },
+                        thesis_id=tid,
+                    )
+    except Exception as e:
+        logger.debug(f"Could not log thesis match events: {e}")
 
     # Print urgent news
     if new_urgent:

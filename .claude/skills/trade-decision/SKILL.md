@@ -69,8 +69,28 @@ if state:
     print("\n=== SIGNALS ===")
     for symbol, signal in list(state.watchlist_signals.items())[:5]:
         print(f"  {symbol}: composite={signal.composite_score:.2f}, conf={signal.confidence:.2f}")
+
+    # NEWS INTELLIGENCE — thesis-matched headlines from automated pipeline
+    print("\n=== THESIS-MATCHED NEWS ===")
+    for news in state.news_events[:10]:
+        print(f"  [{news.get('source','')}] {news.get('headline','')[:80]}")
+        for tid, match in news.get('thesis_matches', {}).items():
+            print(f"    → {match['name']} ({match.get('direction','neutral')}, {match.get('relevance',0):.0%})")
+
+    print("\n=== URGENT NEWS ALERTS ===")
+    for alert in state.news_urgency_alerts[:5]:
+        urgency = alert.get('urgency', 'medium')
+        headline = alert.get('headline', '')[:80]
+        print(f"  [{urgency.upper()}] {headline}")
+        if alert.get('thesis_matches'):
+            names = [m['name'] for m in alert['thesis_matches'].values()]
+            print(f"    Theses: {', '.join(names)}")
 EOF
 ```
+
+**IMPORTANT:** Factor thesis-matched news into your trading decisions. Headlines that match
+active theses with relevance > 0.5 are strong catalysts — check if they confirm or
+challenge your thesis before trading.
 
 ### Step 2: Review Knowledge Base
 

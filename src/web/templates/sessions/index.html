@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% set active_page = "sessions" %}
+{% block title %}Autonomous Sessions{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Autonomous Sessions</h1>
+            <p class="text-xs text-gray-500 mt-1">Live status, event timeline, and thesis-matched news feed</p>
+        </div>
+        <a href="/sessions/{{ today }}" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-lg transition">
+            Full Day View &rarr;
+        </a>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Sessions (7d)</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ stats.sessions_started }}</p>
+            <p class="text-[10px] {% if stats.sessions_failed > 0 %}text-red-400{% else %}text-gray-500{% endif %}">{{ stats.sessions_failed }} failed</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Operator Checks</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ stats.operator_checks }}</p>
+            <p class="text-[10px] text-gray-500">7 day total</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">News Matches</p>
+            <p class="mono text-lg font-bold text-emerald-400">{{ stats.news_matches }}</p>
+            <p class="text-[10px] text-gray-500">thesis-linked</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Trade Triggers</p>
+            <p class="mono text-lg font-bold {% if stats.trade_triggers > 0 %}text-yellow-400{% else %}text-gray-200{% endif %}">{{ stats.trade_triggers }}</p>
+            <p class="text-[10px] text-gray-500">convergences</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Thesis Changes</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ stats.thesis_changes }}</p>
+            <p class="text-[10px] text-gray-500">conviction updates</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Completed</p>
+            <p class="mono text-lg font-bold text-emerald-400">{{ stats.sessions_completed }}</p>
+            <p class="text-[10px] text-gray-500">successful</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Running</p>
+            <p class="mono text-lg font-bold {% if live_status.running_sessions %}text-emerald-400{% else %}text-gray-500{% endif %}">
+                {{ live_status.running_sessions | length }}
+            </p>
+            <p class="text-[10px] text-gray-500">active now</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Live Status -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Live Status</h2>
+
+            {% if live_status.running_sessions %}
+            <div class="space-y-2 mb-4">
+                {% for rs in live_status.running_sessions %}
+                <div class="flex items-center gap-2 bg-gray-800/50 rounded px-3 py-2">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 pulse-green"></div>
+                    <span class="text-sm text-gray-200 mono">{{ rs.session_type }}</span>
+                    <span class="text-[10px] text-gray-500 ml-auto">PID {{ rs.pid }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-sm text-gray-500 mb-4">No sessions currently running</div>
+            {% endif %}
+
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 mt-4">Today's Sessions</h3>
+            {% if todays_sessions %}
+            <div class="space-y-2">
+                {% for s in todays_sessions %}
+                <div class="flex items-center justify-between bg-gray-800/30 rounded px-3 py-2">
+                    <div class="flex items-center gap-2">
+                        {% if s.status == 'completed' %}
+                        <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        {% elif s.status == 'running' %}
+                        <div class="w-2 h-2 rounded-full bg-emerald-500 pulse-green"></div>
+                        {% elif s.status == 'failed' %}
+                        <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                        {% else %}
+                        <div class="w-2 h-2 rounded-full bg-gray-500"></div>
+                        {% endif %}
+                        <span class="text-sm text-gray-300 mono">{{ s.session_type }}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] text-gray-500">
+                            {% if s.started_at %}{{ s.started_at[11:16] }}{% endif %}
+                            {% if s.completed_at %} - {{ s.completed_at[11:16] }}{% endif %}
+                        </span>
+                        <span class="ml-2 rounded-full px-2 py-0.5 text-[10px]
+                            {% if s.status == 'completed' %}bg-emerald-900/50 text-emerald-400
+                            {% elif s.status == 'running' %}bg-blue-900/50 text-blue-400
+                            {% elif s.status == 'failed' %}bg-red-900/50 text-red-400
+                            {% else %}bg-gray-800 text-gray-500{% endif %}">
+                            {{ s.status }}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-sm text-gray-500">No sessions today</div>
+            {% endif %}
+
+            {% if live_status.last_updated %}
+            <div class="text-[10px] text-gray-600 mt-3">
+                Scheduler updated: {{ live_status.last_updated[:19] }}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Center: Timeline (auto-refresh) -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">Event Timeline</h2>
+                <span class="htmx-indicator text-[10px] text-gray-500">updating...</span>
+            </div>
+            <div id="timeline-content"
+                 hx-get="/sessions/timeline" hx-trigger="load, every 30s"
+                 hx-swap="innerHTML" hx-indicator="closest .htmx-indicator">
+                <div class="text-sm text-gray-500">Loading timeline...</div>
+            </div>
+        </div>
+
+        <!-- Right: News Feed (auto-refresh) -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">Thesis News</h2>
+                <span class="htmx-indicator text-[10px] text-gray-500">updating...</span>
+            </div>
+            <div id="news-content"
+                 hx-get="/sessions/news" hx-trigger="load, every 60s"
+                 hx-swap="innerHTML" hx-indicator="closest .htmx-indicator">
+                <div class="text-sm text-gray-500">Loading news feed...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
