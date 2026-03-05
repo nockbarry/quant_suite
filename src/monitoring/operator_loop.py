@@ -90,6 +90,7 @@ class OperatorObservation:
     session_updates: list[dict] = field(default_factory=list)
     thesis_changes: list[dict] = field(default_factory=list)
     new_research: list[dict] = field(default_factory=list)
+    social_signals: list[dict] = field(default_factory=list)
 
     # Market state
     market_regime: str = "unknown"
@@ -139,6 +140,7 @@ class OperatorObservation:
                 for a in self.agent_completions
             ],
             "convergences": self.convergences,
+            "social_signals": self.social_signals,
             "session_updates": self.session_updates,
             "thesis_changes": self.thesis_changes,
             "new_research": self.new_research,
@@ -203,6 +205,7 @@ class OperatorLoop:
         session_updates = self._check_session_updates()
         thesis_changes = self._check_thesis_changes()
         new_research = self._check_new_research()
+        social_signals = self._check_social_signals()
 
         # Market state
         market_regime = state.get("market", {}).get("rotation_theme", "unknown")
@@ -238,6 +241,7 @@ class OperatorLoop:
             session_updates=session_updates,
             thesis_changes=thesis_changes,
             new_research=new_research,
+            social_signals=social_signals,
             market_regime=market_regime,
             regime_change=regime_change,
             portfolio_status=portfolio_status,
@@ -528,6 +532,48 @@ class OperatorLoop:
         except Exception as e:
             logger.debug(f"Error writing trade triggers: {e}")
 
+    def _check_social_signals(self) -> list[dict]:
+        """Read latest social signal scan results (from cron_signal_scan.py)."""
+        try:
+            scan_file = Path.home() / "quant_results" / "social" / "latest_scan.json"
+            if not scan_file.exists():
+                return []
+
+            # Only report if scan is fresh (< 4 hours old)
+            age_hours = (datetime.now().timestamp() - scan_file.stat().st_mtime) / 3600
+            if age_hours > 4:
+                return []
+
+            with open(scan_file) as f:
+                scan = json.load(f)
+
+            signals = scan.get("wsb", {}).get("signals", [])
+            suggestions = scan.get("suggestions", {}).get("suggestions", [])
+
+            results = []
+            for s in signals[:5]:
+                results.append({
+                    "type": "wsb_signal",
+                    "symbol": s.get("symbol", ""),
+                    "phase": s.get("phase", ""),
+                    "mentions": s.get("mentions", 0),
+                    "sentiment": s.get("sentiment", 0),
+                    "growth_rate": s.get("growth_rate", 0),
+                })
+            for s in suggestions[:3]:
+                results.append({
+                    "type": "thesis_suggestion",
+                    "symbol": s.get("symbol", ""),
+                    "name": s.get("name", ""),
+                    "direction": s.get("direction", ""),
+                    "confidence": s.get("confidence", 0),
+                    "signal_count": s.get("signal_count", 0),
+                })
+            return results
+        except Exception as e:
+            logger.debug(f"Error checking social signals: {e}")
+            return []
+
     def _generate_action_items(
         self,
         alerts: list[Alert],
@@ -771,6 +817,15 @@ class OperatorLoop:
             lines.append(f"\n--- CONVERGENCES ({len(obs.convergences)}) ---")
             for conv in obs.convergences:
                 lines.append(f"  {conv.get('symbol')}: {conv.get('signal_count')} {conv.get('direction')} signals")
+
+        # Social signals
+        if obs.social_signals:
+            lines.append(f"\n--- SOCIAL SIGNALS ({len(obs.social_signals)}) ---")
+            for sig in obs.social_signals:
+                if sig.get("type") == "wsb_signal":
+                    lines.append(f"  WSB: {sig['symbol']} ({sig.get('phase','')}) mentions={sig.get('mentions',0)} sentiment={sig.get('sentiment',0):+.1f}")
+                elif sig.get("type") == "thesis_suggestion":
+                    lines.append(f"  SUGGESTION: {sig['symbol']} — {sig.get('name','')} ({sig.get('direction','')}, {sig.get('signal_count',0)} signals)")
 
         # Autonomous session updates
         if obs.session_updates:

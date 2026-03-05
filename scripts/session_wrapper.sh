@@ -23,6 +23,9 @@
 
 set -uo pipefail
 
+# Ensure claude binary is on PATH (cron has minimal PATH that misses ~/.local/bin)
+export PATH="$HOME/.local/bin:$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node/ 2>/dev/null | tail -1)/bin:/usr/local/bin:$PATH"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SCHEDULER_DIR="$HOME/quant_results/scheduler"
@@ -312,7 +315,8 @@ get_timeout() {
         research)          echo 20 ;;
         thesis)            echo 10 ;;
         brainstorm)        echo 15 ;;
-        research-theory)   echo 20 ;;
+        signal-scan)       echo 15 ;;
+        research-theory)   echo 15 ;;
         operator)          echo 480 ;;  # 8 hours
         *)                 echo 15 ;;
     esac
@@ -326,6 +330,7 @@ get_model() {
         research)          echo "sonnet" ;;
         thesis)            echo "sonnet" ;;
         brainstorm)        echo "sonnet" ;;
+        signal-scan)       echo "sonnet" ;;
         research-theory)   echo "sonnet" ;;
         operator)          echo "opus" ;;
         *)                 echo "sonnet" ;;
@@ -340,7 +345,8 @@ get_skill_prompt() {
         research)          echo "/research --quick" ;;
         thesis)            echo "/thesis" ;;
         brainstorm)        echo "/brainstorm" ;;
-        research-theory)   echo "Run a combined research-theory-thesis cycle: 1) Load unified state and check news_events for thesis-matched headlines. 2) Run /research --quick to scan for new signals and strategies. 3) Check ThesisSuggester for auto-generated thesis ideas from converging signals. 4) Review active theses — update conviction for any with new signpost triggers. 5) Generate 2-3 new hypothesis ideas based on current market conditions. Write all findings to completion record." ;;
+        signal-scan)       echo "/social-signals" ;;
+        research-theory)   echo "/social-signals" ;;
         *)                 echo "" ;;
     esac
 }
@@ -387,7 +393,7 @@ if [ "$SESSION_TYPE" = "operator" ]; then
         --dangerously-skip-permissions \
         --append-system-prompt "$(cat "$PROMPT_FILE")" \
         -p "/operator-session --active" \
-        2>&1 || true
+        2>&1 | tee -a "$LOG_FILE" || true
 
     log "Operator session ended"
 else
@@ -399,7 +405,7 @@ else
         --dangerously-skip-permissions \
         --append-system-prompt "$(cat "$PROMPT_FILE")" \
         -p "$SKILL_PROMPT" \
-        2>&1 || true
+        2>&1 | tee -a "$LOG_FILE" || true
 
     log "One-shot session completed"
 fi
