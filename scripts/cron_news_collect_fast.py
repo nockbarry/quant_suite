@@ -61,7 +61,7 @@ async def fetch_news_rss(url: str, source_name: str) -> list[dict]:
     import httpx
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()
 
@@ -138,11 +138,12 @@ async def collect_fast_news():
     """Collect news from fast sources."""
     logger.info("Starting fast news collection...")
 
-    # RSS feeds for financial news
+    # RSS feeds for financial news (Yahoo Finance 404 since early 2026)
     feeds = [
-        ("https://feeds.finance.yahoo.com/rss/2.0/headline?s=^DJI&region=US&lang=en-US", "yahoo_finance"),
+        ("https://www.cnbc.com/id/100003114/device/rss/rss.html", "cnbc_top"),
         ("https://www.investing.com/rss/news.rss", "investing_com"),
         ("https://feeds.bloomberg.com/markets/news.rss", "bloomberg"),
+        ("https://feeds.marketwatch.com/marketwatch/topstories/", "marketwatch"),
     ]
 
     all_items = []

@@ -27,23 +27,39 @@ def _get_data_sources() -> list[dict]:
     sources = []
 
     # Map of source name -> (directory/file, description)
+    # Paths must match where collectors ACTUALLY write data
     source_map = {
+        # Core state
         "state.json": ("live/state.json", "Unified live state"),
-        "congressional": ("live/research/congressional", "Congressional trades"),
-        "insider": ("live/research/insider", "Insider trading (Form 4)"),
-        "options_flow": ("live/research/options_flow", "Options flow data"),
-        "social_wsb": ("live/research/social/wsb", "WSB mentions"),
-        "social_stocktwits": ("live/research/social/stocktwits", "Stocktwits sentiment"),
-        "news": ("live/research/news", "Market news feeds"),
-        "earnings_calendar": ("live/research/earnings", "Earnings calendar"),
-        "economic_calendar": ("live/research/economic", "Economic releases"),
-        "fda_calendar": ("live/research/fda", "FDA PDUFA dates"),
-        "ipo_calendar": ("live/research/ipo", "IPO calendar"),
-        "vix_structure": ("live/research/vix", "VIX term structure"),
-        "finviz_screens": ("live/research/finviz", "Finviz stock screens"),
-        "aaii_sentiment": ("live/research/sentiment/aaii", "AAII investor survey"),
-        "fed_futures": ("live/research/fed", "Fed funds futures"),
-        "breadth": ("live/research/breadth", "Market breadth"),
+
+        # News (expanded_news writes here, fast_news writes to live/news_cache.json)
+        "news": ("live/news", "Market news feeds (15+ RSS)"),
+        "news_fast": ("live/news_cache.json", "Fast news with thesis matching"),
+
+        # Social signals
+        "social_wsb": ("social/wsb.db", "WSB/Reddit mentions"),
+        "social_stocktwits": ("social/stocktwits_cache.json", "Stocktwits sentiment"),
+
+        # Screens & signals
+        "finviz_screens": ("scraped_data/finviz/screens_latest.json", "Finviz stock screens (8)"),
+
+        # Alternative data
+        "congressional": ("logs/congressional_collection_history.json", "Congressional trades"),
+        "insider": ("logs/insider_collection_history.json", "Insider trading (Form 4)"),
+        "geopolitical": ("live/geopolitical", "Geopolitical event tracking"),
+        "legal": ("live/legal", "Legal/regulatory tracking"),
+        "prediction_markets": ("live/research/prediction_markets", "Prediction markets"),
+
+        # Market regime (read from state.json)
+        "vix_structure": ("live/state.json", "VIX term structure"),
+        "breadth": ("live/state.json", "Market breadth"),
+
+        # Calendars (read from state.json)
+        "earnings_calendar": ("live/state.json", "Earnings calendar"),
+        "economic_calendar": ("live/state.json", "Economic releases"),
+        "fda_calendar": ("live/state.json", "FDA PDUFA dates"),
+
+        # Persistent stores
         "theses": ("theses", "Investment theses"),
         "learnings": ("learnings", "Trade learnings"),
         "knowledge": ("knowledge", "Company/sector knowledge"),
@@ -115,11 +131,11 @@ def _freshness_status(source_name: str, age_seconds: int) -> str:
     # Real-time sources (should update every few minutes)
     realtime_sources = {"state.json", "breadth", "vix_structure"}
     # Hourly sources
-    hourly_sources = {"news", "fed_futures", "options_flow"}
+    hourly_sources = {"news", "news_fast", "fed_futures", "options_flow"}
     # Daily sources
     daily_sources = {"congressional", "insider", "earnings_calendar", "economic_calendar",
                      "fda_calendar", "ipo_calendar", "finviz_screens", "social_wsb",
-                     "social_stocktwits"}
+                     "social_stocktwits", "geopolitical", "legal", "prediction_markets"}
     # Persistent stores (always OK)
     persistent_sources = {"theses", "learnings", "knowledge", "decisions"}
 

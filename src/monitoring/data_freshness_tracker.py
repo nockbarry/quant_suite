@@ -333,10 +333,10 @@ class DataFreshnessTracker:
                 vix = market.get("vix", 0)
                 vix_change = market.get("vix_change_pct", 0)
 
-                if "updated_at" in state:
-                    last_update = datetime.fromisoformat(state["updated_at"])
-                elif "timestamp" in state:
+                if "timestamp" in state:
                     last_update = datetime.fromisoformat(state["timestamp"])
+                elif "updated_at" in state:
+                    last_update = datetime.fromisoformat(state["updated_at"])
 
                 # Generate signal based on VIX level and change
                 if vix > 25:
@@ -383,10 +383,10 @@ class DataFreshnessTracker:
                 pc_ratio = sentiment.get("put_call_ratio", 0)
                 pc_signal = sentiment.get("put_call_signal", "neutral")
 
-                if "updated_at" in state:
-                    last_update = datetime.fromisoformat(state["updated_at"])
-                elif "timestamp" in state:
+                if "timestamp" in state:
                     last_update = datetime.fromisoformat(state["timestamp"])
+                elif "updated_at" in state:
+                    last_update = datetime.fromisoformat(state["updated_at"])
 
                 if pc_ratio > 1.2:
                     top_signal = f"Extreme puts: {pc_ratio:.2f} (contrarian bullish)"
@@ -429,9 +429,11 @@ class DataFreshnessTracker:
                     state = json.load(f)
 
                 sentiment = state.get("sentiment", {})
-                fear_greed = sentiment.get("fear_greed_index", 50)
+                fear_greed = sentiment.get("fear_greed_value", 50)
 
-                if "updated_at" in state:
+                if "timestamp" in state:
+                    last_update = datetime.fromisoformat(state["timestamp"])
+                elif "updated_at" in state:
                     last_update = datetime.fromisoformat(state["updated_at"])
 
                 if fear_greed < 25:
@@ -474,8 +476,10 @@ class DataFreshnessTracker:
                 with open(state_file) as f:
                     state = json.load(f)
 
-                calendar = state.get("calendar_events", [])
-                if "updated_at" in state:
+                calendar = state.get("upcoming_events", [])
+                if "timestamp" in state:
+                    last_update = datetime.fromisoformat(state["timestamp"])
+                elif "updated_at" in state:
                     last_update = datetime.fromisoformat(state["updated_at"])
 
                 # Count earnings this week
@@ -528,8 +532,10 @@ class DataFreshnessTracker:
                 with open(state_file) as f:
                     state = json.load(f)
 
-                calendar = state.get("calendar_events", [])
-                if "updated_at" in state:
+                calendar = state.get("upcoming_events", [])
+                if "timestamp" in state:
+                    last_update = datetime.fromisoformat(state["timestamp"])
+                elif "updated_at" in state:
                     last_update = datetime.fromisoformat(state["updated_at"])
 
                 # Look for high-impact economic events
@@ -585,8 +591,10 @@ class DataFreshnessTracker:
                 with open(state_file) as f:
                     state = json.load(f)
 
-                calendar = state.get("calendar_events", [])
-                if "updated_at" in state:
+                calendar = state.get("upcoming_events", [])
+                if "timestamp" in state:
+                    last_update = datetime.fromisoformat(state["timestamp"])
+                elif "updated_at" in state:
                     last_update = datetime.fromisoformat(state["updated_at"])
 
                 # Look for FDA events
@@ -640,9 +648,11 @@ class DataFreshnessTracker:
         top_signal = None
         signal_count = 0
 
-        # Finviz screens would be in research files
-        research_dir = self.live_dir / "research"
-        screens_file = research_dir / "screens.json"
+        # Finviz screens are saved by FinvizScreener
+        screens_file = self.results_dir / "scraped_data" / "finviz" / "screens_latest.json"
+        if not screens_file.exists():
+            # Fallback to old location
+            screens_file = self.live_dir / "research" / "screens.json"
 
         if screens_file.exists():
             try:
@@ -692,7 +702,9 @@ class DataFreshnessTracker:
                 with open(state_file) as f:
                     state = json.load(f)
 
-                if "updated_at" in state:
+                if "timestamp" in state:
+                    last_update = datetime.fromisoformat(state["timestamp"])
+                elif "updated_at" in state:
                     last_update = datetime.fromisoformat(state["updated_at"])
 
                 # Check for geopolitical mentions in alerts
@@ -744,10 +756,10 @@ class DataFreshnessTracker:
                     state = json.load(f)
 
                 market = state.get("market", {})
-                if "updated_at" in state:
-                    last_update = datetime.fromisoformat(state["updated_at"])
-                elif "timestamp" in state:
+                if "timestamp" in state:
                     last_update = datetime.fromisoformat(state["timestamp"])
+                elif "updated_at" in state:
+                    last_update = datetime.fromisoformat(state["updated_at"])
 
                 # Check for breadth data
                 advancing = market.get("advancing", 0)

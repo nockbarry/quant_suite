@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Master Data Collection Script - Collects from ALL data sources.
 
-Run this to activate all 35+ data sources.
+Run this to activate all data sources and log results.
 
 Usage:
     PYTHONPATH=. python scripts/collect_all_data.py
@@ -12,8 +12,11 @@ import argparse
 import asyncio
 import json
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +24,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# --- Collector Functions ---
 
 async def collect_expanded_news():
     """Collect from 15+ RSS feeds."""
@@ -85,11 +90,100 @@ async def collect_from_daemon():
         from src.data.sources.collection_daemon import DataCollectionDaemon
         daemon = DataCollectionDaemon()
         await daemon.collect_all_now()
-        status = await daemon.get_collection_status()
-        return {"daemon": status}
+        status = daemon.get_status()
+        return {"daemon": {"sources_collected": len(status.sources)}}
     except Exception as e:
         logger.error(f"Daemon collection failed: {e}")
         return {"daemon": {"error": str(e)}}
+
+
+async def collect_wsb():
+    """Collect WSB and Reddit social signals."""
+    try:
+        from src.data.sources.alternative.wsb_tracker import get_wsb_tracker
+        tracker = get_wsb_tracker()
+        mentions = await tracker.scan_recent_posts(limit=100)
+        early_signals = tracker.get_early_signals()
+        return {"wsb": {
+            "mentions": len(mentions),
+            "early_signals": len(early_signals),
+            "top_signals": [
+                {"symbol": s.symbol, "phase": s.current_phase.value, "mentions": s.mention_count}
+                for s in early_signals[:5]
+            ],
+        }}
+    except Exception as e:
+        logger.error(f"WSB collection failed: {e}")
+        return {"wsb": {"error": str(e)}}
+
+
+async def collect_finviz():
+    """Collect Finviz screen results."""
+    try:
+        from src.data.sources.alternative.finviz_screens import FinvizScreener
+        screener = FinvizScreener()
+        screens = await screener.get_screens(force_refresh=True)
+        await screener.close()
+        return {"finviz": {
+            "screens": len(screens.screens),
+            "total_symbols": sum(s.symbol_count for s in screens.screens.values()),
+        }}
+    except Exception as e:
+        logger.error(f"Finviz collection failed: {e}")
+        return {"finviz": {"error": str(e)}}
+
+
+async def collect_stocktwits():
+    """Collect Stocktwits trending data."""
+    try:
+        from src.data.sources.alternative.stocktwits import get_stocktwits_client
+        client = get_stocktwits_client()
+        trending = client.get_trending()
+        return {"stocktwits": {
+            "trending_count": len(trending),
+            "top_trending": [t.get("symbol", t.get("title", "?")) for t in trending[:10]],
+        }}
+    except Exception as e:
+        logger.error(f"Stocktwits collection failed: {e}")
+        return {"stocktwits": {"error": str(e)}}
+
+
+async def collect_congressional():
+    """Collect congressional trading data."""
+    try:
+        from src.data.sources.alternative.congressional_trades import CongressionalTradesSource
+        source = CongressionalTradesSource()
+        trades = await source.fetch_recent_trades(days=7)
+        notable = [t for t in trades if t.signal_strength >= 0.5]
+        return {"congressional": {
+            "total_trades": len(trades),
+            "notable_trades": len(notable),
+            "top_trades": [
+                {"politician": t.politician, "symbol": t.symbol, "type": t.trade_type, "amount": t.amount_estimate}
+                for t in notable[:5]
+            ],
+        }}
+    except Exception as e:
+        logger.error(f"Congressional collection failed: {e}")
+        return {"congressional": {"error": str(e)}}
+
+
+async def collect_prediction_markets():
+    """Collect prediction market data."""
+    try:
+        from src.data.sources.alternative.prediction_markets import PredictionMarketsSource
+        source = PredictionMarketsSource()
+        signals = await source.get_macro_signals()
+        return {"prediction_markets": {
+            "macro_signals": len(signals),
+            "top_signals": [
+                {"category": s.category, "direction": s.direction, "confidence": s.confidence}
+                for s in signals[:5]
+            ],
+        }}
+    except Exception as e:
+        logger.error(f"Prediction markets collection failed: {e}")
+        return {"prediction_markets": {"error": str(e)}}
 
 
 async def update_unified_state():
@@ -118,55 +212,85 @@ async def run_signpost_check():
         return {"signposts": {"error": str(e)}}
 
 
+# --- ProcessEvent Logging ---
+
+def log_collection_event(name: str, result: dict):
+    """Log a data collection event to ProcessEvent for provenance."""
+    try:
+        from src.autonomy.provenance import log_event
+        has_error = "error" in result.get(name, result)
+        log_event(
+            event_type="data_collected" if not has_error else "data_collection_failed",
+            source=f"collector:{name}",
+            title=f"{'Collected' if not has_error else 'Failed'}: {name}",
+            detail=result,
+        )
+    except Exception:
+        pass  # Don't fail collection over logging
+
+
+# --- Main Collection ---
+
 async def collect_all(quick: bool = False):
-    """Collect from all data sources."""
+    """Collect from all data sources in parallel."""
     logger.info("=" * 60)
     logger.info(f"Master Data Collection - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     logger.info("=" * 60)
 
-    results = {}
     start_time = datetime.now()
 
     # Essential collections (always run)
-    essential_tasks = [
-        ("expanded_news", collect_expanded_news()),
-        ("unified_state", update_unified_state()),
-        ("signposts", run_signpost_check()),
-    ]
+    essential = {
+        "expanded_news": collect_expanded_news(),
+        "unified_state": update_unified_state(),
+        "signposts": run_signpost_check(),
+    }
 
     # Extended collections (skip if --quick)
-    extended_tasks = [
-        ("legal", collect_legal()),
-        ("geopolitical", collect_geopolitical()),
-        ("sector_rotation", collect_sector_rotation()),
-        ("daemon", collect_from_daemon()),
-    ]
+    extended = {
+        "legal": collect_legal(),
+        "geopolitical": collect_geopolitical(),
+        "sector_rotation": collect_sector_rotation(),
+        "wsb": collect_wsb(),
+        "finviz": collect_finviz(),
+        "stocktwits": collect_stocktwits(),
+        "congressional": collect_congressional(),
+        "prediction_markets": collect_prediction_markets(),
+        "daemon": collect_from_daemon(),
+    }
 
-    tasks_to_run = essential_tasks if quick else essential_tasks + extended_tasks
+    tasks = essential if quick else {**essential, **extended}
 
-    # Run all tasks concurrently
-    logger.info(f"Running {len(tasks_to_run)} collection tasks...")
+    logger.info(f"Running {len(tasks)} collection tasks in parallel...")
 
-    for name, coro in tasks_to_run:
-        try:
-            logger.info(f"  Starting: {name}")
-            result = await coro
+    # Run all tasks concurrently with asyncio.gather
+    names = list(tasks.keys())
+    coros = list(tasks.values())
+    gather_results = await asyncio.gather(*coros, return_exceptions=True)
+
+    results = {}
+    for name, result in zip(names, gather_results):
+        if isinstance(result, Exception):
+            logger.error(f"  Failed: {name} - {result}")
+            results[name] = {"error": str(result)}
+        elif isinstance(result, dict):
             results.update(result)
             logger.info(f"  Completed: {name}")
-        except Exception as e:
-            logger.error(f"  Failed: {name} - {e}")
-            results[name] = {"error": str(e)}
+        else:
+            results[name] = {"error": f"Unexpected result type: {type(result)}"}
 
-    # Calculate duration
+    # Log each result as ProcessEvent
+    for name in names:
+        if name in results:
+            log_collection_event(name, {name: results[name]})
+
     duration = (datetime.now() - start_time).total_seconds()
 
-    # Summary
     logger.info("=" * 60)
     logger.info(f"Collection completed in {duration:.1f} seconds")
     logger.info("=" * 60)
 
-    # Count successes and failures
-    successes = sum(1 for v in results.values() if "error" not in v)
+    successes = sum(1 for v in results.values() if not isinstance(v, dict) or "error" not in v)
     failures = len(results) - successes
 
     logger.info(f"Results: {successes} succeeded, {failures} failed")
@@ -180,14 +304,19 @@ async def collect_all(quick: bool = False):
         "timestamp": datetime.now().isoformat(),
         "duration_seconds": duration,
         "quick_mode": quick,
+        "task_count": len(tasks),
+        "successes": successes,
+        "failures": failures,
         "results": results,
     }
 
-    # Append to log
     existing_log = []
     if log_file.exists():
-        with open(log_file) as f:
-            existing_log = json.load(f)
+        try:
+            with open(log_file) as f:
+                existing_log = json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            existing_log = []
 
     existing_log.append(log_entry)
     existing_log = existing_log[-100:]  # Keep last 100
@@ -206,18 +335,17 @@ def main():
     results = asyncio.run(collect_all(quick=args.quick))
 
     # Print summary
-    print("\nCollection Summary:")
+    print(f"\nCollection Summary ({len(results)} sources):")
     print("-" * 40)
-    for source, result in results.items():
-        status = "✓" if "error" not in result else "✗"
-        print(f"  {status} {source}")
+    for source, result in sorted(results.items()):
+        if isinstance(result, dict) and "error" in result:
+            print(f"  ✗ {source}: {result['error'][:60]}")
+        else:
+            print(f"  ✓ {source}")
 
-    # Print any errors
-    errors = {k: v["error"] for k, v in results.items() if "error" in v}
+    errors = {k: v["error"] for k, v in results.items() if isinstance(v, dict) and "error" in v}
     if errors:
-        print("\nErrors:")
-        for source, error in errors.items():
-            print(f"  {source}: {error}")
+        print(f"\n{len(errors)} errors encountered (see logs for details)")
 
 
 if __name__ == "__main__":

@@ -21,33 +21,28 @@ logger = logging.getLogger(__name__)
 # Comprehensive RSS feed collection
 RSS_FEEDS = {
     # Major Financial News
-    "yahoo_finance": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,AAPL,MSFT,GOOGL,AMZN,META,NVDA&region=US&lang=en-US",
     "seeking_alpha": "https://seekingalpha.com/market_currents.xml",
-    "reuters_business": "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best",
     "wsj_markets": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
     "cnbc_top": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+    "cnbc_world": "https://www.cnbc.com/id/100727362/device/rss/rss.html",
     "marketwatch": "https://feeds.marketwatch.com/marketwatch/topstories/",
     "bloomberg_markets": "https://feeds.bloomberg.com/markets/news.rss",
-
+    "investing_com": "https://www.investing.com/rss/news.rss",
+    "benzinga": "https://www.benzinga.com/feed",
     # Sector-Specific
     "oilprice": "https://oilprice.com/rss/main",
-    "mining_com": "https://www.mining.com/feed/",
     "fierce_pharma": "https://www.fiercepharma.com/rss/xml",
     "techcrunch": "https://techcrunch.com/feed/",
     "the_block_crypto": "https://www.theblock.co/rss.xml",
 
     # Fed/Policy/Government
     "fed_press": "https://www.federalreserve.gov/feeds/press_all.xml",
-    "treasury_press": "https://home.treasury.gov/system/files/136/press-rss.xml",
     "sec_news": "https://www.sec.gov/news/pressreleases.rss",
 
     # Legal/Regulatory
     "scotusblog": "https://www.scotusblog.com/feed/",
-    "law360_securities": "https://www.law360.com/rss/securities",
 
     # International
-    "ft_markets": "https://www.ft.com/markets?format=rss",
-    "reuters_world": "https://www.reutersagency.com/feed/?best-topics=world&post_type=best",
     "scmp_economy": "https://www.scmp.com/rss/91/feed",  # South China Morning Post
 }
 
@@ -133,11 +128,25 @@ class ExpandedNewsCollector:
             root = ElementTree.fromstring(response.content)
 
             # Handle both RSS and Atom formats
-            for item in root.findall(".//item") or root.findall(".//{http://www.w3.org/2005/Atom}entry"):
-                title_elem = item.find("title") or item.find("{http://www.w3.org/2005/Atom}title")
-                link_elem = item.find("link") or item.find("{http://www.w3.org/2005/Atom}link")
-                pub_elem = item.find("pubDate") or item.find("{http://www.w3.org/2005/Atom}published")
-                desc_elem = item.find("description") or item.find("{http://www.w3.org/2005/Atom}summary")
+            # NOTE: Cannot use `or` with Element — Element.__bool__() returns
+            # False for elements with no children (Python 3.10+), even if they
+            # have text content. Use explicit `is None` checks instead.
+            feed_items = root.findall(".//item")
+            if not feed_items:
+                feed_items = root.findall(".//{http://www.w3.org/2005/Atom}entry")
+            for item in feed_items:
+                title_elem = item.find("title")
+                if title_elem is None:
+                    title_elem = item.find("{http://www.w3.org/2005/Atom}title")
+                link_elem = item.find("link")
+                if link_elem is None:
+                    link_elem = item.find("{http://www.w3.org/2005/Atom}link")
+                pub_elem = item.find("pubDate")
+                if pub_elem is None:
+                    pub_elem = item.find("{http://www.w3.org/2005/Atom}published")
+                desc_elem = item.find("description")
+                if desc_elem is None:
+                    desc_elem = item.find("{http://www.w3.org/2005/Atom}summary")
 
                 if title_elem is None:
                     continue
@@ -221,8 +230,11 @@ class ExpandedNewsCollector:
                 seen.add(item.hash)
                 unique_items.append(item)
 
-        # Sort by published date
-        unique_items.sort(key=lambda x: x.published, reverse=True)
+        # Sort by published date (normalize to naive UTC for comparison)
+        unique_items.sort(
+            key=lambda x: x.published.replace(tzinfo=None) if x.published.tzinfo else x.published,
+            reverse=True,
+        )
 
         return unique_items
 

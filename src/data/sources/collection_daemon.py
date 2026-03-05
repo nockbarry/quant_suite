@@ -346,7 +346,7 @@ class DataCollectionDaemon:
         from src.data.sources.alternative.finviz_screens import FinvizScreener
         screener = FinvizScreener()
         try:
-            await screener.run_all_screens(force_refresh=True)
+            await screener.get_screens(force_refresh=True)
         finally:
             await screener.close()
 

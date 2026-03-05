@@ -1997,22 +1997,107 @@ class LiveDaemon:
         - FDA Calendar → Binary event alerts
         - Short Interest + Social → Squeeze candidates
         - Research Insights → Actionable recommendations
+        - WSB/Stocktwits → Social signals (early alpha, trending)
+        - Finviz → Screen results (momentum, squeeze, insider buying)
+        - Congressional → Notable political trades
 
         Added: 2026-01-19 per SYSTEM_COHESION_AUDIT.md
+        Enhanced: 2026-03-05 — added social, screen, congressional signals
         """
+        result = {}
+
+        # Original alternative signals
         try:
             from src.synthesis.alternative_signals import AlternativeSignalGenerator
 
             generator = AlternativeSignalGenerator()
             signals = await generator.generate_all()
-            return signals.to_dict()
-
+            result = signals.to_dict()
         except ImportError as e:
             logger.warning(f"Alternative signals module not available: {e}")
-            return None
         except Exception as e:
             logger.warning(f"Could not generate alternative signals: {e}")
-            return None
+
+        # Augment with cached social/screen/congressional data
+        result.update(self._read_social_signals())
+
+        return result if result else None
+
+    def _read_social_signals(self) -> dict:
+        """Read cached social, screen, and congressional data files.
+
+        These files are written by collect_all_data.py collectors.
+        We read the cached results rather than re-fetching to stay fast.
+        """
+        import json
+        signals = {}
+
+        # WSB early signals
+        try:
+            wsb_file = paths.base / "social" / "wsb_signals.json"
+            if wsb_file.exists():
+                with open(wsb_file) as f:
+                    wsb_data = json.load(f)
+                # File format: {"updated_at": ..., "early_signals": [...], "trending_signals": [...]}
+                early = wsb_data.get("early_signals", []) if isinstance(wsb_data, dict) else []
+                trending = wsb_data.get("trending_signals", []) if isinstance(wsb_data, dict) else []
+                signals["social_wsb"] = {
+                    "early_signals": early[:10],
+                    "trending_signals": trending[:10],
+                    "updated_at": wsb_data.get("updated_at") if isinstance(wsb_data, dict) else None,
+                }
+        except Exception as e:
+            logger.debug(f"Could not read WSB signals: {e}")
+
+        # Stocktwits trending
+        try:
+            st_file = paths.base / "social" / "stocktwits_cache.json"
+            if st_file.exists():
+                with open(st_file) as f:
+                    st_data = json.load(f)
+                trending = st_data.get("trending", [])[:10] if isinstance(st_data, dict) else []
+                signals["social_stocktwits"] = {
+                    "trending": trending,
+                    "total_symbols": len(st_data.get("symbols", {})) if isinstance(st_data, dict) else 0,
+                }
+        except Exception as e:
+            logger.debug(f"Could not read Stocktwits data: {e}")
+
+        # Finviz screens
+        try:
+            finviz_file = paths.base / "scraped_data" / "finviz" / "screens_latest.json"
+            if finviz_file.exists():
+                with open(finviz_file) as f:
+                    finviz_data = json.load(f)
+                # Extract top screens with symbols (context-efficient)
+                screens_summary = {}
+                for screen_name, screen_data in finviz_data.get("screens", {}).items():
+                    if isinstance(screen_data, dict) and screen_data.get("symbols"):
+                        screens_summary[screen_name] = {
+                            "symbols": screen_data["symbols"][:10],
+                            "count": screen_data.get("symbol_count", len(screen_data["symbols"])),
+                        }
+                signals["screens_finviz"] = screens_summary
+        except Exception as e:
+            logger.debug(f"Could not read Finviz screens: {e}")
+
+        # Congressional trades (from collection history)
+        try:
+            cong_file = paths.base / "logs" / "congressional_collection_history.json"
+            if cong_file.exists():
+                with open(cong_file) as f:
+                    history = json.load(f)
+                if history and isinstance(history, list):
+                    last = history[-1]
+                    notable = last.get("result", {}).get("notable_trades", [])
+                    signals["congressional"] = {
+                        "notable_trades": notable[:10] if isinstance(notable, list) else [],
+                        "last_collected": last.get("timestamp"),
+                    }
+        except Exception as e:
+            logger.debug(f"Could not read congressional data: {e}")
+
+        return signals
 
 
 async def main():

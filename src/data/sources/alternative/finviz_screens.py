@@ -291,31 +291,24 @@ class FinvizScreener:
                     table = soup.find("table", class_="screener_table")
 
                 if table:
-                    # Look for ticker symbols in the table
-                    for link in table.find_all("a", class_="screener-link-primary"):
-                        symbol = link.text.strip()
-                        if symbol and len(symbol) <= 5 and symbol.isalpha():
-                            symbols.append(symbol.upper())
+                    # Finviz screener table: columns are [#, Ticker, Company, Sector, ...]
+                    # Extract tickers from the second column (index 1) of each data row
+                    for row in table.find_all("tr"):
+                        cells = row.find_all("td")
+                        if len(cells) >= 2:
+                            ticker_cell = cells[1]
+                            link = ticker_cell.find("a")
+                            if link:
+                                symbol = link.text.strip()
+                                if symbol and 1 <= len(symbol) <= 5 and symbol.isalpha() and symbol.isupper():
+                                    symbols.append(symbol)
 
-                    # Also try looking for tickers in specific cells
-                    if not symbols:
-                        for row in table.find_all("tr"):
-                            cells = row.find_all("td")
-                            if cells:
-                                first_cell = cells[0]
-                                link = first_cell.find("a")
-                                if link:
-                                    symbol = link.text.strip()
-                                    if symbol and len(symbol) <= 5:
-                                        symbols.append(symbol.upper())
-
-                # If still no symbols, try a different approach
+                # Fallback: look for quote.ashx links anywhere on page
                 if not symbols:
-                    # Look for any link that looks like a ticker
-                    for link in soup.find_all("a", href=re.compile(r"/quote\.ashx\?t=")):
+                    for link in soup.find_all("a", href=re.compile(r"quote\.ashx\?t=")):
                         symbol = link.text.strip()
-                        if symbol and len(symbol) <= 5 and symbol.isalpha():
-                            symbols.append(symbol.upper())
+                        if symbol and 1 <= len(symbol) <= 5 and symbol.isalpha() and symbol.isupper():
+                            symbols.append(symbol)
 
                 logger.info(f"Screen {screen_name}: found {len(symbols)} symbols")
 
