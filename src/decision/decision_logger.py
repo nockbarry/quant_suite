@@ -651,4 +651,37 @@ def create_decision(
     except Exception:
         pass
 
+    # Auto-create direction prediction for the intelligence feedback loop
+    try:
+        from src.db.write_api import athena_db
+        from src.intelligence.setup_types import normalize_setup_type
+
+        if action in (Action.BUY, Action.ADD):
+            pred_direction = "bullish"
+        elif action in (Action.SELL, Action.CLOSE, Action.TRIM):
+            pred_direction = "bearish"
+        else:
+            pred_direction = None
+
+        if pred_direction:
+            norm_setup = normalize_setup_type(setup_type or "thesis_driven")
+            hold_days = expected_hold_days or 10
+            athena_db.save_prediction({
+                "decision_id": decision.id,
+                "thesis_id": thesis_id,
+                "symbol": symbol,
+                "prediction_type": "direction",
+                "direction": pred_direction,
+                "target_value": limit_price,
+                "target_description": f"{'Bullish' if pred_direction == 'bullish' else 'Bearish'} on {symbol} ({action.value})",
+                "confidence": confidence,
+                "timeframe_days": hold_days,
+                "reasoning_category": norm_setup,
+                "setup_type": norm_setup,
+                "key_reasoning": (reasoning or "")[:500],
+                "created": decision.timestamp.isoformat(),
+            })
+    except Exception:
+        pass  # Never block decision creation
+
     return decision

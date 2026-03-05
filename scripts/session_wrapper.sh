@@ -153,35 +153,29 @@ write_completion() {
         local EXISTING_TIME
         EXISTING_TIME=$(stat -c %Y "$EXISTING" 2>/dev/null || echo 0)
         if [ "$EXISTING_TIME" -gt "$START_TIME" ]; then
-            log "Enriched completion record exists, skipping wrapper fallback"
-            return
+            # Verify it has actual findings (not just an empty shell)
+            local HAS_FINDINGS
+            HAS_FINDINGS=$(python3 -c "
+import json, sys
+with open('$EXISTING') as f:
+    r = json.load(f)
+print('yes' if r.get('key_findings') else 'no')
+" 2>/dev/null || echo "no")
+            if [ "$HAS_FINDINGS" = "yes" ]; then
+                log "Enriched completion record exists, skipping fallback"
+                return
+            fi
         fi
     fi
 
-    python3 -c "
-import json
-from datetime import datetime
-from pathlib import Path
-
-completions_dir = Path('$SCHEDULER_DIR/completions')
-completions_dir.mkdir(parents=True, exist_ok=True)
-
-record = {
-    'session_type': '$SESSION_TYPE',
-    'success': $SUCCESS,
-    'exit_code': $EXIT_CODE,
-    'duration_seconds': $DURATION,
-    'completed_at': datetime.now().isoformat(),
-    'log_file': '$LOG_FILE',
-    'summary': 'Session completed' if $SUCCESS else 'Session failed (exit $EXIT_CODE)',
-    'key_findings': [],
-    'symbols': [],
-}
-
-filename = f'${SESSION_TYPE}_${TIMESTAMP}.json'
-with open(completions_dir / filename, 'w') as f:
-    json.dump(record, f, indent=2)
-" 2>/dev/null || true
+    # Use smart completion to extract findings from actual session outputs
+    log "Running smart completion fallback for $SESSION_TYPE"
+    cd "$PROJECT_DIR" && PYTHONPATH="$PROJECT_DIR" python3 \
+        "$SCRIPT_DIR/smart_completion.py" \
+        "$SESSION_TYPE" \
+        "$START_TIME" \
+        "$LOG_FILE" \
+        2>&1 | tee -a "$LOG_FILE" || true
 }
 
 # --- Update Scheduler State ---
