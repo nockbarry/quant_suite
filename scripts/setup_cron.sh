@@ -10,6 +10,7 @@
 # Usage: ./setup_cron.sh install|remove|show
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 CRON_MARKER="# QUANT_SUITE_TRADING"
 
 show_cron() {
@@ -109,7 +110,7 @@ install_auto() {
     echo ""
 
     # Get existing crontab (without our auto entries)
-    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py")
+    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "cron_signal_scan.py")
 
     # Create new crontab with auto entries
     {
@@ -175,7 +176,7 @@ install_auto() {
 remove_auto() {
     echo "Removing autonomous Claude session cron jobs..."
 
-    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | crontab -
+    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "cron_signal_scan.py" | crontab -
 
     echo "Autonomous cron jobs removed."
 }
