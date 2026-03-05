@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+{% block title %}Usage Monitor{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6 max-w-7xl">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-100">Claude Code Usage</h1>
+            <p class="text-sm text-gray-500 mt-1">Max 5x Plan &mdash; {{ summary.current_month }}</p>
+        </div>
+        <div class="text-xs text-gray-600 mono">
+            API-equivalent pricing &bull; Estimates only
+        </div>
+    </div>
+
+    <!-- Top Metric Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- MTD Cost -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="text-xs text-gray-500 uppercase tracking-wider">MTD Cost (API equiv)</div>
+            <div class="text-2xl font-bold mono mt-1 text-emerald-400">${{ "%.2f"|format(summary.total_cost) }}</div>
+            <div class="text-xs text-gray-500 mt-1">of ~${{ "%.0f"|format(summary.budget) }} est. capacity</div>
+        </div>
+
+        <!-- Daily Average -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="text-xs text-gray-500 uppercase tracking-wider">Daily Average</div>
+            <div class="text-2xl font-bold mono mt-1 text-blue-400">${{ "%.2f"|format(summary.daily_avg_cost) }}</div>
+            <div class="text-xs text-gray-500 mt-1">per active day</div>
+        </div>
+
+        <!-- Output Tokens -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="text-xs text-gray-500 uppercase tracking-wider">Output Tokens (MTD)</div>
+            <div class="text-2xl font-bold mono mt-1 text-amber-400">{{ format_tokens(summary.output_tokens_month) }}</div>
+            <div class="text-xs text-gray-500 mt-1">primary capacity driver</div>
+        </div>
+
+        <!-- Sessions -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="text-xs text-gray-500 uppercase tracking-wider">Sessions</div>
+            <div class="text-2xl font-bold mono mt-1 text-purple-400">{{ summary.sessions_month }}</div>
+            <div class="text-xs text-gray-500 mt-1">{{ summary.messages_month }} messages &bull; {{ summary.sessions_today }} today</div>
+        </div>
+    </div>
+
+    <!-- Capacity Gauge -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs text-gray-500 uppercase tracking-wider">Projected Monthly Capacity</span>
+            <span class="text-sm mono font-bold
+                {% if summary.capacity_pct < 50 %}text-emerald-400
+                {% elif summary.capacity_pct < 75 %}text-amber-400
+                {% else %}text-red-400{% endif %}">
+                {{ "%.0f"|format(summary.capacity_pct) }}%
+            </span>
+        </div>
+        <div class="w-full bg-gray-800 rounded-full h-3">
+            <div class="h-3 rounded-full transition-all duration-500
+                {% if summary.capacity_pct < 50 %}bg-emerald-500
+                {% elif summary.capacity_pct < 75 %}bg-amber-500
+                {% else %}bg-red-500{% endif %}"
+                style="width: {{ [summary.capacity_pct, 100] | min }}%">
+            </div>
+        </div>
+        <div class="flex justify-between mt-1 text-xs text-gray-600 mono">
+            <span>${{ "%.0f"|format(summary.total_cost) }} used</span>
+            <span>${{ "%.0f"|format(summary.projected_monthly_cost) }} projected</span>
+            <span>${{ "%.0f"|format(summary.budget) }} est. budget</span>
+        </div>
+    </div>
+
+    <!-- Daily Cost Chart -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-gray-300 mb-4">Daily API-Equivalent Cost (Last 30 Days)</h2>
+        <div style="height: 280px;">
+            <canvas id="dailyCostChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Two-column: Token Breakdown + Daily Table -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Token Breakdown Chart -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-4">Token Distribution (This Month)</h2>
+            <div style="height: 220px;">
+                <canvas id="tokenPieChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Session Type Breakdown -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 mb-4">Scheduled Sessions</h2>
+            {% if sessions %}
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="text-gray-500 border-b border-gray-800">
+                        <th class="text-left py-2">Type</th>
+                        <th class="text-right py-2">Count</th>
+                        <th class="text-right py-2">Avg Duration</th>
+                        <th class="text-right py-2">Success</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in sessions %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                        <td class="py-2 mono text-gray-300">{{ s.session_type }}</td>
+                        <td class="py-2 text-right mono">{{ s.count }}</td>
+                        <td class="py-2 text-right mono text-gray-400">{{ "%.0f"|format(s.avg_duration_s) }}s</td>
+                        <td class="py-2 text-right mono
+                            {% if s.success_rate >= 80 %}text-emerald-400
+                            {% elif s.success_rate >= 50 %}text-amber-400
+                            {% else %}text-red-400{% endif %}">
+                            {{ "%.0f"|format(s.success_rate) }}%
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-gray-600 text-sm">No scheduled session data yet</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Daily Breakdown Table -->
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-gray-300 mb-4">Daily Breakdown</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="text-gray-500 border-b border-gray-800">
+                        <th class="text-left py-2">Date</th>
+                        <th class="text-right py-2">Sessions</th>
+                        <th class="text-right py-2">Messages</th>
+                        <th class="text-right py-2">Tools</th>
+                        <th class="text-right py-2">Input</th>
+                        <th class="text-right py-2">Output</th>
+                        <th class="text-right py-2">Cache Write</th>
+                        <th class="text-right py-2">Cache Read</th>
+                        <th class="text-right py-2">Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in summary.days | reverse %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                        <td class="py-2 mono text-gray-300">{{ d.date }}</td>
+                        <td class="py-2 text-right mono">{{ d.sessions }}</td>
+                        <td class="py-2 text-right mono">{{ d.messages }}</td>
+                        <td class="py-2 text-right mono text-gray-400">{{ d.tool_calls }}</td>
+                        <td class="py-2 text-right mono text-blue-400">{{ format_tokens(d.input_tokens) }}</td>
+                        <td class="py-2 text-right mono text-emerald-400">{{ format_tokens(d.output_tokens) }}</td>
+                        <td class="py-2 text-right mono text-amber-400">{{ format_tokens(d.cache_write_tokens) }}</td>
+                        <td class="py-2 text-right mono text-gray-500">{{ format_tokens(d.cache_read_tokens) }}</td>
+                        <td class="py-2 text-right mono font-semibold
+                            {% if d.equivalent_cost_usd > 300 %}text-red-400
+                            {% elif d.equivalent_cost_usd > 150 %}text-amber-400
+                            {% else %}text-emerald-400{% endif %}">
+                            ${{ "%.2f"|format(d.equivalent_cost_usd) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const days = {{ days_json | tojson }};
+
+    // Daily Cost Bar Chart
+    const costCtx = document.getElementById('dailyCostChart').getContext('2d');
+    new Chart(costCtx, {
+        type: 'bar',
+        data: {
+            labels: days.map(d => d.date.slice(5)),  // MM-DD
+            datasets: [
+                {
+                    label: 'Output ($75/MTok)',
+                    data: days.map(d => +(d.output_tokens / 1e6 * 75).toFixed(2)),
+                    backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                    borderColor: 'rgba(34, 197, 94, 1)',
+                    borderWidth: 1,
+                },
+                {
+                    label: 'Cache Write ($18.75/MTok)',
+                    data: days.map(d => +(d.cache_write_tokens / 1e6 * 18.75).toFixed(2)),
+                    backgroundColor: 'rgba(245, 158, 11, 0.7)',
+                    borderColor: 'rgba(245, 158, 11, 1)',
+                    borderWidth: 1,
+                },
+                {
+                    label: 'Cache Read ($1.875/MTok)',
+                    data: days.map(d => +(d.cache_read_tokens / 1e6 * 1.875).toFixed(2)),
+                    backgroundColor: 'rgba(100, 116, 139, 0.5)',
+                    borderColor: 'rgba(100, 116, 139, 1)',
+                    borderWidth: 1,
+                },
+                {
+                    label: 'Input ($15/MTok)',
+                    data: days.map(d => +(d.input_tokens / 1e6 * 15).toFixed(2)),
+                    backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    borderWidth: 1,
+                },
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                    ticks: { color: '#9ca3af', font: { size: 10, family: 'JetBrains Mono' } },
+                },
+                y: {
+                    stacked: true,
+                    grid: { color: 'rgba(75, 85, 99, 0.3)' },
+                    ticks: {
+                        color: '#9ca3af',
+                        font: { size: 10, family: 'JetBrains Mono' },
+                        callback: v => '$' + v.toFixed(0),
+                    },
+                    title: { display: true, text: 'API Equivalent ($)', color: '#6b7280', font: { size: 11 } },
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { color: '#9ca3af', font: { size: 10 }, boxWidth: 12, padding: 8 },
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ctx.dataset.label + ': $' + ctx.parsed.y.toFixed(2),
+                    }
+                }
+            }
+        }
+    });
+
+    // Token Distribution Pie Chart (this month only)
+    const monthDays = days.filter(d => d.date.startsWith('{{ summary.current_month }}'));
+    const totals = {
+        input: monthDays.reduce((s, d) => s + d.input_tokens, 0),
+        output: monthDays.reduce((s, d) => s + d.output_tokens, 0),
+        cache_write: monthDays.reduce((s, d) => s + d.cache_write_tokens, 0),
+        cache_read: monthDays.reduce((s, d) => s + d.cache_read_tokens, 0),
+    };
+
+    const pieCtx = document.getElementById('tokenPieChart').getContext('2d');
+    new Chart(pieCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Output', 'Cache Write', 'Cache Read', 'Input'],
+            datasets: [{
+                data: [totals.output, totals.cache_write, totals.cache_read, totals.input],
+                backgroundColor: [
+                    'rgba(34, 197, 94, 0.8)',
+                    'rgba(245, 158, 11, 0.8)',
+                    'rgba(100, 116, 139, 0.5)',
+                    'rgba(59, 130, 246, 0.8)',
+                ],
+                borderColor: 'rgba(17, 24, 39, 1)',
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { color: '#9ca3af', font: { size: 11 }, padding: 12 },
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            const val = ctx.parsed;
+                            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                            const pct = ((val / total) * 100).toFixed(1);
+                            let label = '';
+                            if (val >= 1e9) label = (val / 1e9).toFixed(1) + 'B';
+                            else if (val >= 1e6) label = (val / 1e6).toFixed(1) + 'M';
+                            else if (val >= 1e3) label = (val / 1e3).toFixed(1) + 'K';
+                            else label = val.toString();
+                            return ctx.label + ': ' + label + ' tokens (' + pct + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
