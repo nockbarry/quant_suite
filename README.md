@@ -298,6 +298,35 @@ python -m src.monitoring.swarm_visualizer --watch
 
 ---
 
+## Autonomous Operation
+
+Claude Code sessions run autonomously throughout the trading day, scheduled via `cron + tmux`:
+
+```
+05:55  Health monitor starts (watchdog)
+06:30  /morning-briefing (one-shot)
+08:30  /operator-session (long-running, monitors all day)
+10:00  /trade-decision (one-shot, morning)
+10:30  /research --quick (one-shot)
+13:00  /trade-decision (one-shot, afternoon)
+14:30  /research --quick (one-shot)
+16:05  Operator graceful exit
+16:30  /eod-review (one-shot)
+```
+
+Sessions coordinate through shared state files in `~/quant_results/scheduler/`. The operator session ingests results from other sessions (briefings, research, thesis changes) and writes trade triggers when convergences are detected. A health monitor watchdog restarts crashed sessions and launches ad-hoc trade decisions.
+
+```bash
+# Install autonomous schedule
+./scripts/setup_cron.sh install_auto
+
+# Manual control
+./scripts/athena_scheduler.sh status     # Show all sessions
+./scripts/athena_scheduler.sh kill-all   # Emergency stop
+```
+
+---
+
 ## Core Components
 
 ### Synthesis Layer

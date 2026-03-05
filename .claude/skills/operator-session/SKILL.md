@@ -386,6 +386,43 @@ The handoff includes:
 - Key observations
 - Current authority and safety rails
 
+## Autonomous Session Data Flow
+
+When running as part of the autonomous trading day, the operator session automatically ingests data from other Claude sessions:
+
+### What flows IN (from other sessions → operator)
+
+| Source | Data | How |
+|--------|------|-----|
+| `/morning-briefing` | Key findings, watchlist, convergences | Completion record in `scheduler/completions/` |
+| `/research --quick` | Validated strategies, new insights | Completion record + research_results/ files |
+| `/trade-decision` | Decisions made, trades executed | Completion record + decisions/ files |
+| Thesis updates | Conviction changes, new theses, invalidations | YAML file comparison via thesis snapshot |
+| Belief updater | Signal weight changes, calibration updates | intelligence/ directory files |
+
+The operator's `operator_check()` calls three ingestion methods each cycle:
+- `_check_session_updates()` — reads `scheduler/completions/` for new session results
+- `_check_thesis_changes()` — compares thesis YAMLs against cached snapshot
+- `_check_new_research()` — scans research_results/ and briefings/ for new files
+
+### What flows OUT (operator → other sessions)
+
+| Output | Destination | Trigger |
+|--------|-------------|---------|
+| Trade triggers | `scheduler/trade_triggers.json` | 4+ signal convergence detected |
+| Observations | `logs/operator_log.jsonl` | Every check cycle |
+| Session state | `live/operator_session.json` | Every check cycle |
+
+**Health monitor** reads `trade_triggers.json` every 60s and launches `/trade-decision` sessions automatically.
+
+### Crash Recovery
+
+If the operator crashes (context exhaustion, error):
+1. Health monitor detects dead pane within 60s
+2. Writes `scheduler/handoff.json` with last observations + session state
+3. Restarts operator with handoff context via `--append-system-prompt`
+4. New operator reads handoff and continues monitoring
+
 ## Best Practices
 
 1. **Start with THESIS_ONLY authority** - safest for active trading

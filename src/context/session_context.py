@@ -71,7 +71,15 @@ class SessionContext:
 
     @classmethod
     def reset(cls) -> None:
-        """Reset the singleton (useful for tests)."""
+        """Reset the singleton — clears events and resets for a new session.
+
+        After reset, the next ``get()`` call returns a fresh instance.
+        The old reference is also cleared so callers who kept it don't
+        accidentally add events to an orphaned object.
+        """
+        if cls._instance is not None:
+            cls._instance.events.clear()
+            cls._instance.session_id = ""
         cls._instance = None
 
     def __init__(self) -> None:

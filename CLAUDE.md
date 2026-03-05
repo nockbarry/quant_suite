@@ -1063,6 +1063,70 @@ job_postings: 3 days
 crontab -l | grep QUANT_SUITE_CRON
 ```
 
+### Autonomous Trading Day
+
+Claude Code sessions run autonomously throughout the trading day via `cron + tmux`.
+The Max 5x subscription ($100/mo flat) covers unlimited usage.
+
+**Architecture**: `cron → athena_scheduler.sh (tmux) → session_wrapper.sh → claude`
+
+| Time (ET) | Session | Mode | Model |
+|-----------|---------|------|-------|
+| 05:55 | health_monitor.py starts | Python daemon | N/A |
+| 06:30 | `/morning-briefing` | One-shot (`-p`) | opus |
+| 08:30 | `/operator-session` | Long-running (tmux) | opus |
+| 10:00 | `/trade-decision` | One-shot (`-p`) | opus |
+| 10:30 | `/research --quick` | One-shot (`-p`) | sonnet |
+| 13:00 | `/trade-decision` | One-shot (`-p`) | opus |
+| 14:30 | `/research --quick` | One-shot (`-p`) | sonnet |
+| 16:05 | Operator graceful exit | Kill signal | N/A |
+| 16:30 | `/eod-review` | One-shot (`-p`) | opus |
+| Sunday 6 PM | `/thesis` | One-shot (`-p`) | sonnet |
+| Sunday 7 PM | `/brainstorm` | One-shot (`-p`) | sonnet |
+
+**Install/manage:**
+```bash
+# Install autonomous cron schedule
+./scripts/setup_cron.sh install_auto
+
+# Install both data + autonomous cron
+./scripts/setup_cron.sh install_all
+
+# Manual control
+./scripts/athena_scheduler.sh setup           # Create tmux session
+./scripts/athena_scheduler.sh operator-start  # Launch operator
+./scripts/athena_scheduler.sh operator-stop   # Graceful stop
+./scripts/athena_scheduler.sh status          # Show all sessions
+./scripts/athena_scheduler.sh kill-all        # Emergency stop
+
+# Run one-shot manually
+./scripts/session_wrapper.sh morning-briefing
+./scripts/session_wrapper.sh trade-decision
+
+# Health monitor
+python3 scripts/health_monitor.py             # Run until 5:05 PM
+python3 scripts/health_monitor.py --once      # Single check
+```
+
+**Session coordination** via `~/quant_results/scheduler/`:
+- `scheduler_state.json` — overall status
+- `trade_triggers.json` — operator writes convergences, health monitor launches trade-decision
+- `handoff.json` — operator context for restart after crash
+- `completions/` — per-session completion records
+- `locks/` — prevent duplicate sessions
+
+**Data flow**: Operator loop automatically ingests data from other sessions:
+- Session completions (morning briefing findings, research results)
+- Thesis conviction/status changes
+- Trade triggers from convergences
+- New research results and briefings
+
+**Health monitor** checks every 60s:
+- Operator alive? → Restart if dead
+- state.json fresh? → Alert if stale
+- Trade triggers? → Launch trade-decision
+- Hung sessions? → Kill after 15 min
+
 ---
 
 ## Validated Strategies

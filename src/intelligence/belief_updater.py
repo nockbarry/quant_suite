@@ -143,12 +143,12 @@ class BeliefUpdater:
         quality_data = {}
 
         for sig_type, entries in outcomes_by_type.items():
-            hits = sum(1 for e in entries if e.get("pnl", 0) > 0)
+            hits = sum(1 for e in entries if (e.get("pnl") or 0) > 0)
             hit_rate = hits / len(entries) if entries else 0
 
             # IC approximation from pnl correlation with signal strength
-            strengths = [e.get("signal_strength", 0.5) for e in entries]
-            pnls = [e.get("pnl", 0) for e in entries]
+            strengths = [e.get("signal_strength") or 0.5 for e in entries]
+            pnls = [e.get("pnl") or 0 for e in entries]
             ic = self._simple_correlation(strengths, pnls)
 
             weight = round(hit_rate * max(ic, 0.01), 4)

@@ -86,6 +86,11 @@ class OperatorObservation:
     convergences: list[dict] = field(default_factory=list)
     stale_sources: list[str] = field(default_factory=list)
 
+    # Autonomous session data ingestion
+    session_updates: list[dict] = field(default_factory=list)
+    thesis_changes: list[dict] = field(default_factory=list)
+    new_research: list[dict] = field(default_factory=list)
+
     # Market state
     market_regime: str = "unknown"
     regime_change: bool = False
@@ -134,6 +139,9 @@ class OperatorObservation:
                 for a in self.agent_completions
             ],
             "convergences": self.convergences,
+            "session_updates": self.session_updates,
+            "thesis_changes": self.thesis_changes,
+            "new_research": self.new_research,
             "market_regime": self.market_regime,
             "regime_change": self.regime_change,
             "action_items": [
@@ -191,6 +199,11 @@ class OperatorLoop:
         convergences = self._check_convergences()
         stale_sources = self._check_data_freshness()
 
+        # Check autonomous session data
+        session_updates = self._check_session_updates()
+        thesis_changes = self._check_thesis_changes()
+        new_research = self._check_new_research()
+
         # Market state
         market_regime = state.get("market", {}).get("rotation_theme", "unknown")
         regime_change = market_regime != self.last_regime and self.last_regime != "unknown"
@@ -199,9 +212,10 @@ class OperatorLoop:
         # Portfolio status
         portfolio_status = self._get_portfolio_status(state)
 
-        # Generate action items
+        # Generate action items (include autonomous session data)
         action_items = self._generate_action_items(
-            alerts, signpost_triggers, convergences, portfolio_status, regime_change
+            alerts, signpost_triggers, convergences, portfolio_status, regime_change,
+            thesis_changes, new_research,
         )
 
         # Research suggestions based on findings
@@ -221,6 +235,9 @@ class OperatorLoop:
             agent_completions=agent_completions,
             convergences=convergences,
             stale_sources=stale_sources,
+            session_updates=session_updates,
+            thesis_changes=thesis_changes,
+            new_research=new_research,
             market_regime=market_regime,
             regime_change=regime_change,
             portfolio_status=portfolio_status,
@@ -462,6 +479,52 @@ class OperatorLoop:
             "cash": portfolio.get("cash", 0),
         }
 
+    def _check_session_updates(self) -> list[dict]:
+        """Check for completed autonomous sessions since last check."""
+        try:
+            from src.monitoring.autonomous_mode import get_session_completions_since
+            cutoff = self.last_check_time or (datetime.now() - timedelta(hours=1))
+            return get_session_completions_since(cutoff)
+        except Exception as e:
+            logger.debug(f"Error checking session updates: {e}")
+            return []
+
+    def _check_thesis_changes(self) -> list[dict]:
+        """Check for thesis conviction/status changes."""
+        try:
+            from src.monitoring.autonomous_mode import get_thesis_changes_since
+            cutoff = self.last_check_time or (datetime.now() - timedelta(hours=1))
+            return get_thesis_changes_since(cutoff)
+        except Exception as e:
+            logger.debug(f"Error checking thesis changes: {e}")
+            return []
+
+    def _check_new_research(self) -> list[dict]:
+        """Check for new research results and trade triggers."""
+        try:
+            from src.monitoring.autonomous_mode import get_new_research_since
+            cutoff = self.last_check_time or (datetime.now() - timedelta(hours=1))
+            return get_new_research_since(cutoff)
+        except Exception as e:
+            logger.debug(f"Error checking new research: {e}")
+            return []
+
+    def _write_trade_triggers(self, convergences: list[dict]) -> None:
+        """Write strong convergences as trade triggers for health monitor."""
+        try:
+            from src.monitoring.autonomous_mode import write_trade_trigger
+            for conv in convergences:
+                if conv.get("signal_count", 0) >= 4:
+                    write_trade_trigger(
+                        symbol=conv.get("symbol", ""),
+                        direction=conv.get("direction", "unknown"),
+                        signal_count=conv.get("signal_count", 0),
+                        signals=conv.get("signals", []),
+                        source="operator",
+                    )
+        except Exception as e:
+            logger.debug(f"Error writing trade triggers: {e}")
+
     def _generate_action_items(
         self,
         alerts: list[Alert],
@@ -469,6 +532,8 @@ class OperatorLoop:
         convergences: list[dict],
         portfolio_status: dict,
         regime_change: bool,
+        thesis_changes: list[dict] | None = None,
+        new_research: list[dict] | None = None,
     ) -> list[ActionItem]:
         """Generate action recommendations based on findings."""
         actions = []
@@ -523,6 +588,50 @@ class OperatorLoop:
                     action=f"Evaluate {symbol} - strong {direction} convergence",
                     reason=f"{conv.get('signal_count')} signals aligned",
                     symbol=symbol,
+                ))
+
+        # Write strong convergences as trade triggers for health monitor
+        self._write_trade_triggers(convergences)
+
+        # Thesis changes from autonomous sessions
+        for change in (thesis_changes or []):
+            if change.get("type") == "conviction_change":
+                old_c = change.get("old_conviction", 0)
+                new_c = change.get("new_conviction", 0)
+                priority = "high" if abs(new_c - old_c) >= 20 else "medium"
+                actions.append(ActionItem(
+                    priority=priority,
+                    category="thesis",
+                    action=f"Review {change.get('name')} conviction: {old_c}% → {new_c}%",
+                    reason="Thesis conviction changed by autonomous session",
+                    thesis_id=change.get("thesis_id"),
+                ))
+            elif change.get("type") == "new_thesis":
+                actions.append(ActionItem(
+                    priority="medium",
+                    category="thesis",
+                    action=f"Review new thesis: {change.get('name')} ({change.get('conviction')}%)",
+                    reason="New thesis created by autonomous session",
+                    thesis_id=change.get("thesis_id"),
+                ))
+            elif change.get("type") == "status_change" and change.get("new_status") == "invalidated":
+                actions.append(ActionItem(
+                    priority="high",
+                    category="thesis",
+                    action=f"Thesis invalidated: {change.get('name')}",
+                    reason=f"Status changed from {change.get('old_status')} to {change.get('new_status')}",
+                    thesis_id=change.get("thesis_id"),
+                ))
+
+        # Trade triggers from research/other sessions
+        for item in (new_research or []):
+            if item.get("type") == "trade_trigger" and not item.get("consumed"):
+                actions.append(ActionItem(
+                    priority="high",
+                    category="position",
+                    action=f"Trade trigger: {item.get('symbol')} {item.get('direction')} ({item.get('signal_count')} signals)",
+                    reason=f"Convergence trigger from {item.get('source', 'autonomous session')}",
+                    symbol=item.get("symbol"),
                 ))
 
         return actions
@@ -610,6 +719,41 @@ class OperatorLoop:
             lines.append(f"\n--- CONVERGENCES ({len(obs.convergences)}) ---")
             for conv in obs.convergences:
                 lines.append(f"  {conv.get('symbol')}: {conv.get('signal_count')} {conv.get('direction')} signals")
+
+        # Autonomous session updates
+        if obs.session_updates:
+            lines.append(f"\n--- SESSION UPDATES ({len(obs.session_updates)}) ---")
+            for update in obs.session_updates:
+                status = "OK" if update.get("success") else "FAILED"
+                lines.append(f"  [{status}] {update.get('session_type', 'unknown')}: {update.get('summary', '')[:80]}")
+                for finding in update.get("key_findings", [])[:3]:
+                    lines.append(f"        → {finding[:80]}")
+
+        # Thesis changes
+        if obs.thesis_changes:
+            lines.append(f"\n--- THESIS CHANGES ({len(obs.thesis_changes)}) ---")
+            for change in obs.thesis_changes:
+                ctype = change.get("type", "")
+                name = change.get("name", "Unknown")
+                if ctype == "conviction_change":
+                    lines.append(f"  {name}: {change.get('old_conviction')}% → {change.get('new_conviction')}%")
+                elif ctype == "new_thesis":
+                    lines.append(f"  NEW: {name} ({change.get('conviction')}%)")
+                elif ctype == "status_change":
+                    lines.append(f"  {name}: {change.get('old_status')} → {change.get('new_status')}")
+                else:
+                    lines.append(f"  {name}: {ctype}")
+
+        # New research
+        if obs.new_research:
+            lines.append(f"\n--- NEW RESEARCH ({len(obs.new_research)}) ---")
+            for item in obs.new_research:
+                if item.get("type") == "trade_trigger":
+                    lines.append(f"  !! TRIGGER: {item.get('symbol')} {item.get('direction')} ({item.get('signal_count')} signals)")
+                else:
+                    lines.append(f"  [{item.get('type', 'unknown')}] {item.get('title', item.get('file', ''))[:60]}")
+                    if item.get("symbols"):
+                        lines.append(f"        Symbols: {', '.join(item['symbols'][:5])}")
 
         # Action items
         if obs.action_items:

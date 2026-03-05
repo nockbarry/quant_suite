@@ -94,6 +94,88 @@ remove_cron() {
     echo "Cron jobs removed."
 }
 
+# --- Autonomous Claude Sessions (QUANT_SUITE_AUTO) ---
+
+CRON_AUTO_MARKER="# QUANT_SUITE_AUTO"
+
+show_auto() {
+    echo "Autonomous Claude session cron jobs:"
+    crontab -l 2>/dev/null | grep -A1 "$CRON_AUTO_MARKER" || echo "  (none installed)"
+}
+
+install_auto() {
+    echo "Installing autonomous trading day cron jobs..."
+    echo "These schedule Claude Code sessions throughout the trading day."
+    echo ""
+
+    # Get existing crontab (without our auto entries)
+    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py")
+
+    # Create new crontab with auto entries
+    {
+        echo "$EXISTING"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Health Monitor Start"
+        echo "# Start health monitor at 5:55 AM ET (Mon-Fri)"
+        echo "55 5 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh setup >> ~/quant_results/logs/scheduler.log 2>&1 && $SCRIPT_DIR/athena_scheduler.sh monitor-start >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Morning Briefing"
+        echo "# Run morning briefing at 6:30 AM ET (Mon-Fri)"
+        echo "30 6 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot morning-briefing >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Operator Session Start"
+        echo "# Start operator session at 8:30 AM ET (Mon-Fri)"
+        echo "30 8 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh operator-start >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Morning Trade Decision"
+        echo "# Run trade decision at 10:00 AM ET (Mon-Fri)"
+        echo "0 10 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot trade-decision >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Morning Research"
+        echo "# Run quick research at 10:30 AM ET (Mon-Fri)"
+        echo "30 10 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot research >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Afternoon Trade Decision"
+        echo "# Run trade decision at 1:00 PM ET (Mon-Fri)"
+        echo "0 13 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot trade-decision >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Afternoon Research"
+        echo "# Run quick research at 2:30 PM ET (Mon-Fri)"
+        echo "30 14 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot research >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Operator Session Stop"
+        echo "# Stop operator at 4:05 PM ET (Mon-Fri)"
+        echo "5 16 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh operator-stop >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - EOD Review"
+        echo "# Run end-of-day review at 4:30 PM ET (Mon-Fri)"
+        echo "30 16 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot eod-review >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Health Monitor Stop"
+        echo "# Stop health monitor at 5:10 PM ET (Mon-Fri)"
+        echo "10 17 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh monitor-stop >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Weekly Thesis Review"
+        echo "# Weekly thesis review on Sundays at 6 PM ET"
+        echo "0 18 * * 0 $SCRIPT_DIR/session_wrapper.sh thesis >> ~/quant_results/logs/claude_thesis_weekly.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Weekly Brainstorm"
+        echo "# Weekly brainstorm on Sundays at 7 PM ET"
+        echo "0 19 * * 0 $SCRIPT_DIR/session_wrapper.sh brainstorm >> ~/quant_results/logs/claude_brainstorm_weekly.log 2>&1"
+    } | crontab -
+
+    echo "Autonomous cron jobs installed. Current schedule:"
+    show_auto
+}
+
+remove_auto() {
+    echo "Removing autonomous Claude session cron jobs..."
+
+    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | crontab -
+
+    echo "Autonomous cron jobs removed."
+}
+
 case "$1" in
     install)
         install_cron
@@ -104,13 +186,35 @@ case "$1" in
     show)
         show_cron
         ;;
-    *)
-        echo "Usage: $0 {install|remove|show}"
+    install_auto)
+        install_auto
+        ;;
+    remove_auto)
+        remove_auto
+        ;;
+    show_auto)
+        show_auto
+        ;;
+    install_all)
+        install_cron
         echo ""
-        echo "This sets up automated trading workflow:"
-        echo "  - 6:00 AM: Start daemons, pre-market prep"
-        echo "  - Every 5 min: Update state.json"
-        echo "  - 5:00 PM: Stop daemons"
+        install_auto
+        ;;
+    *)
+        echo "Usage: $0 {install|remove|show|install_auto|remove_auto|show_auto|install_all}"
+        echo ""
+        echo "Data automation (cron + Python daemons):"
+        echo "  install       Install data collection cron jobs"
+        echo "  remove        Remove data collection cron jobs"
+        echo "  show          Show data collection cron jobs"
+        echo ""
+        echo "Autonomous Claude sessions (cron + tmux + Claude Code):"
+        echo "  install_auto  Install autonomous trading day schedule"
+        echo "  remove_auto   Remove autonomous trading day schedule"
+        echo "  show_auto     Show autonomous trading day schedule"
+        echo ""
+        echo "Both:"
+        echo "  install_all   Install data + autonomous cron jobs"
         exit 1
         ;;
 esac
