@@ -200,6 +200,17 @@ class ThesisRecord(Base):
         Index("ix_theses_status_conviction", "status", "conviction"),
     )
 
+    @staticmethod
+    def _safe_json_list(val: str | None) -> list:
+        """Parse a JSON list field, wrapping plain text as a single-element list."""
+        if not val:
+            return []
+        try:
+            result = json.loads(val)
+            return result if isinstance(result, list) else [result]
+        except (json.JSONDecodeError, TypeError):
+            return [val]
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -210,13 +221,13 @@ class ThesisRecord(Base):
             "bull_case": self.bull_case,
             "bear_case": self.bear_case,
             "conviction": self.conviction,
-            "positions": json.loads(self.positions or "[]"),
-            "invalidation_triggers": json.loads(self.invalidation_triggers or "[]"),
+            "positions": self._safe_json_list(self.positions),
+            "invalidation_triggers": self._safe_json_list(self.invalidation_triggers),
             "last_review": self.last_review.isoformat() if self.last_review else None,
             "next_review": self.next_review.isoformat() if self.next_review else None,
             "review_interval_days": self.review_interval_days,
-            "conviction_history": json.loads(self.conviction_history or "[]"),
-            "notes": json.loads(self.notes or "[]"),
+            "conviction_history": self._safe_json_list(self.conviction_history),
+            "notes": self._safe_json_list(self.notes),
             "signposts": [s.to_dict() for s in self.signposts] if self.signposts else [],
         }
 

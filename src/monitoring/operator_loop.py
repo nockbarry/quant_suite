@@ -260,11 +260,14 @@ class OperatorLoop:
                 summary_parts.append(f"{len(observation.action_items)} action items")
             obs_summary = f"Check #{observation.check_num}: " + (", ".join(summary_parts) or "all clear")
 
-            SessionContext.get().add_operator_observation(
+            ctx = SessionContext.get()
+            ctx.add_operator_observation(
                 observation_summary=obs_summary,
                 portfolio_snapshot=portfolio_status,
                 alerts=[a.title for a in observation.alerts],
             )
+            # Flush to shared file so trade-decision sessions can load context
+            ctx.flush_to_shared(session_type="operator")
         except Exception:
             pass  # Don't break operator loop if context push fails
 
@@ -410,7 +413,7 @@ class OperatorLoop:
         if not activity_log.exists():
             return completions
 
-        cutoff = self.last_check_time or (datetime.now() - timedelta(hours=1))
+        cutoff = self.last_check_time or datetime.now().replace(hour=5, minute=0, second=0, microsecond=0)
 
         try:
             with open(activity_log) as f:
@@ -483,7 +486,7 @@ class OperatorLoop:
         """Check for completed autonomous sessions since last check."""
         try:
             from src.monitoring.autonomous_mode import get_session_completions_since
-            cutoff = self.last_check_time or (datetime.now() - timedelta(hours=1))
+            cutoff = self.last_check_time or datetime.now().replace(hour=5, minute=0, second=0, microsecond=0)
             return get_session_completions_since(cutoff)
         except Exception as e:
             logger.debug(f"Error checking session updates: {e}")
@@ -493,7 +496,7 @@ class OperatorLoop:
         """Check for thesis conviction/status changes."""
         try:
             from src.monitoring.autonomous_mode import get_thesis_changes_since
-            cutoff = self.last_check_time or (datetime.now() - timedelta(hours=1))
+            cutoff = self.last_check_time or datetime.now().replace(hour=5, minute=0, second=0, microsecond=0)
             return get_thesis_changes_since(cutoff)
         except Exception as e:
             logger.debug(f"Error checking thesis changes: {e}")
@@ -503,7 +506,7 @@ class OperatorLoop:
         """Check for new research results and trade triggers."""
         try:
             from src.monitoring.autonomous_mode import get_new_research_since
-            cutoff = self.last_check_time or (datetime.now() - timedelta(hours=1))
+            cutoff = self.last_check_time or datetime.now().replace(hour=5, minute=0, second=0, microsecond=0)
             return get_new_research_since(cutoff)
         except Exception as e:
             logger.debug(f"Error checking new research: {e}")

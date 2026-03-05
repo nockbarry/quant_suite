@@ -111,23 +111,31 @@
             </div>
             {% endif %}
 
-            <!-- LLM Interaction Preview -->
-            {% if decision.llm_interaction_id %}
-            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <h2 class="text-sm font-semibold text-gray-300">LLM Analysis</h2>
-                    <a href="/llm/{{ decision.llm_interaction_id }}" class="text-xs text-emerald-400 hover:underline">Full view &rarr;</a>
+            <!-- Predictions Made -->
+            {% if predictions %}
+            <div class="bg-gray-900 border border-indigo-900/30 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-indigo-400 mb-2">Predictions</h2>
+                <div class="space-y-2">
+                    {% for p in predictions %}
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="rounded-full px-2 py-0.5 text-[10px]
+                            {% if p.status == 'correct' %}bg-emerald-900/50 text-emerald-400
+                            {% elif p.status == 'incorrect' %}bg-red-900/50 text-red-400
+                            {% elif p.status == 'expired' %}bg-gray-800 text-gray-500
+                            {% else %}bg-yellow-900/50 text-yellow-400{% endif %}">
+                            {{ p.status or "open" }}
+                        </span>
+                        <span class="text-gray-400">{{ p.prediction_type }}:</span>
+                        <span class="mono text-gray-300">{{ p.direction }} {{ "%.0f"|format((p.confidence or 0) * 100) }}%</span>
+                        <span class="text-gray-500 text-xs">{{ p.timeframe_days }}d</span>
+                        {% if p.actual_return_pct is not none %}
+                        <span class="mono text-xs {% if p.actual_return_pct >= 0 %}text-profit{% else %}text-loss{% endif %}">
+                            {{ "%+.1f"|format(p.actual_return_pct) }}%
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
                 </div>
-                {% if llm_interaction %}
-                <div class="bg-gray-800/50 rounded p-3 max-h-48 overflow-y-auto">
-                    <p class="text-xs text-gray-400 mono whitespace-pre-wrap">{{ llm_interaction.response[:1000] }}{% if llm_interaction.response|length > 1000 %}...{% endif %}</p>
-                </div>
-                <div class="flex gap-4 mt-2 text-xs text-gray-500">
-                    <span>Model: <span class="mono">{{ llm_interaction.model }}</span></span>
-                    <span>Tokens: <span class="mono">{{ llm_interaction.tokens_input + llm_interaction.tokens_output }}</span></span>
-                    <span>Cost: <span class="mono">${{ "%.4f"|format(llm_interaction.cost_usd) }}</span></span>
-                </div>
-                {% endif %}
             </div>
             {% endif %}
 
@@ -276,15 +284,10 @@
             {% endif %}
 
             <!-- Learning Link -->
-            {% if decision.learning_extracted and learnings %}
+            {% if decision.learning_extracted %}
             <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                <h2 class="text-sm font-semibold text-gray-300 mb-2">Extracted Learnings</h2>
-                {% for l in learnings %}
-                <a href="/learnings#{{ l.id }}" class="block text-sm text-gray-400 hover:text-gray-200 mb-1">
-                    <span class="{% if l.outcome == 'win' %}text-emerald-400{% elif l.outcome == 'loss' %}text-red-400{% else %}text-gray-400{% endif %}">&#9679;</span>
-                    {{ l.what_i_learned[:80] }}{% if l.what_i_learned|length > 80 %}...{% endif %}
-                </a>
-                {% endfor %}
+                <h2 class="text-sm font-semibold text-gray-300 mb-2">Learning Extracted</h2>
+                <span class="text-xs text-emerald-400">&#10003; Learning captured from this decision</span>
             </div>
             {% endif %}
         </div>

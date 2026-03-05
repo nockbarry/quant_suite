@@ -142,6 +142,19 @@ write_completion() {
     local END_TIME=$(date +%s)
     local DURATION=$((END_TIME - START_TIME))
 
+    # Check if Claude already wrote an enriched completion record during this session.
+    # If so, skip the fallback to avoid overwriting with empty key_findings/symbols.
+    local EXISTING
+    EXISTING=$(ls -t "$SCHEDULER_DIR/completions/${SESSION_TYPE}_"*.json 2>/dev/null | head -1)
+    if [ -n "$EXISTING" ]; then
+        local EXISTING_TIME
+        EXISTING_TIME=$(stat -c %Y "$EXISTING" 2>/dev/null || echo 0)
+        if [ "$EXISTING_TIME" -gt "$START_TIME" ]; then
+            log "Enriched completion record exists, skipping wrapper fallback"
+            return
+        fi
+    fi
+
     python3 -c "
 import json
 from datetime import datetime

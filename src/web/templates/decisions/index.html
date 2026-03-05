@@ -73,10 +73,11 @@
                         <th class="px-4 py-2 text-left">Symbol</th>
                         <th class="px-4 py-2 text-left">Action</th>
                         <th class="px-4 py-2 text-left">Confidence</th>
+                        <th class="px-4 py-2 text-left">Setup</th>
+                        <th class="px-4 py-2 text-left">Risk</th>
                         <th class="px-4 py-2 text-left">Status</th>
                         <th class="px-4 py-2 text-right">P&L</th>
                         <th class="px-4 py-2 text-left">Thesis</th>
-                        <th class="px-4 py-2 text-right">Signals</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -111,6 +112,28 @@
                             </div>
                         </td>
                         <td class="px-4 py-2">
+                            {% if d.setup_type %}
+                            <span class="rounded-full px-2 py-0.5 text-[10px] bg-indigo-900/50 text-indigo-400">{{ d.setup_type | replace("_", " ") }}</span>
+                            {% else %}
+                            <span class="text-gray-600">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2">
+                            {% if d.adversarial_notes %}
+                                {% if "HIGH CONCERN" in (d.adversarial_notes | upper) or "CRITICAL" in (d.adversarial_notes | upper) %}
+                                <span class="rounded-full px-2 py-0.5 text-[10px] bg-red-900/50 text-red-400" title="{{ d.adversarial_notes[:120] }}">high</span>
+                                {% elif "MODERATE CONCERN" in (d.adversarial_notes | upper) %}
+                                <span class="rounded-full px-2 py-0.5 text-[10px] bg-yellow-900/50 text-yellow-400" title="{{ d.adversarial_notes[:120] }}">med</span>
+                                {% elif "LOW CONCERN" in (d.adversarial_notes | upper) or "MINIMAL" in (d.adversarial_notes | upper) %}
+                                <span class="rounded-full px-2 py-0.5 text-[10px] bg-emerald-900/50 text-emerald-400" title="{{ d.adversarial_notes[:120] }}">low</span>
+                                {% else %}
+                                <span class="rounded-full px-2 py-0.5 text-[10px] bg-gray-800 text-gray-400" title="{{ d.adversarial_notes[:120] }}">&#10003;</span>
+                                {% endif %}
+                            {% else %}
+                            <span class="text-gray-700">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2">
                             <span class="rounded-full px-2 py-0.5 text-xs
                                 {% if d.status == 'pending' %}bg-yellow-900/50 text-yellow-400
                                 {% elif d.status == 'executed' %}bg-blue-900/50 text-blue-400
@@ -133,18 +156,10 @@
                             <span class="text-xs text-gray-600">&mdash;</span>
                             {% endif %}
                         </td>
-                        <td class="px-4 py-2 text-right">
-                            {% set signal_count = d.signal_ids | length if d.signal_ids else 0 %}
-                            {% if signal_count > 0 %}
-                            <span class="rounded-full px-2 py-0.5 text-xs bg-purple-900/50 text-purple-400">{{ signal_count }}</span>
-                            {% else %}
-                            <span class="text-gray-600">&mdash;</span>
-                            {% endif %}
-                        </td>
                     </tr>
                     {% endfor %}
                     {% if not decisions %}
-                    <tr><td colspan="8" class="px-4 py-8 text-center text-gray-600">No decisions found matching filters.</td></tr>
+                    <tr><td colspan="9" class="px-4 py-8 text-center text-gray-600">No decisions found matching filters.</td></tr>
                     {% endif %}
                 </tbody>
             </table>

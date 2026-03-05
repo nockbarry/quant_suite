@@ -87,36 +87,41 @@ def tmux_session_exists() -> bool:
 
 
 def is_operator_alive() -> bool:
-    """Check if the operator window has an active process."""
+    """Check if the operator has a running claude process.
+
+    Uses the lock file PID and process state rather than tmux pane
+    inspection, which is unreliable (pane shows 'sh' even when claude
+    is running as a child process).
+    """
     if not tmux_session_exists():
         return False
 
-    result = subprocess.run(
-        ["tmux", "capture-pane", "-t", f"{TMUX_SESSION}:operator", "-p"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
+    # Check lock file for operator PID
+    lock_file = SCHEDULER_DIR / "locks" / "operator.lock"
+    if not lock_file.exists():
         return False
 
-    # Check if there's recent activity (claude process running)
-    output = result.stdout.strip()
-    # If the pane shows a shell prompt ($ at end) and no claude output, it's idle
-    lines = output.split("\n")
-    if not lines:
+    try:
+        pid = int(lock_file.read_text().strip())
+    except (ValueError, OSError):
         return False
 
-    # Check for active claude process in the pane
-    result = subprocess.run(
-        ["tmux", "list-panes", "-t", f"{TMUX_SESSION}:operator", "-F", "#{pane_current_command}"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        cmd = result.stdout.strip()
-        return cmd not in ("bash", "zsh", "sh", "")
-
-    return True
+    # Check if process is alive and not stopped/zombie
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "stat=", "-p", str(pid)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return False
+        state = result.stdout.strip()
+        # T = stopped, Z = zombie — these are dead
+        if state and state[0] in ("T", "Z"):
+            return False
+        return True
+    except Exception:
+        return False
 
 
 def check_state_freshness() -> dict:

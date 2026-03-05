@@ -71,13 +71,17 @@ class SignpostChecker:
             likelihood = await self._assess_signpost_likelihood(thesis, signpost)
 
             if likelihood > 0.3:  # Threshold for alerting
+                evidence = self._gather_evidence(thesis, signpost)
                 alert = SignpostAlert(
                     thesis_id=thesis.id,
                     thesis_name=thesis.name,
-                    signpost_index=i,
                     signpost_description=signpost.description,
-                    trigger_likelihood=likelihood,
-                    evidence=self._gather_evidence(thesis, signpost),
+                    triggered_at=datetime.now().isoformat(),
+                    outcome=getattr(signpost, "outcome", "neutral"),
+                    news_headline=f"Signpost #{i} triggered ({likelihood:.0%})",
+                    news_source="signpost_monitor",
+                    recommended_action=f"Review: {signpost.description[:60]}. {evidence[:100]}",
+                    urgency="high" if likelihood > 0.7 else "medium" if likelihood > 0.5 else "low",
                 )
                 alerts.append(alert)
 

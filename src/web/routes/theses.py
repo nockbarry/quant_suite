@@ -90,6 +90,24 @@ async def thesis_detail(request: Request, thesis_id: str):
     except Exception:
         thesis_predictions = []
 
+    # Position P&L from state.json portfolio
+    position_pnl = {}
+    try:
+        import json
+        from src.core.paths import paths
+        state_file = paths.live_state
+        if state_file.exists():
+            with open(state_file) as f:
+                state_data = json.load(f)
+            positions_data = state_data.get("portfolio", {}).get("positions", [])
+            for pos in positions_data:
+                sym = pos.get("symbol", "")
+                pnl_pct = pos.get("unrealized_pnl_pct", 0)
+                if sym:
+                    position_pnl[sym] = pnl_pct
+    except Exception:
+        pass
+
     return templates.TemplateResponse(
         request,
         "theses/detail.html",
@@ -100,6 +118,7 @@ async def thesis_detail(request: Request, thesis_id: str):
             "performance": performance,
             "related_docs": related_docs,
             "thesis_predictions": thesis_predictions,
+            "position_pnl": position_pnl,
             "breadcrumbs": [
                 {"label": "Theses", "url": "/theses"},
                 {"label": thesis.get("name", thesis_id) if isinstance(thesis, dict) else getattr(thesis, "name", thesis_id)},

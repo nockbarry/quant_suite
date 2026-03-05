@@ -196,6 +196,9 @@ class DecisionLogger:
         with open(self.daily_file, "r") as f:
             data = json.load(f)
 
+        # Handle both list and dict formats
+        if isinstance(data, list):
+            data = {"date": datetime.now().strftime("%Y-%m-%d"), "decisions": data}
         data["decisions"].append(decision.to_dict())
 
         with open(self.daily_file, "w") as f:
@@ -578,6 +581,12 @@ def create_decision(
         from src.context.market_snapshot import capture_market_snapshot
 
         session_ctx = SessionContext.get()
+
+        # Load shared context from other sessions (operator, briefing) if this
+        # process has no events yet (common in autonomous trade-decision sessions)
+        if session_ctx.event_count() == 0:
+            session_ctx.load_shared_context(hours=4.0)
+
         if session_ctx.event_count() > 0:
             enriched_context.update(session_ctx.snapshot_for_decision(symbol))
 
@@ -586,6 +595,32 @@ def create_decision(
             enriched_context["market_snapshot"] = capture_market_snapshot()
     except Exception:
         pass  # Don't block decision creation if context enrichment fails
+
+    # Auto-run adversarial analysis if not provided
+    if adversarial_notes is None:
+        try:
+            from src.decision.adversary import AdversarialAgent
+            adversary = AdversarialAgent()
+            adv_analysis = adversary.challenge(
+                symbol=symbol,
+                proposed_action=action.value,
+                reasoning=reasoning,
+                confidence=confidence,
+                context=enriched_context,
+                setup_type=setup_type,
+            )
+            adversarial_notes = adv_analysis.summary
+        except Exception:
+            pass
+
+    # Auto-generate pre-mortem if not provided
+    if pre_mortem is None:
+        try:
+            from src.decision.adversary import AdversarialAgent
+            adversary = AdversarialAgent()
+            pre_mortem = adversary._generate_pre_mortem(symbol, action.value, enriched_context)
+        except Exception:
+            pass
 
     decision = TradingDecision(
         id=str(uuid.uuid4())[:8],

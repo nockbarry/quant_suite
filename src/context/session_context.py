@@ -21,6 +21,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -276,6 +277,81 @@ class SessionContext:
 
         logger.info(f"Persisted {count} context events for decision {decision_id}")
         return count
+
+    # ------------------------------------------------------------------
+    # Cross-process persistence
+    # ------------------------------------------------------------------
+
+    _SHARED_CONTEXT_PATH = Path.home() / "quant_results" / "scheduler" / "shared_context.jsonl"
+
+    def flush_to_shared(self, session_type: str = "") -> int:
+        """Append current events to shared JSONL file for cross-process access.
+
+        Returns the number of events flushed.
+        """
+        path = self._SHARED_CONTEXT_PATH
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Daily rotation: if file exists and is from a previous date, truncate
+        if path.exists():
+            try:
+                mtime = datetime.fromtimestamp(path.stat().st_mtime)
+                if mtime.date() < datetime.now().date():
+                    path.unlink()
+            except Exception:
+                pass
+
+        count = 0
+        try:
+            with open(path, "a") as f:
+                for event in self.events:
+                    record = event.to_dict()
+                    record["session_type"] = session_type
+                    f.write(json.dumps(record, default=str) + "\n")
+                    count += 1
+        except Exception as exc:
+            logger.warning(f"Failed to flush context to shared file: {exc}")
+
+        return count
+
+    def load_shared_context(self, hours: float = 4.0) -> int:
+        """Load recent events from shared JSONL into this session's context.
+
+        Returns the number of events loaded.
+        """
+        path = self._SHARED_CONTEXT_PATH
+        if not path.exists():
+            return 0
+
+        cutoff = datetime.utcnow() - timedelta(hours=hours)
+        loaded = 0
+
+        try:
+            for line in path.read_text().strip().split("\n"):
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    ts = datetime.fromisoformat(data["timestamp"])
+                    if ts >= cutoff:
+                        self.events.append(ContextEvent(
+                            timestamp=ts,
+                            event_type=data["event_type"],
+                            source=data["source"],
+                            symbols=data.get("symbols", []),
+                            summary=data.get("summary", ""),
+                            detail=data.get("detail", ""),
+                            metadata=data.get("metadata", {}),
+                        ))
+                        loaded += 1
+                except (json.JSONDecodeError, KeyError, ValueError):
+                    continue
+        except Exception as exc:
+            logger.warning(f"Failed to load shared context: {exc}")
+
+        if loaded:
+            logger.info(f"Loaded {loaded} shared context events from last {hours}h")
+        return loaded
 
     # ------------------------------------------------------------------
     # Utilities

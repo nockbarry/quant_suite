@@ -27,6 +27,7 @@ async def sessions_index(request: Request):
             "live_status": live_status,
             "todays_sessions": todays_sessions,
             "stats": stats,
+            "today": datetime.now().strftime("%Y-%m-%d"),
         },
     )
 

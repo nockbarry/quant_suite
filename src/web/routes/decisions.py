@@ -74,6 +74,15 @@ async def decision_detail(request: Request, decision_id: str):
     from src.web.services import document_service
     related_docs = document_service.get_documents_for_decision(decision_id)
 
+    # Linked predictions
+    predictions = []
+    try:
+        from src.web.services import intelligence_service
+        all_preds = intelligence_service.list_predictions(limit=100)
+        predictions = [p for p in all_preds if p.get("decision_id") == decision_id]
+    except Exception:
+        pass
+
     d_symbol = decision.get("symbol", "") if isinstance(decision, dict) else getattr(decision, "symbol", "")
     d_label = f"{d_symbol} — {decision_id[:8]}" if d_symbol else decision_id[:8]
 
@@ -85,6 +94,7 @@ async def decision_detail(request: Request, decision_id: str):
             "decision": decision,
             "lineage": lineage,
             "related_docs": related_docs,
+            "predictions": predictions,
             "breadcrumbs": [
                 {"label": "Decisions", "url": "/decisions"},
                 {"label": d_label},
