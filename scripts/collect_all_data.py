@@ -13,7 +13,7 @@ import asyncio
 import json
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -149,12 +149,37 @@ async def collect_stocktwits():
 
 
 async def collect_congressional():
-    """Collect congressional trading data."""
+    """Collect congressional trading data and persist to disk."""
     try:
+        from src.core.paths import paths
         from src.data.sources.alternative.congressional_trades import CongressionalTradesSource
         source = CongressionalTradesSource()
         trades = await source.fetch_recent_trades(days=7)
         notable = [t for t in trades if t.signal_strength >= 0.5]
+
+        # Persist to disk for daemon.py, data_freshness_tracker, and web UI
+        log_dir = paths.base / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "congressional_collection_history.json"
+
+        history = []
+        if log_file.exists():
+            try:
+                with open(log_file) as f:
+                    history = json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                history = []
+
+        history.append({
+            "timestamp": datetime.now().isoformat(),
+            "trades_found": len(trades),
+            "notable_trades": [t.to_dict() for t in notable[:20]],
+        })
+        history = history[-90:]
+
+        with open(log_file, "w") as f:
+            json.dump(history, f, indent=2, default=str)
+
         return {"congressional": {
             "total_trades": len(trades),
             "notable_trades": len(notable),
@@ -169,21 +194,101 @@ async def collect_congressional():
 
 
 async def collect_prediction_markets():
-    """Collect prediction market data."""
+    """Collect prediction market data and persist to disk."""
     try:
+        from src.core.paths import paths
         from src.data.sources.alternative.prediction_markets import PredictionMarketsSource
         source = PredictionMarketsSource()
         signals = await source.get_macro_signals()
+
+        # Persist to disk for web UI data_sources.py
+        pm_dir = paths.live / "research" / "prediction_markets"
+        pm_dir.mkdir(parents=True, exist_ok=True)
+        latest_file = pm_dir / "latest.json"
+
+        with open(latest_file, "w") as f:
+            json.dump({
+                "timestamp": datetime.now().isoformat(),
+                "macro_signals": [s.to_dict() for s in signals],
+            }, f, indent=2, default=str)
+
         return {"prediction_markets": {
             "macro_signals": len(signals),
             "top_signals": [
-                {"category": s.category, "direction": s.direction, "confidence": s.confidence}
+                {"category": s.category.value, "direction": s.consensus_direction, "avg_probability": s.avg_probability}
                 for s in signals[:5]
             ],
         }}
     except Exception as e:
         logger.error(f"Prediction markets collection failed: {e}")
         return {"prediction_markets": {"error": str(e)}}
+
+
+async def collect_insider():
+    """Collect insider trading data and persist to disk."""
+    try:
+        from src.core.paths import paths
+        from src.data.sources.alternative.insider import InsiderDataSource
+
+        source = InsiderDataSource()
+        # Scan a default set of symbols for recent insider activity
+        watchlist = [
+            "SLB", "HAL", "NVDA", "MSFT", "AAPL", "GOOGL", "META",
+            "AMD", "AMZN", "XOM", "CVX", "JPM", "GS", "SPY",
+        ]
+
+        all_transactions = []
+        for symbol in watchlist:
+            try:
+                end = datetime.now()
+                start = end - timedelta(days=30)
+                transactions = await source.fetch_transactions(symbol, start, end, limit=50)
+                for t in transactions:
+                    all_transactions.append(t.to_dict())
+            except Exception:
+                pass
+
+        await source.close()
+
+        purchases = [t for t in all_transactions if t.get("is_purchase")]
+        notable = [t for t in all_transactions if t.get("value", 0) >= 100_000]
+
+        # Persist to disk for data_freshness_tracker and web UI
+        log_dir = paths.base / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "insider_collection_history.json"
+
+        history = []
+        if log_file.exists():
+            try:
+                with open(log_file) as f:
+                    history = json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                history = []
+
+        history.append({
+            "timestamp": datetime.now().isoformat(),
+            "result": {
+                "status": "success",
+                "transactions_collected": len(all_transactions),
+                "purchases": len(purchases),
+                "notable_transactions": len(notable),
+                "top_notable": notable[:20],
+            },
+        })
+        history = history[-90:]
+
+        with open(log_file, "w") as f:
+            json.dump(history, f, indent=2, default=str)
+
+        return {"insider": {
+            "transactions": len(all_transactions),
+            "purchases": len(purchases),
+            "notable": len(notable),
+        }}
+    except Exception as e:
+        logger.error(f"Insider collection failed: {e}")
+        return {"insider": {"error": str(e)}}
 
 
 async def update_unified_state():
@@ -256,6 +361,7 @@ async def collect_all(quick: bool = False):
         "stocktwits": collect_stocktwits(),
         "congressional": collect_congressional(),
         "prediction_markets": collect_prediction_markets(),
+        "insider": collect_insider(),
         "daemon": collect_from_daemon(),
     }
 
