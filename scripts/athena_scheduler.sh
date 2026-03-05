@@ -68,10 +68,27 @@ cmd_operator_start() {
         cmd_setup
     fi
 
-    # Check if operator is already running
-    if tmux capture-pane -t "$TMUX_SESSION:operator" -p 2>/dev/null | grep -q "claude"; then
-        log "Operator appears to be already running"
-        return 0
+    # Check if operator is actually running (via live process, not pane text)
+    local operator_pid
+    operator_pid=$(cat "$SCHEDULER_DIR/locks/operator.lock" 2>/dev/null || echo "")
+    if [ -n "$operator_pid" ] && kill -0 "$operator_pid" 2>/dev/null; then
+        # Process exists — check if it's stopped/zombie
+        local proc_state
+        proc_state=$(ps -o stat= -p "$operator_pid" 2>/dev/null || echo "")
+        if echo "$proc_state" | grep -qE '^[TZ]'; then
+            log "Operator process $operator_pid is stuck (state: $proc_state), killing..."
+            kill -9 "$operator_pid" 2>/dev/null || true
+            # Also kill child claude process
+            pkill -9 -P "$operator_pid" 2>/dev/null || true
+            sleep 1
+            rm -f "$SCHEDULER_DIR/locks/operator.lock"
+        else
+            log "Operator is already running (PID $operator_pid)"
+            return 0
+        fi
+    else
+        # No valid process — clean up stale lock
+        rm -f "$SCHEDULER_DIR/locks/operator.lock"
     fi
 
     local DATE=$(date '+%Y%m%d')

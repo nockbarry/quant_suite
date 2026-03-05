@@ -39,7 +39,7 @@ class SignpostChecker:
 
     def __init__(self):
         self.tracker = ThesisTracker(paths.theses)
-        self.alerts_dir = paths.results / "alerts"
+        self.alerts_dir = paths.base / "alerts"
         self.alerts_dir.mkdir(parents=True, exist_ok=True)
 
     async def check_all_signposts(self) -> list[SignpostAlert]:

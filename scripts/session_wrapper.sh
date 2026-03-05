@@ -358,16 +358,21 @@ export PYTHONPATH="$PROJECT_DIR"
 # another Claude session or from environments that inherit the variable.
 unset CLAUDECODE 2>/dev/null || true
 
+# Write system prompt to temp file, then read as single line to avoid
+# shell expansion issues with newlines and special characters in --append-system-prompt
+PROMPT_FILE=$(mktemp /tmp/athena_prompt_XXXXXX.txt)
+printf '%s' "$AUTO_PROMPT" | tr '\n' ' ' > "$PROMPT_FILE"
+
 if [ "$SESSION_TYPE" = "operator" ]; then
     # Operator is long-running — runs with -p but the autonomous prompt
     # instructs Claude to implement a persistent monitoring loop with sleep
     # between checks. The 8-hour timeout acts as the outer boundary.
     log "Launching operator session (persistent loop via autonomous prompt)"
 
-    timeout "${TIMEOUT}m" claude \
+    timeout --foreground "${TIMEOUT}m" claude \
         --model "$MODEL" \
         --dangerously-skip-permissions \
-        --append-system-prompt "$AUTO_PROMPT" \
+        --append-system-prompt "$(cat "$PROMPT_FILE")" \
         -p "/operator-session --active" \
         2>&1 || true
 
@@ -376,14 +381,16 @@ else
     # One-shot sessions use -p for non-interactive execution
     log "Launching one-shot: $SKILL_PROMPT"
 
-    timeout "${TIMEOUT}m" claude \
+    timeout --foreground "${TIMEOUT}m" claude \
         --model "$MODEL" \
         --dangerously-skip-permissions \
-        --append-system-prompt "$AUTO_PROMPT" \
+        --append-system-prompt "$(cat "$PROMPT_FILE")" \
         -p "$SKILL_PROMPT" \
         2>&1 || true
 
     log "One-shot session completed"
 fi
+
+rm -f "$PROMPT_FILE" 2>/dev/null
 
 log "Session $SESSION_TYPE finished"

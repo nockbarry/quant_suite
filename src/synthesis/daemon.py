@@ -24,7 +24,7 @@ Usage:
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 import json
@@ -1218,7 +1218,7 @@ class LiveDaemon:
             )
 
             # Get filled sell orders from past 30 days
-            since = datetime.now() - timedelta(days=30)
+            since = datetime.now(timezone.utc) - timedelta(days=30)
             request = GetOrdersRequest(
                 status=QueryOrderStatus.CLOSED,
                 after=since,
@@ -1267,7 +1267,7 @@ class LiveDaemon:
                         opp_cost_pct = (opp_cost / sell_total) * 100 if sell_total > 0 else 0.0
 
                         sell_date = order.filled_at.strftime("%Y-%m-%d") if order.filled_at else ""
-                        days_since = (datetime.now() - order.filled_at).days if order.filled_at else 0
+                        days_since = (datetime.now(timezone.utc) - order.filled_at).days if order.filled_at else 0
 
                         sold_positions.append(SoldPositionTrack(
                             symbol=symbol,
