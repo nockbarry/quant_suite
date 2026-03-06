@@ -28,16 +28,66 @@ logger = logging.getLogger(__name__)
 # --- Collector Functions ---
 
 async def collect_expanded_news():
-    """Collect from 15+ RSS feeds."""
+    """Collect from 15+ RSS feeds and update news_cache.json."""
     try:
         from src.data.sources.alternative.expanded_news import ExpandedNewsCollector
         collector = ExpandedNewsCollector()
         result = await collector.collect_and_save()
         await collector.close()
+
+        # Also update news_cache.json (previously maintained by cron_news_collect_fast.py).
+        # daemon.py and operator_loop read from this path for urgency alerts.
+        _update_news_cache(collector.cache_dir)
+
         return {"expanded_news": result}
     except Exception as e:
         logger.error(f"Expanded news collection failed: {e}")
         return {"expanded_news": {"error": str(e)}}
+
+
+def _update_news_cache(expanded_cache_dir: Path):
+    """Convert expanded_news latest.json → live/news_cache.json for operator consumption."""
+    try:
+        from src.core.paths import paths
+
+        latest_file = expanded_cache_dir / "latest.json"
+        if not latest_file.exists():
+            return
+
+        with open(latest_file) as f:
+            data = json.load(f)
+
+        # Convert expanded_news format to news_cache.json format
+        items = []
+        for item in data.get("items", []):
+            items.append({
+                "timestamp": item.get("published", item.get("timestamp", datetime.now().isoformat())),
+                "headline": item.get("title", ""),
+                "source": item.get("source", ""),
+                "link": item.get("link", ""),
+                "pubdate": item.get("published", ""),
+                "symbols": item.get("symbols", []),
+                "is_urgent": item.get("importance") in ("critical", "high"),
+                "urgent_keyword": item.get("importance", ""),
+                "thesis_matches": item.get("thesis_matches", {}),
+            })
+
+        cache_path = paths.live / "news_cache.json"
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+        output = {
+            "last_updated": datetime.now().isoformat(),
+            "urgent_count": len([i for i in items if i.get("is_urgent")]),
+            "total_count": len(items),
+            "items": items[:200],
+        }
+
+        with open(cache_path, "w") as f:
+            json.dump(output, f, indent=2)
+
+        logger.info(f"Updated news_cache.json with {len(items[:200])} items")
+    except Exception as e:
+        logger.warning(f"Failed to update news_cache.json: {e}")
 
 
 async def collect_legal():

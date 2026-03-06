@@ -91,14 +91,14 @@ cmd_operator_start() {
         rm -f "$SCHEDULER_DIR/locks/operator.lock"
     fi
 
-    local DATE=$(date '+%Y%m%d')
-    local LOG_FILE="$LOG_DIR/claude_operator_${DATE}.log"
+    # Respawn the operator pane if its shell is dead
+    _respawn_pane_if_dead "operator"
 
     log "Starting operator session"
 
-    # Use session_wrapper.sh to launch with all the right flags
+    # session_wrapper.sh handles its own logging via tee — no outer tee needed
     tmux send-keys -t "$TMUX_SESSION:operator" \
-        "$SCRIPT_DIR/session_wrapper.sh operator 2>&1 | tee -a $LOG_FILE" C-m
+        "$SCRIPT_DIR/session_wrapper.sh operator" C-m
 
     # Update scheduler state
     _update_scheduler_state "operator" "running"
@@ -153,9 +153,12 @@ cmd_oneshot() {
 
     log "Starting one-shot session: $SESSION_TYPE"
 
-    # Run via session_wrapper in the oneshot window
+    # Respawn the oneshot pane if its shell is dead
+    _respawn_pane_if_dead "oneshot"
+
+    # session_wrapper.sh handles its own logging — no outer tee needed
     tmux send-keys -t "$TMUX_SESSION:oneshot" \
-        "$SCRIPT_DIR/session_wrapper.sh $SESSION_TYPE 2>&1 | tee -a $LOG_FILE" C-m
+        "$SCRIPT_DIR/session_wrapper.sh $SESSION_TYPE" C-m
 
     _update_scheduler_state "$SESSION_TYPE" "running"
     log "One-shot session $SESSION_TYPE started in tmux window 1"
@@ -172,6 +175,9 @@ cmd_monitor_start() {
     local LOG_FILE="$LOG_DIR/health_monitor_${DATE}.log"
 
     log "Starting health monitor"
+
+    # Respawn the monitor pane if its shell is dead
+    _respawn_pane_if_dead "monitor"
 
     tmux send-keys -t "$TMUX_SESSION:monitor" \
         "cd $PROJECT_DIR && PYTHONPATH=$PROJECT_DIR python3 $SCRIPT_DIR/health_monitor.py 2>&1 | tee -a $LOG_FILE" C-m
@@ -267,6 +273,31 @@ cmd_kill_all() {
 }
 
 # --- Helpers ---
+
+_respawn_pane_if_dead() {
+    # Check if a tmux pane's shell is still alive. If not, kill and recreate the window.
+    local WINDOW_NAME="$1"
+
+    # Get the PID of the shell process running in the pane
+    local pane_pid
+    pane_pid=$(tmux list-panes -t "$TMUX_SESSION:$WINDOW_NAME" -F '#{pane_pid}' 2>/dev/null || echo "")
+
+    if [ -z "$pane_pid" ]; then
+        log "Pane $WINDOW_NAME has no PID, recreating window"
+    elif ! kill -0 "$pane_pid" 2>/dev/null; then
+        log "Pane $WINDOW_NAME shell (PID $pane_pid) is dead, recreating window"
+    else
+        # Shell is alive, nothing to do
+        return 0
+    fi
+
+    # Kill the old window (may fail if already gone) and recreate
+    tmux kill-window -t "$TMUX_SESSION:$WINDOW_NAME" 2>/dev/null || true
+    tmux new-window -t "$TMUX_SESSION" -n "$WINDOW_NAME"
+    tmux send-keys -t "$TMUX_SESSION:$WINDOW_NAME" "cd $PROJECT_DIR && export PYTHONPATH=$PROJECT_DIR && unset CLAUDECODE" C-m
+    sleep 0.5
+    log "Respawned window: $WINDOW_NAME"
+}
 
 _update_scheduler_state() {
     local SESSION_TYPE="$1"
