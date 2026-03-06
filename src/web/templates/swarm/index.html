@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% set active_page = "swarm" %}
+{% block title %}Swarm{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Swarm Dashboard</h1>
+            <p class="text-xs text-gray-500 mt-1">Sentinel, situation board, strategic context</p>
+        </div>
+        <div class="flex items-center gap-3">
+            {% if sentinel.running %}
+            <div class="flex items-center gap-2 bg-emerald-900/30 border border-emerald-800 rounded-lg px-3 py-1.5">
+                <div class="w-2 h-2 rounded-full bg-emerald-500 pulse-green"></div>
+                <span class="text-xs text-emerald-400 mono">Sentinel running</span>
+            </div>
+            {% else %}
+            <div class="flex items-center gap-2 bg-red-900/30 border border-red-800 rounded-lg px-3 py-1.5">
+                <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                <span class="text-xs text-red-400 mono">Sentinel offline</span>
+            </div>
+            {% endif %}
+            <span class="text-xs text-gray-500">Board: {% if board._fresh %}<span class="text-emerald-400">{{ board._age_display }} ago</span>{% elif board.get('_age_seconds', -1) >= 0 %}<span class="text-yellow-400">{{ board._age_display }} ago</span>{% else %}<span class="text-red-400">unavailable</span>{% endif %}</span>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">SPY</p>
+            <p class="mono text-lg font-bold {% if (board.market_snapshot.spy_change or 0) >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                {{ "%.1f"|format(board.market_snapshot.spy or 0) }}
+            </p>
+            <p class="text-[10px] {% if (board.market_snapshot.spy_change or 0) >= 0 %}text-emerald-500{% else %}text-red-500{% endif %}">
+                {{ "%+.2f"|format(board.market_snapshot.spy_change or 0) }}%
+            </p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">VIX</p>
+            <p class="mono text-lg font-bold {% if (board.market_snapshot.vix or 0) > 25 %}text-red-400{% elif (board.market_snapshot.vix or 0) > 20 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                {{ "%.1f"|format(board.market_snapshot.vix or 0) }}
+            </p>
+            <p class="text-[10px] text-gray-500">{{ board.market_snapshot.regime or '?' }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Observations</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ (board.today_observations or []) | length }}</p>
+            <p class="text-[10px] text-gray-500">today</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Decisions</p>
+            <p class="mono text-lg font-bold {% if (board.decisions_today or []) | length > 0 %}text-emerald-400{% else %}text-gray-500{% endif %}">
+                {{ (board.decisions_today or []) | length }}
+            </p>
+            <p class="text-[10px] text-gray-500">today</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Alerts</p>
+            <p class="mono text-lg font-bold {% if (board.portfolio_alerts or []) | length > 3 %}text-yellow-400{% else %}text-gray-200{% endif %}">
+                {{ (board.portfolio_alerts or []) | length }}
+            </p>
+            <p class="text-[10px] text-gray-500">portfolio</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Theses</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ context._thesis_count or 0 }}</p>
+            <p class="text-[10px] text-gray-500">tracked</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Patterns</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ (context.developing_patterns or []) | length }}</p>
+            <p class="text-[10px] text-gray-500">developing</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Catalysts</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ (context.upcoming_catalysts or []) | length }}</p>
+            <p class="text-[10px] text-gray-500">upcoming</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Situation Board (auto-refreshes) -->
+        <div class="lg:col-span-2 space-y-4"
+             hx-get="/swarm/board" hx-trigger="every 30s" hx-target="#board-content" hx-swap="innerHTML">
+
+            <!-- Observations -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Today's Observations</h2>
+                <div id="board-content">
+                    {% include "swarm/board_partial.html" %}
+                </div>
+            </div>
+
+            <!-- Portfolio Alerts -->
+            {% if board.portfolio_alerts %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Portfolio Alerts</h2>
+                <div class="space-y-1">
+                    {% for alert in board.portfolio_alerts %}
+                    <div class="flex items-center justify-between px-3 py-1.5 bg-gray-800/50 rounded text-sm">
+                        <span class="mono text-gray-200">{{ alert.symbol }}</span>
+                        <span class="text-xs {% if alert.type == 'stop_approaching' %}text-red-400{% elif alert.type == 'big_mover_up' %}text-emerald-400{% elif alert.type == 'big_mover_down' %}text-red-400{% else %}text-yellow-400{% endif %}">
+                            {{ alert.type | replace('_', ' ') }}
+                        </span>
+                        <span class="mono text-xs text-gray-400">{{ alert.current_pnl or '' }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Recent Completions -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Recent Sessions</h2>
+                <div class="space-y-2">
+                    {% for c in completions %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center justify-between">
+                            <span class="mono text-sm text-emerald-400">{{ c.session_type }}</span>
+                            <span class="text-[10px] text-gray-500">{{ (c.completed_at or '')[:16] }}</span>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">{{ c.summary or 'No summary' }}</p>
+                        {% if c.key_findings %}
+                        <div class="mt-1.5 space-y-0.5">
+                            {% for finding in c.key_findings[:3] %}
+                            <p class="text-[10px] text-gray-500 truncate">{{ finding }}</p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Strategic Context -->
+        <div class="space-y-4">
+            <!-- Thesis Momentum -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    Thesis Momentum
+                    <span class="text-[10px] text-gray-500 ml-1">({{ context._thesis_count or 0 }})</span>
+                </h2>
+                {% if context._theses_sorted %}
+                <div class="space-y-1">
+                    {% for t in context._theses_sorted[:15] %}
+                    <div class="flex items-center justify-between px-2 py-1 rounded hover:bg-gray-800/50">
+                        <span class="text-xs text-gray-300 truncate max-w-[160px]" title="{{ t.name }}">{{ t.name }}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="mono text-xs {% if t.conviction >= 80 %}text-emerald-400{% elif t.conviction >= 60 %}text-yellow-400{% elif t.conviction >= 40 %}text-orange-400{% else %}text-red-400{% endif %}">
+                                {{ t.conviction | int }}%
+                            </span>
+                            <span class="text-[10px] {% if t.trend == 'rising' %}text-emerald-500{% elif t.trend == 'declining' %}text-red-500{% else %}text-gray-600{% endif %}">
+                                {% if t.trend == 'rising' %}&#9650;{% elif t.trend == 'declining' %}&#9660;{% elif t.trend == 'new' %}&#9679;{% else %}&#8212;{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No thesis momentum data yet</p>
+                {% endif %}
+            </div>
+
+            <!-- Developing Patterns -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Developing Patterns</h2>
+                {% if context.developing_patterns %}
+                <div class="space-y-2">
+                    {% for p in context.developing_patterns %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-gray-200 font-medium">{{ p.name }}</span>
+                            <span class="text-[10px] text-gray-500">{{ p.days_active or 0 }}d</span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1">{{ p.interpretation }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No developing patterns</p>
+                {% endif %}
+            </div>
+
+            <!-- Upcoming Catalysts -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Catalysts</h2>
+                {% if context.upcoming_catalysts %}
+                <div class="space-y-2">
+                    {% for c in context.upcoming_catalysts %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-yellow-400 mono">{{ c.date }}</span>
+                            <span class="text-[10px] text-gray-500">{{ (c.affected or []) | join(', ') }}</span>
+                        </div>
+                        <p class="text-xs text-gray-300 mt-1">{{ c.event }}</p>
+                        {% if c.scenario_bull %}
+                        <div class="mt-1 grid grid-cols-2 gap-1">
+                            <p class="text-[10px] text-emerald-500 truncate" title="{{ c.scenario_bull }}">&#9650; {{ c.scenario_bull }}</p>
+                            <p class="text-[10px] text-red-500 truncate" title="{{ c.scenario_bear }}">&#9660; {{ c.scenario_bear }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No upcoming catalysts</p>
+                {% endif %}
+            </div>
+
+            <!-- Research Hypotheses -->
+            {% if context.research_hypotheses %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Research Hypotheses</h2>
+                <div class="space-y-2">
+                    {% for h in context.research_hypotheses %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <p class="text-xs text-gray-300">{{ h.hypothesis }}</p>
+                        <div class="flex items-center justify-between mt-1">
+                            <span class="text-[10px] text-gray-500">{{ h.suggested_by }}</span>
+                            <span class="text-[10px] {% if h.status == 'open' %}text-yellow-400{% elif h.status == 'confirmed' %}text-emerald-400{% else %}text-gray-500{% endif %}">
+                                {{ h.status }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Open Questions -->
+            {% if context.open_questions %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Open Questions</h2>
+                <div class="space-y-1">
+                    {% for q in context.open_questions %}
+                    <p class="text-xs text-gray-400 px-2 py-1">{{ q.question }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -275,6 +275,25 @@ class OperatorLoop:
         except Exception:
             pass  # Don't break operator loop if context push fails
 
+        # Push key observations to situation board for cross-session context
+        try:
+            from src.swarm.situation_board import SituationBoard
+            board = SituationBoard.load_or_create()
+            board.update_market_snapshot(state)
+            # Log convergences to board
+            for conv in convergences:
+                symbol = conv.get("symbol", "")
+                count = conv.get("signal_count", 0)
+                board.add_observation(
+                    source="operator",
+                    obs_type="convergence",
+                    text=f"{symbol}: {count} signals aligned",
+                    symbols=[symbol] if symbol else [],
+                )
+            board.save()
+        except Exception:
+            pass  # Don't break operator loop if board update fails
+
         return observation
 
     def _load_state(self) -> dict:

@@ -1,0 +1,16 @@
+<div class="space-y-1 max-h-96 overflow-y-auto">
+    {% for obs in (board.today_observations or []) | reverse %}
+    <div class="flex items-start gap-2 px-3 py-1.5 rounded {% if obs.type == 'assessment' %}bg-emerald-900/20{% elif obs.type == 'trigger' %}bg-yellow-900/20{% elif obs.type == 'alert' %}bg-red-900/10{% elif obs.type == 'convergence' %}bg-blue-900/20{% else %}bg-gray-800/30{% endif %}">
+        <span class="text-[10px] text-gray-500 mono whitespace-nowrap mt-0.5">{{ obs.time }}</span>
+        <span class="text-[10px] px-1.5 py-0.5 rounded {% if obs.source == 'sentinel' %}bg-gray-700 text-gray-400{% elif obs.source == 'analyst' %}bg-emerald-900/50 text-emerald-400{% elif obs.source == 'internal-review' %}bg-blue-900/50 text-blue-400{% else %}bg-gray-700 text-gray-400{% endif %}">
+            {{ obs.source }}
+        </span>
+        <span class="text-xs text-gray-300 flex-1">{{ obs.text }}</span>
+        {% if obs.symbols %}
+        <span class="text-[10px] text-yellow-400 mono whitespace-nowrap">{{ obs.symbols | join(' ') }}</span>
+        {% endif %}
+    </div>
+    {% else %}
+    <p class="text-xs text-gray-500 px-3 py-2">No observations yet today</p>
+    {% endfor %}
+</div>
