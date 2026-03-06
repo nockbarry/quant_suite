@@ -246,6 +246,7 @@ EXTRACTORS = {
     "research": extract_signal_scan,  # Research reads same scan data
     "thesis": extract_morning_briefing,  # Thesis review reads similar data
     "brainstorm": extract_signal_scan,
+    "internal-review": extract_eod_review,  # Review reads similar evaluation data
 }
 
 

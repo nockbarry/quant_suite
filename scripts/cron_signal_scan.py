@@ -94,6 +94,71 @@ def scan_thesis_suggestions() -> dict:
         return {"error": str(e), "count": 0, "suggestions": []}
 
 
+async def scan_prediction_markets() -> dict:
+    """Scan prediction markets for macro signals and trending markets."""
+    try:
+        from src.data.sources.alternative.prediction_markets import PredictionMarketsSource
+
+        pm = PredictionMarketsSource()
+        macro_signals = await pm.get_macro_signals()
+        trending = await pm.get_trending_markets(min_change=0.05)
+
+        # Convert to serializable format with trading-relevant signals
+        signals = []
+        for sig in macro_signals:
+            # Map macro categories to affected symbols
+            symbol_map = {
+                "fed_policy": ["TLT", "SHY", "GLD"],
+                "economics": ["SPY", "QQQ", "IWM"],
+                "geopolitics": ["XLE", "GLD", "USO"],
+                "crypto": ["COIN", "MSTR"],
+                "tech": ["QQQ", "SOXX"],
+            }
+            affected = symbol_map.get(sig.category.value, [])
+
+            for symbol in affected:
+                if sig.avg_probability > 0.6 or sig.avg_probability < 0.4:
+                    direction = "bearish" if sig.category.value == "fed_policy" and sig.avg_probability > 0.6 else sig.consensus_direction
+                    signals.append({
+                        "symbol": symbol,
+                        "direction": direction,
+                        "strength": round(abs(sig.avg_probability - 0.5) * 2, 3),
+                        "source": "prediction_market",
+                        "detail": f"{sig.category.value}: avg_prob={sig.avg_probability:.2f} ({len(sig.markets)} markets)",
+                    })
+
+        result = {
+            "macro_signals": len(macro_signals),
+            "trending_markets": len(trending),
+            "signals": signals[:20],
+            "trending": [
+                {
+                    "title": m.title[:100],
+                    "source": m.source.value,
+                    "probability": round(m.probability, 3),
+                    "change_24h": round(m.probability_change_24h, 3),
+                    "category": m.category.value,
+                }
+                for m in trending[:10]
+            ],
+        }
+
+        if signals:
+            logger.info(f"Prediction markets: {len(signals)} trading signals from {len(macro_signals)} macro signals")
+        if trending:
+            logger.info(f"Trending markets: {len(trending)} with significant moves")
+
+        # Write dedicated prediction markets file for signal digest
+        pm_file = RESULTS_DIR / "social" / "prediction_markets.json"
+        with open(pm_file, "w") as f:
+            json.dump({"timestamp": datetime.now().isoformat(), **result}, f, indent=2)
+
+        return result
+    except Exception as e:
+        logger.error(f"Prediction markets scan failed: {e}")
+        return {"error": str(e), "macro_signals": 0, "trending_markets": 0, "signals": [], "trending": []}
+
+
 def check_news_freshness() -> dict:
     """Check that news collection is running and report latest."""
     try:
@@ -167,6 +232,7 @@ async def main():
     # Run scans
     results["wsb"] = await scan_wsb()
     results["suggestions"] = scan_thesis_suggestions()
+    results["prediction_markets"] = await scan_prediction_markets()
     results["news"] = check_news_freshness()
 
     # Save latest scan result (operator reads this)
@@ -196,9 +262,11 @@ async def main():
     # Summary
     wsb = results["wsb"]
     sug = results["suggestions"]
+    pm = results["prediction_markets"]
     news = results["news"]
     logger.info(f"Results: WSB {wsb.get('early_signals', 0)} early signals, "
                 f"{sug.get('count', 0)} thesis suggestions, "
+                f"{pm.get('macro_signals', 0)} prediction market signals, "
                 f"news {'ok' if news.get('status') == 'ok' else 'STALE'}")
     logger.info("Scan complete")
 

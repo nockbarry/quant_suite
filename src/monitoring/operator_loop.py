@@ -445,8 +445,17 @@ class OperatorLoop:
         return completions
 
     def _check_convergences(self) -> list[dict]:
-        """Check for signal convergences."""
+        """Check for signal convergences from pre-computed digest."""
+        digest_file = Path.home() / "quant_results" / "scheduler" / "signal_digest.json"
         try:
+            if digest_file.exists():
+                import os
+                age_hours = (datetime.now().timestamp() - os.path.getmtime(digest_file)) / 3600
+                if age_hours < 2:
+                    with open(digest_file) as f:
+                        digest = json.load(f)
+                    return digest.get("convergences", [])
+            # Fallback to direct computation if digest is stale/missing
             from src.monitoring.signal_summary import get_signal_summary
             summary = get_signal_summary()
             return [c.to_dict() for c in summary.convergences]

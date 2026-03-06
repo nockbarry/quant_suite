@@ -311,6 +311,7 @@ get_timeout() {
         brainstorm)        echo 15 ;;
         signal-scan)       echo 15 ;;
         research-theory)   echo 15 ;;
+        internal-review)   echo 10 ;;
         operator)          echo 480 ;;  # 8 hours
         *)                 echo 15 ;;
     esac
@@ -326,6 +327,7 @@ get_model() {
         brainstorm)        echo "sonnet" ;;
         signal-scan)       echo "sonnet" ;;
         research-theory)   echo "sonnet" ;;
+        internal-review)   echo "sonnet" ;;
         operator)          echo "opus" ;;
         *)                 echo "sonnet" ;;
     esac
@@ -341,6 +343,7 @@ get_skill_prompt() {
         brainstorm)        echo "/brainstorm" ;;
         signal-scan)       echo "/social-signals" ;;
         research-theory)   echo "/social-signals" ;;
+        internal-review)   echo "/internal-review" ;;
         *)                 echo "" ;;
     esac
 }
@@ -402,6 +405,13 @@ else
         2>&1 | tee -a "$LOG_FILE" || true
 
     log "One-shot session completed"
+
+    # Auto-execute pending decisions after trade-decision sessions (paper only)
+    if [ "$SESSION_TYPE" = "trade-decision" ]; then
+        log "Auto-executing pending paper decisions"
+        PYTHONPATH="$PROJECT_DIR" python3 "$SCRIPT_DIR/cron_auto_execute.py" \
+            2>&1 | tee -a "$LOG_FILE" || true
+    fi
 fi
 
 rm -f "$PROMPT_FILE" 2>/dev/null

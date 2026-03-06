@@ -20,11 +20,12 @@ show_cron() {
 
 install_cron() {
     echo "Installing trading automation cron jobs..."
+    echo "Note: Squeeze, news, sector rotation, legal/geo are handled by collect_all_data.py"
 
     # Get existing crontab (without our entries)
-    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | grep -v "trading_day.sh" | grep -v "cron_squeeze_scan" | grep -v "cron_news_collect")
+    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | grep -v "trading_day.sh" | grep -v "cron_squeeze_scan" | grep -v "cron_news_collect" | grep -v "collect_all_data" | grep -v "signpost_monitor" | grep -v "cron_trade_wrapper" | grep -v "archive_daily_signals" | grep -v "run_day_trading_signals" | grep -v "cron_weekly_improvement" | grep -v "cron_signal_digest" | grep -v "sector_rotation" | grep -v "legal_tracker" | grep -v "geopolitical")
 
-    # Create new crontab
+    # Create new crontab — consolidated from 13 entries to 8
     {
         echo "$EXISTING"
         echo ""
@@ -40,57 +41,43 @@ install_cron() {
         echo "# Stop daemons after market close at 5:00 PM ET (Mon-Fri)"
         echo "0 17 * * 1-5 $SCRIPT_DIR/trading_day.sh stop >> ~/quant_results/logs/cron.log 2>&1"
         echo ""
-        echo "$CRON_MARKER - Squeeze Scanner"
-        echo "# Daily squeeze scan at 6:30 AM ET (Mon-Fri)"
-        echo "30 6 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_squeeze_scan.py >> ~/quant_results/logs/squeeze_scan.log 2>&1"
+        echo "$CRON_MARKER - Master Data Collection"
+        echo "# Collect from 35+ sources every 30 min (includes news, legal, geo, sector rotation)"
+        echo "*/30 6-17 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 $SCRIPT_DIR/collect_all_data.py --quick >> ~/quant_results/logs/collection.log 2>&1"
         echo ""
-        echo "$CRON_MARKER - Fast News Collection"
-        echo "# Fast news collection every 30 min during market hours (Mon-Fri, 6 AM - 5 PM ET)"
-        echo "*/30 6-17 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_news_collect_fast.py >> ~/quant_results/logs/news_fast.log 2>&1"
+        echo "$CRON_MARKER - Signal Digest"
+        echo "# Build unified signal digest every 30 min (quality-weighted, deduplicated)"
+        echo "15,45 6-17 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 $SCRIPT_DIR/cron_signal_digest.py >> ~/quant_results/logs/signal_digest.log 2>&1"
         echo ""
         echo "$CRON_MARKER - Signpost Monitor"
-        echo "# Check price signposts every 10 min during market hours (Mon-Fri, 9:30 AM - 4 PM ET)"
-        echo "*/10 9-15 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/signpost_monitor.py --alerts >> ~/quant_results/logs/signpost.log 2>&1"
+        echo "# Check price signposts every 10 min during market hours"
+        echo "*/10 9-15 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 $SCRIPT_DIR/signpost_monitor.py --alerts >> ~/quant_results/logs/signpost.log 2>&1"
         echo ""
         echo "$CRON_MARKER - Scheduled Trades"
-        echo "# Execute scheduled trades at 9:31 AM ET (1 min after open for prices to settle)"
-        echo "31 9 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_trade_wrapper.sh >> ~/quant_results/logs/scheduled_trades.log 2>&1"
+        echo "# Execute scheduled trades at 9:31 AM ET (1 min after open)"
+        echo "31 9 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 $SCRIPT_DIR/cron_trade_wrapper.sh >> ~/quant_results/logs/scheduled_trades.log 2>&1"
         echo ""
-        echo "$CRON_MARKER - Master Data Collection"
-        echo "# Collect from all 35+ data sources every 30 min during market hours"
-        echo "*/30 6-17 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/collect_all_data.py --quick >> ~/quant_results/logs/collection.log 2>&1"
+        echo "$CRON_MARKER - Day Trading Signals"
+        echo "# Scan for day trading signals every 5 min during market hours + opening range"
+        echo "*/5 9-15 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 $SCRIPT_DIR/run_day_trading_signals.py --scan --deploy-paper >> ~/quant_results/logs/day_trading_signals.log 2>&1"
         echo ""
-        echo "$CRON_MARKER - Sector Rotation Analysis"
-        echo "# Analyze sector rotation hourly during market hours"
-        echo "0 7-16 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 -c 'from src.synthesis.sector_rotation import SectorRotationDetector; import asyncio; asyncio.run(SectorRotationDetector().analyze_sectors())' >> ~/quant_results/logs/sector_rotation.log 2>&1"
-        echo ""
-        echo "$CRON_MARKER - Legal/Geopolitical Monitor"
-        echo "# Check legal and geopolitical events every 2 hours"
-        echo "0 6,8,10,12,14,16 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 -c 'from src.data.sources.alternative.legal_tracker import LegalTracker; from src.data.sources.alternative.geopolitical import GeopoliticalMonitor; import asyncio; asyncio.run(LegalTracker().collect_all()); asyncio.run(GeopoliticalMonitor().collect_all())' >> ~/quant_results/logs/legal_geo.log 2>&1"
+        echo "$CRON_MARKER - Daily Signal Archive"
+        echo "# Archive all signals daily at 5:30 PM ET for backtesting"
+        echo "30 17 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 $SCRIPT_DIR/archive_daily_signals.py >> ~/quant_results/logs/signal_archive.log 2>&1"
         echo ""
         echo "$CRON_MARKER - Weekly Improvement Review"
         echo "# Weekly improvement review on Sundays at 6 PM ET"
-        echo "0 18 * * 0 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/cron_weekly_improvement_review.py >> ~/quant_results/logs/weekly_review.log 2>&1"
-        echo ""
-        echo "$CRON_MARKER - Daily Signal Archive"
-        echo "# Archive all signals daily at 5:30 PM ET for future backtesting"
-        echo "30 17 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/archive_daily_signals.py >> ~/quant_results/logs/signal_archive.log 2>&1"
-        echo ""
-        echo "$CRON_MARKER - Day Trading Signal Scanner"
-        echo "# Scan for day trading signals every 5 min during market hours (9:30 AM - 4 PM ET)"
-        echo "*/5 9-15 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/run_day_trading_signals.py --scan --deploy-paper >> ~/quant_results/logs/day_trading_signals.log 2>&1"
-        echo "# Also run at 9:31 and 9:35 for opening range signals"
-        echo "31,35 9 * * 1-5 cd $(dirname $SCRIPT_DIR) && PYTHONPATH=. python3 $SCRIPT_DIR/run_day_trading_signals.py --scan --deploy-paper >> ~/quant_results/logs/day_trading_signals.log 2>&1"
+        echo "0 18 * * 0 cd $PROJECT_DIR && PYTHONPATH=. python3 $SCRIPT_DIR/cron_weekly_improvement_review.py >> ~/quant_results/logs/weekly_review.log 2>&1"
     } | crontab -
 
-    echo "Cron jobs installed. Current schedule:"
+    echo "Cron jobs installed (10 entries). Current schedule:"
     show_cron
 }
 
 remove_cron() {
     echo "Removing trading automation cron jobs..."
 
-    crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | grep -v "trading_day.sh" | grep -v "signpost_monitor" | grep -v "cron_trade_wrapper" | crontab -
+    crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | grep -v "trading_day.sh" | grep -v "signpost_monitor" | grep -v "cron_trade_wrapper" | grep -v "collect_all_data" | grep -v "cron_signal_digest" | grep -v "archive_daily_signals" | grep -v "run_day_trading_signals" | grep -v "cron_weekly_improvement" | crontab -
 
     echo "Cron jobs removed."
 }
@@ -112,7 +99,7 @@ install_auto() {
     # Get existing crontab (without our auto entries)
     EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "cron_signal_scan.py")
 
-    # Create new crontab with auto entries
+    # Create new crontab — consolidated from 13 entries to 11
     {
         echo "$EXISTING"
         echo ""
@@ -129,11 +116,11 @@ install_auto() {
         echo "30 8 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh operator-start >> ~/quant_results/logs/scheduler.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Morning Trade Decision"
-        echo "# Run trade decision at 10:00 AM ET (Mon-Fri)"
+        echo "# Run trade decision at 10:00 AM ET (auto-executes paper orders after)"
         echo "0 10 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot trade-decision >> ~/quant_results/logs/scheduler.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Afternoon Trade Decision"
-        echo "# Run trade decision at 1:00 PM ET (Mon-Fri)"
+        echo "# Run trade decision at 1:00 PM ET (auto-executes paper orders after)"
         echo "0 13 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot trade-decision >> ~/quant_results/logs/scheduler.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Operator Session Stop"
@@ -148,28 +135,25 @@ install_auto() {
         echo "# Stop health monitor at 5:10 PM ET (Mon-Fri)"
         echo "10 17 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh monitor-stop >> ~/quant_results/logs/scheduler.log 2>&1"
         echo ""
-        echo "$CRON_AUTO_MARKER - Signal Scan Cron (Python)"
-        echo "# Scan WSB, Stocktwits, thesis suggestions every 2 hours (no Claude needed)"
+        echo "$CRON_AUTO_MARKER - Signal Scan (Python + Prediction Markets)"
+        echo "# Scan WSB, Stocktwits, prediction markets, thesis suggestions every 2 hours"
         echo "0 6,8,10,12,14,16 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_signal_scan.py >> ~/quant_results/logs/signal_scan.log 2>&1"
         echo ""
-        echo "$CRON_AUTO_MARKER - Signal Scan Claude Morning"
-        echo "# LLM analysis of social signals at 10:30 AM ET (Mon-Fri)"
-        echo "30 10 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot signal-scan >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo "$CRON_AUTO_MARKER - Signal Scan Claude (Morning + Afternoon)"
+        echo "# LLM analysis of social signals at 10:30 AM and 2:30 PM ET (Mon-Fri)"
+        echo "30 10,14 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot signal-scan >> ~/quant_results/logs/scheduler.log 2>&1"
         echo ""
-        echo "$CRON_AUTO_MARKER - Signal Scan Claude Afternoon"
-        echo "# LLM analysis of social signals at 2:30 PM ET (Mon-Fri)"
-        echo "30 14 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot signal-scan >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo "$CRON_AUTO_MARKER - Internal Review"
+        echo "# Automated self-assessment at 12:00 PM and 3:00 PM ET (Mon-Fri)"
+        echo "0 12,15 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot internal-review >> ~/quant_results/logs/scheduler.log 2>&1"
         echo ""
-        echo "$CRON_AUTO_MARKER - Weekly Thesis Review"
-        echo "# Weekly thesis review on Sundays at 6 PM ET"
+        echo "$CRON_AUTO_MARKER - Weekly Thesis + Brainstorm"
+        echo "# Weekly thesis review (6 PM) then brainstorm (7 PM) on Sundays"
         echo "0 18 * * 0 $SCRIPT_DIR/athena_scheduler.sh oneshot thesis >> ~/quant_results/logs/scheduler.log 2>&1"
-        echo ""
-        echo "$CRON_AUTO_MARKER - Weekly Brainstorm"
-        echo "# Weekly brainstorm on Sundays at 7 PM ET"
         echo "0 19 * * 0 $SCRIPT_DIR/athena_scheduler.sh oneshot brainstorm >> ~/quant_results/logs/scheduler.log 2>&1"
     } | crontab -
 
-    echo "Autonomous cron jobs installed. Current schedule:"
+    echo "Autonomous cron jobs installed (12 entries). Current schedule:"
     show_auto
 }
 
