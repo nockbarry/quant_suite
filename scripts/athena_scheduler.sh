@@ -178,6 +178,10 @@ cmd_sentinel_start() {
 
     log "Starting sentinel daemon"
 
+    # Kill any existing process in the monitor pane (health_monitor or old sentinel)
+    tmux send-keys -t "$TMUX_SESSION:monitor" C-c 2>/dev/null || true
+    sleep 2
+
     # Respawn the monitor pane if its shell is dead
     _respawn_pane_if_dead "monitor"
 

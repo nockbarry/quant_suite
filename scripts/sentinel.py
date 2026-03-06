@@ -262,6 +262,7 @@ class Sentinel:
         self.last_convergence_symbols: set[str] = set()
         self.last_news_count: int = 0
         self.check_count = 0
+        self.logged_alert_titles: set[str] = set()  # Track which alert types have been logged
 
     def run_check(self) -> dict:
         """Run a single sentinel check cycle.
@@ -347,9 +348,19 @@ class Sentinel:
             kill_hung_session(stale["session_type"], stale.get("pid"), stale["lock_file"])
             actions_taken.append(f"killed_hung:{stale['session_type']}")
 
-        # 9. Log alerts to board
+        # 9. Log alerts to board (only first occurrence of each alert type per session)
         for alert in alerts:
-            if alert.level in ("critical", "warning"):
+            if alert.level == "critical":
+                # Always log critical alerts
+                self.board.add_observation(
+                    source="sentinel",
+                    obs_type="alert",
+                    text=f"[{alert.level}] {alert.title}: {alert.message}",
+                    symbols=[alert.symbol] if alert.symbol else [],
+                )
+            elif alert.level == "warning" and alert.title not in self.logged_alert_titles:
+                # Log warning alerts only once per sentinel session
+                self.logged_alert_titles.add(alert.title)
                 self.board.add_observation(
                     source="sentinel",
                     obs_type="alert",
