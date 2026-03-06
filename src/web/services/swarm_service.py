@@ -108,6 +108,30 @@ def get_recent_completions(limit: int = 8) -> list[dict]:
     return results
 
 
+def get_signal_digest() -> dict:
+    """Load signal digest with computed fields."""
+    path = SCHEDULER_DIR / "signal_digest.json"
+    if not path.exists():
+        return {"missing": True}
+    try:
+        with open(path) as f:
+            digest = json.load(f)
+        if digest.get("timestamp"):
+            updated = datetime.fromisoformat(digest["timestamp"])
+            digest["_age_seconds"] = (datetime.now() - updated).total_seconds()
+            digest["_age_display"] = _format_age(digest["_age_seconds"])
+            digest["_fresh"] = digest["_age_seconds"] < 3600
+        # Summarize by source type
+        source_counts = digest.get("source_counts", {})
+        digest["_source_summary"] = sorted(
+            [{"source": k, "count": v} for k, v in source_counts.items()],
+            key=lambda x: -x["count"],
+        )
+        return digest
+    except Exception:
+        return {"missing": True}
+
+
 def _format_age(seconds: float) -> str:
     if seconds < 0:
         return "unknown"

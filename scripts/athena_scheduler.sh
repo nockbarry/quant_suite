@@ -185,8 +185,9 @@ cmd_sentinel_start() {
     # Respawn the monitor pane if its shell is dead
     _respawn_pane_if_dead "monitor"
 
+    # Sentinel has its own FileHandler — don't tee to the same file (causes double logging)
     tmux send-keys -t "$TMUX_SESSION:monitor" \
-        "cd $PROJECT_DIR && PYTHONPATH=$PROJECT_DIR python3 $SCRIPT_DIR/sentinel.py 2>&1 | tee -a $LOG_FILE" C-m
+        "cd $PROJECT_DIR && PYTHONPATH=$PROJECT_DIR python3 $SCRIPT_DIR/sentinel.py" C-m
 
     _update_scheduler_state "sentinel" "running"
     log "Sentinel started in tmux window 2"

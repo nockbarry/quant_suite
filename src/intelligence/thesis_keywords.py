@@ -312,6 +312,31 @@ def _extract_phrases(text: str) -> list[str]:
         "surges", "higher", "lower", "rising", "falling", "remains", "sees",
         "stocks", "impact", "global", "gains", "falls", "call", "says",
         "transcript", "quarter", "year-over-year", "above", "below",
+        # Months and temporal words (leak through signpost descriptions)
+        "january", "february", "march", "april", "june", "july",
+        "august", "september", "october", "november", "december",
+        "week", "weeks", "months", "years", "daily", "weekly", "monthly",
+        "today", "tomorrow", "yesterday", "recent", "current", "prior",
+        # Common verbs/adjectives that appear in signpost conditions
+        "trump", "about", "concern", "concerns", "concerned",
+        "dropped", "drops", "dropping", "continuing", "continued", "continues",
+        "additional", "significant", "significantly", "potential", "potentially",
+        "confirm", "confirmed", "confirms", "indicate", "indicates", "indicated",
+        "suggest", "suggests", "suggested", "support", "supports", "supported",
+        "pass", "passed", "passes", "reach", "reaches", "reached",
+        "fail", "fails", "failed", "failure", "reduce", "reduced", "reduces",
+        "issue", "issues", "issued", "form", "forms", "total", "totals",
+        "include", "includes", "included", "likely", "unlikely",
+        "push", "pulls", "pushes", "approve", "approved", "approves",
+        "delay", "delayed", "delays", "extend", "extends", "extended",
+        "halt", "halts", "halted", "pause", "paused", "pauses",
+        # Countries/regions too generic on their own (keep in CONCEPT_KEYWORDS instead)
+        "india", "europe", "japan", "korea", "canada", "mexico", "asia",
+        # Generic financial terms that leak through
+        "budget", "policy", "program", "project", "system", "group",
+        "world", "south", "north", "east", "west", "state", "states",
+        "order", "orders", "ordered", "phase", "stage", "point", "points",
+        "cost", "costs", "value", "values", "offer", "offers", "offered",
     }
 
     # Only keep words >= 4 chars that aren't stopwords (more selective)

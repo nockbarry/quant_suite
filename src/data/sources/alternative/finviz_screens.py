@@ -284,18 +284,17 @@ class FinvizScreener:
 
                 soup = BeautifulSoup(response.text, "html.parser")
 
-                # Find the screener table
-                table = soup.find("table", {"id": "screener-views-table"})
-                if not table:
-                    # Try alternative table class
-                    table = soup.find("table", class_="screener_table")
-
-                if table:
-                    # Finviz screener table: columns are [#, Ticker, Company, Sector, ...]
-                    # Extract tickers from the second column (index 1) of each data row
-                    for row in table.find_all("tr"):
+                # Strategy 1: Find the screener results table inside #screener-content.
+                # Finviz nests the actual data table several levels deep within
+                # #screener-content. The data rows use valign="top" to distinguish
+                # them from header/layout rows.
+                screener_content = soup.find(id="screener-content")
+                if screener_content:
+                    # Data rows in the screener results have valign="top"
+                    for row in screener_content.find_all("tr", attrs={"valign": "top"}):
                         cells = row.find_all("td")
                         if len(cells) >= 2:
+                            # Column layout: [No., Ticker, Company, Sector, ...]
                             ticker_cell = cells[1]
                             link = ticker_cell.find("a")
                             if link:
@@ -303,21 +302,60 @@ class FinvizScreener:
                                 if symbol and 1 <= len(symbol) <= 5 and symbol.isalpha() and symbol.isupper():
                                     symbols.append(symbol)
 
-                # Fallback: look for quote.ashx links anywhere on page
+                # Strategy 2: Try the styled-table-new class (alternative Finviz layout)
                 if not symbols:
-                    for link in soup.find_all("a", href=re.compile(r"quote\.ashx\?t=")):
+                    table = soup.find("table", class_="styled-table-new")
+                    if table:
+                        for row in table.find_all("tr"):
+                            cells = row.find_all("td")
+                            if len(cells) >= 2:
+                                ticker_cell = cells[1]
+                                link = ticker_cell.find("a")
+                                if link:
+                                    symbol = link.text.strip()
+                                    if symbol and 1 <= len(symbol) <= 5 and symbol.isalpha() and symbol.isupper():
+                                        symbols.append(symbol)
+
+                # Strategy 3: Look for table-light class (older Finviz layout)
+                if not symbols:
+                    table = soup.find("table", class_="table-light")
+                    if table:
+                        for row in table.find_all("tr"):
+                            cells = row.find_all("td")
+                            if len(cells) >= 2:
+                                ticker_cell = cells[1]
+                                link = ticker_cell.find("a")
+                                if link:
+                                    symbol = link.text.strip()
+                                    if symbol and 1 <= len(symbol) <= 5 and symbol.isalpha() and symbol.isupper():
+                                        symbols.append(symbol)
+
+                # Strategy 4 (last resort): Look for quote.ashx links, but ONLY
+                # within the screener-content container to avoid picking up the
+                # alphabetical ticker index/navigation that Finviz displays on
+                # every page. Without this restriction, the fallback would return
+                # tickers sorted alphabetically from 'A' (the page directory),
+                # not actual screen results.
+                if not symbols and screener_content:
+                    for link in screener_content.find_all("a", href=re.compile(r"quote\.ashx\?t=")):
                         symbol = link.text.strip()
                         if symbol and 1 <= len(symbol) <= 5 and symbol.isalpha() and symbol.isupper():
                             symbols.append(symbol)
 
-                logger.info(f"Screen {screen_name}: found {len(symbols)} symbols")
+                if not symbols:
+                    logger.warning(
+                        f"Screen {screen_name}: no symbols found — Finviz HTML "
+                        f"structure may have changed. Check selectors."
+                    )
+                else:
+                    logger.info(f"Screen {screen_name}: found {len(symbols)} symbols")
 
         except httpx.HTTPError as e:
             logger.warning(f"HTTP error fetching {screen_name}: {e}")
         except Exception as e:
             logger.warning(f"Error fetching {screen_name}: {e}")
 
-        return list(set(symbols))[:50]  # Limit to top 50 per screen
+        return list(dict.fromkeys(symbols))[:50]  # Dedupe preserving order, limit to 50
 
     async def get_screens(
         self,

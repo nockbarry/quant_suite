@@ -57,19 +57,51 @@ def _update_news_cache(expanded_cache_dir: Path):
         with open(latest_file) as f:
             data = json.load(f)
 
+        # Build thesis keyword index for headline matching
+        thesis_index = {}
+        try:
+            from src.intelligence.thesis_keywords import build_keyword_index, match_headline
+            thesis_index = build_keyword_index()
+            logger.info(f"Loaded thesis keyword index: {len(thesis_index)} keywords")
+        except Exception as e:
+            logger.warning(f"Could not build thesis keyword index: {e}")
+
         # Convert expanded_news format to news_cache.json format
+        thesis_match_count = 0
         items = []
         for item in data.get("items", []):
+            headline = item.get("title", "")
+
+            # Run thesis keyword matching on each headline
+            thesis_matches = {}
+            if thesis_index and headline:
+                try:
+                    raw_matches = match_headline(headline, thesis_index)
+                    thesis_matches = {
+                        tid: {
+                            "name": m.thesis_name,
+                            "relevance": round(m.relevance, 2),
+                            "keywords": m.matched_keywords[:5],
+                            "direction": m.directions[0] if m.directions else "neutral",
+                        }
+                        for tid, m in raw_matches.items()
+                        if m.relevance >= 0.4
+                    }
+                    if thesis_matches:
+                        thesis_match_count += 1
+                except Exception:
+                    pass
+
             items.append({
                 "timestamp": item.get("published", item.get("timestamp", datetime.now().isoformat())),
-                "headline": item.get("title", ""),
+                "headline": headline,
                 "source": item.get("source", ""),
                 "link": item.get("link", ""),
                 "pubdate": item.get("published", ""),
                 "symbols": item.get("symbols", []),
                 "is_urgent": item.get("importance") in ("critical", "high"),
                 "urgent_keyword": item.get("importance", ""),
-                "thesis_matches": item.get("thesis_matches", {}),
+                "thesis_matches": thesis_matches,
             })
 
         cache_path = paths.live / "news_cache.json"
@@ -85,7 +117,7 @@ def _update_news_cache(expanded_cache_dir: Path):
         with open(cache_path, "w") as f:
             json.dump(output, f, indent=2)
 
-        logger.info(f"Updated news_cache.json with {len(items[:200])} items")
+        logger.info(f"Updated news_cache.json with {len(items[:200])} items, {thesis_match_count} thesis matches")
     except Exception as e:
         logger.warning(f"Failed to update news_cache.json: {e}")
 

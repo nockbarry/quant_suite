@@ -1643,6 +1643,9 @@ class LiveDaemon:
 
             for item in news_data.get("items", []):
                 item_time = datetime.fromisoformat(item.get("timestamp", "2000-01-01"))
+                # Strip timezone info for comparison with naive datetime.now()
+                if item_time.tzinfo is not None:
+                    item_time = item_time.replace(tzinfo=None)
                 if item_time < cutoff:
                     continue
 

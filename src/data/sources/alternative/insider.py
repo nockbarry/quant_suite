@@ -305,11 +305,13 @@ class InsiderDataSource:
 
         transactions = []
 
-        # Try Finnhub first, then Polygon
+        # Try Finnhub first, then Polygon, then SEC EDGAR (free, no key)
         if self.finnhub_key:
             transactions = await self._fetch_finnhub(symbol, start, end)
         elif self.polygon_key:
             transactions = await self._fetch_polygon(symbol, start, end)
+        else:
+            transactions = await self._fetch_sec_edgar(symbol, start, end)
 
         # Filter by date range
         if start:
@@ -491,6 +493,141 @@ class InsiderDataSource:
 
         except Exception as e:
             logger.error(f"Polygon insider fetch error: {e}")
+
+        return transactions
+
+    async def _fetch_sec_edgar(
+        self,
+        symbol: str,
+        start: datetime | None,
+        end: datetime | None,
+    ) -> list[InsiderTransaction]:
+        """Fetch insider transactions from SEC EDGAR full-text search (free, no API key).
+
+        Uses the EDGAR EFTS API to find recent Form 4 filings for a ticker.
+        """
+        client = await self._get_client()
+        transactions = []
+
+        try:
+            # SEC EDGAR full-text search for Form 4 filings
+            url = "https://efts.sec.gov/LATEST/search-index"
+            params = {
+                "q": f'"{symbol}"',
+                "dateRange": "custom",
+                "forms": "4",
+                "startdt": (start or datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d"),
+                "enddt": (end or datetime.now()).strftime("%Y-%m-%d"),
+            }
+            headers = {
+                "User-Agent": "QuantSuite Research research@example.com",
+                "Accept": "application/json",
+            }
+
+            resp = await client.get(url, params=params, headers=headers)
+
+            # EDGAR may return 403 or non-JSON — fall back to RSS feed
+            if resp.status_code != 200:
+                return await self._fetch_sec_rss(symbol)
+
+            data = resp.json()
+
+            for hit in data.get("hits", {}).get("hits", [])[:20]:
+                try:
+                    source = hit.get("_source", {})
+                    filing_date_str = source.get("file_date", "")
+                    if not filing_date_str:
+                        continue
+
+                    filing_date = datetime.strptime(filing_date_str, "%Y-%m-%d")
+                    display_names = source.get("display_names", [])
+                    insider_name = display_names[0] if display_names else "Unknown"
+
+                    transactions.append(InsiderTransaction(
+                        symbol=symbol,
+                        company_name=source.get("entity_name", symbol),
+                        insider_name=insider_name,
+                        insider_role=InsiderRole.OFFICER,
+                        transaction_type=TransactionType.PURCHASE,  # EDGAR search doesn't distinguish
+                        transaction_date=filing_date,
+                        filing_date=filing_date,
+                        shares=0,
+                        price=0.0,
+                        value=0.0,
+                        shares_owned_after=0,
+                        is_direct=True,
+                    ))
+                except Exception as e:
+                    logger.debug(f"Error parsing EDGAR result: {e}")
+
+        except Exception as e:
+            logger.debug(f"EDGAR search failed, trying RSS: {e}")
+            return await self._fetch_sec_rss(symbol)
+
+        return transactions
+
+    async def _fetch_sec_rss(self, symbol: str) -> list[InsiderTransaction]:
+        """Fetch insider filings from SEC EDGAR RSS feed (free, no key needed)."""
+        client = await self._get_client()
+        transactions = []
+
+        try:
+            url = f"https://www.sec.gov/cgi-bin/browse-edgar"
+            params = {
+                "action": "getcompany",
+                "company": symbol,
+                "type": "4",
+                "dateb": "",
+                "owner": "include",
+                "count": "20",
+                "search_text": "",
+                "output": "atom",
+            }
+            headers = {"User-Agent": "QuantSuite Research research@example.com"}
+
+            resp = await client.get(url, params=params, headers=headers)
+            if resp.status_code != 200:
+                return transactions
+
+            from xml.etree import ElementTree
+            root = ElementTree.fromstring(resp.text)
+            ns = {"atom": "http://www.w3.org/2005/Atom"}
+
+            for entry in root.findall("atom:entry", ns)[:20]:
+                try:
+                    title_el = entry.find("atom:title", ns)
+                    updated_el = entry.find("atom:updated", ns)
+                    if title_el is None or updated_el is None:
+                        continue
+
+                    title = title_el.text or ""
+                    updated = updated_el.text or ""
+
+                    # Parse date from ATOM format
+                    filing_date = datetime.fromisoformat(updated.replace("Z", "+00:00")).replace(tzinfo=None)
+
+                    # Extract name from title like "4 - Doe, John"
+                    name_part = title.split(" - ", 1)[-1].strip() if " - " in title else "Unknown"
+
+                    transactions.append(InsiderTransaction(
+                        symbol=symbol,
+                        company_name=symbol,
+                        insider_name=name_part,
+                        insider_role=InsiderRole.OFFICER,
+                        transaction_type=TransactionType.PURCHASE,
+                        transaction_date=filing_date,
+                        filing_date=filing_date,
+                        shares=0,
+                        price=0.0,
+                        value=0.0,
+                        shares_owned_after=0,
+                        is_direct=True,
+                    ))
+                except Exception as e:
+                    logger.debug(f"Error parsing SEC RSS entry: {e}")
+
+        except Exception as e:
+            logger.debug(f"SEC RSS fetch failed for {symbol}: {e}")
 
         return transactions
 

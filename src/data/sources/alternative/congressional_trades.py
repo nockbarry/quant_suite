@@ -392,7 +392,7 @@ class CongressionalTradesSource:
 
         trades = []
 
-        # Fetch from RSS feeds
+        # Try RSS feeds first (may be dead — DNS down since early 2026)
         if chamber is None or chamber == Chamber.HOUSE:
             house_trades = await self._fetch_rss(self.HOUSE_RSS, Chamber.HOUSE)
             trades.extend(house_trades)
@@ -400,6 +400,11 @@ class CongressionalTradesSource:
         if chamber is None or chamber == Chamber.SENATE:
             senate_trades = await self._fetch_rss(self.SENATE_RSS, Chamber.SENATE)
             trades.extend(senate_trades)
+
+        # If RSS returned nothing, try Capitol Trades (free, no API key)
+        if not trades:
+            capitol_trades = await self._fetch_capitol_trades(days, chamber)
+            trades.extend(capitol_trades)
 
         # Fetch from Quiver if available
         if self.quiver_api_key:
@@ -542,6 +547,161 @@ class CongressionalTradesSource:
         except Exception as e:
             logger.error(f"Error fetching RSS from {url}: {e}")
 
+        return trades
+
+    async def _fetch_capitol_trades(
+        self,
+        days: int = 30,
+        chamber: Chamber | None = None,
+    ) -> list[CongressionalTrade]:
+        """Fetch from Capitol Trades (capitoltrades.com) — free, no API key.
+
+        Scrapes the public HTML tables of recent congressional stock trades.
+        Fallback when House/Senate Stock Watcher RSS feeds are dead.
+        """
+        client = await self._get_client()
+        trades = []
+
+        urls = []
+        if chamber is None or chamber == Chamber.HOUSE:
+            urls.append(("https://www.capitoltrades.com/trades?chamber=house&txType=buy,sell&assetType=stock", Chamber.HOUSE))
+        if chamber is None or chamber == Chamber.SENATE:
+            urls.append(("https://www.capitoltrades.com/trades?chamber=senate&txType=buy,sell&assetType=stock", Chamber.SENATE))
+
+        for url, ch in urls:
+            try:
+                resp = await client.get(url, follow_redirects=True)
+                if resp.status_code != 200:
+                    logger.warning(f"Capitol Trades returned {resp.status_code}")
+                    continue
+
+                html = resp.text
+
+                # Parse trade rows from HTML table
+                # Capitol Trades uses structured table rows with data attributes
+                import re as _re
+
+                # Match table rows containing trade data
+                # Each row has: politician, symbol/issuer, trade type, date, amount
+                row_pattern = _re.compile(
+                    r'<tr[^>]*>.*?'
+                    r'politician["\s>].*?>([\w\s.\'-]+?)</a.*?'  # politician name
+                    r'ticker["\s>].*?>([A-Z]{1,5})</.*?'  # ticker symbol
+                    r'(buy|sell|purchase|sale)["\s<].*?'  # trade type
+                    r'(\d{1,2}/\d{1,2}/\d{2,4}|\d{4}-\d{2}-\d{2}).*?'  # date
+                    r'\$[\d,]+\s*[-–]\s*\$[\d,]+',  # amount range
+                    _re.DOTALL | _re.IGNORECASE,
+                )
+
+                # Simpler fallback: look for ticker links and surrounding context
+                ticker_pattern = _re.compile(
+                    r'href="[^"]*issuer[^"]*"[^>]*>([A-Z]{1,5})</a>',
+                    _re.IGNORECASE,
+                )
+
+                tickers_found = ticker_pattern.findall(html)
+                if tickers_found:
+                    logger.info(f"Capitol Trades: found {len(tickers_found)} ticker references ({ch.value})")
+
+                # Extract structured trade data using JSON-LD or data attributes
+                json_ld_match = _re.search(r'<script[^>]*type="application/json"[^>]*>(.*?)</script>', html, _re.DOTALL)
+                if json_ld_match:
+                    try:
+                        import json
+                        page_data = json.loads(json_ld_match.group(1))
+                        # Capitol Trades may embed trade data as JSON
+                        if isinstance(page_data, dict) and "trades" in page_data:
+                            for trade_data in page_data["trades"][:50]:
+                                try:
+                                    symbol = trade_data.get("ticker", trade_data.get("symbol", ""))
+                                    if not symbol:
+                                        continue
+                                    politician = trade_data.get("politician", trade_data.get("name", "Unknown"))
+                                    action = trade_data.get("type", trade_data.get("txType", "")).lower()
+                                    trade_type = TradeType.PURCHASE if "buy" in action or "purchase" in action else TradeType.SALE
+
+                                    # Parse dates
+                                    tx_date_str = trade_data.get("txDate", trade_data.get("transactionDate", ""))
+                                    disc_date_str = trade_data.get("filingDate", trade_data.get("disclosureDate", ""))
+
+                                    transaction_date = datetime.now() - timedelta(days=30)
+                                    disclosure_date = datetime.now()
+                                    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"):
+                                        try:
+                                            if tx_date_str:
+                                                transaction_date = datetime.strptime(tx_date_str[:10], fmt)
+                                            if disc_date_str:
+                                                disclosure_date = datetime.strptime(disc_date_str[:10], fmt)
+                                            break
+                                        except ValueError:
+                                            continue
+
+                                    # Amount
+                                    amount_low = trade_data.get("amount_low", trade_data.get("rangeLow", 0))
+                                    amount_high = trade_data.get("amount_high", trade_data.get("rangeHigh", 0))
+
+                                    trades.append(CongressionalTrade(
+                                        politician=politician,
+                                        chamber=ch,
+                                        symbol=symbol.upper(),
+                                        asset_type=AssetType.STOCK,
+                                        trade_type=trade_type,
+                                        transaction_date=transaction_date,
+                                        disclosure_date=disclosure_date,
+                                        amount_low=amount_low,
+                                        amount_high=amount_high,
+                                        asset_description=f"{politician} {trade_type.value} {symbol}",
+                                    ))
+                                except Exception as e:
+                                    logger.debug(f"Error parsing Capitol Trades JSON entry: {e}")
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                # If JSON parsing didn't work, try simple HTML table extraction
+                if not trades:
+                    # Look for trade entries using common Capitol Trades HTML patterns
+                    # Pattern: /politicians/<name>, /issuers/<ticker>, buy/sell, date, amount
+                    entry_pattern = _re.compile(
+                        r'/politicians/([^"]+)".*?'
+                        r'/issuers/([^"]+)".*?'
+                        r'q-field\s+trade-type[^>]*>.*?(buy|sell|purchase|sale).*?</.*?'
+                        r'(\d{4}-\d{2}-\d{2})',
+                        _re.DOTALL | _re.IGNORECASE,
+                    )
+
+                    for match in entry_pattern.finditer(html):
+                        try:
+                            politician_slug = match.group(1).replace("-", " ").title()
+                            symbol = match.group(2).upper()
+                            action = match.group(3).lower()
+                            date_str = match.group(4)
+
+                            trade_type = TradeType.PURCHASE if "buy" in action or "purchase" in action else TradeType.SALE
+                            try:
+                                transaction_date = datetime.strptime(date_str, "%Y-%m-%d")
+                            except ValueError:
+                                transaction_date = datetime.now() - timedelta(days=15)
+
+                            trades.append(CongressionalTrade(
+                                politician=politician_slug,
+                                chamber=ch,
+                                symbol=symbol,
+                                asset_type=AssetType.STOCK,
+                                trade_type=trade_type,
+                                transaction_date=transaction_date,
+                                disclosure_date=datetime.now(),
+                                amount_low=0,
+                                amount_high=0,
+                                asset_description=f"{politician_slug} {trade_type.value} {symbol}",
+                            ))
+                        except Exception as e:
+                            logger.debug(f"Error parsing Capitol Trades HTML entry: {e}")
+
+            except Exception as e:
+                logger.warning(f"Capitol Trades fetch failed: {e}")
+
+        if trades:
+            logger.info(f"Capitol Trades: fetched {len(trades)} trades")
         return trades
 
     async def _fetch_quiver(self, days: int) -> list[CongressionalTrade]:

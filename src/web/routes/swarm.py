@@ -17,6 +17,7 @@ async def swarm_index(request: Request):
     context = swarm_service.get_strategic_context()
     sentinel = swarm_service.get_sentinel_health()
     completions = swarm_service.get_recent_completions()
+    digest = swarm_service.get_signal_digest()
 
     return templates.TemplateResponse(
         request,
@@ -27,6 +28,7 @@ async def swarm_index(request: Request):
             "context": context,
             "sentinel": sentinel,
             "completions": completions,
+            "digest": digest,
         },
     )
 

@@ -306,8 +306,56 @@ def process_signals(raw_signals: list[dict]) -> list[dict]:
     return deduped
 
 
+def load_news_signals() -> list[dict]:
+    """Load signals from news_cache.json (headlines with symbol/thesis matches)."""
+    signals = []
+    news_file = RESULTS_DIR / "live" / "news_cache.json"
+
+    if not news_file.exists():
+        return signals
+
+    try:
+        with open(news_file) as f:
+            data = json.load(f)
+
+        for item in data.get("items", []):
+            ts = item.get("timestamp", datetime.now().isoformat())
+
+            # Use thesis matches to infer direction and symbols
+            thesis_matches = item.get("thesis_matches", {})
+            if thesis_matches:
+                for thesis_name, match_info in thesis_matches.items():
+                    symbols = match_info.get("symbols", []) if isinstance(match_info, dict) else []
+                    relevance = match_info.get("relevance", 0.5) if isinstance(match_info, dict) else 0.5
+                    for symbol in symbols:
+                        signals.append({
+                            "symbol": symbol,
+                            "direction": "bullish",  # Thesis-matched news = thesis direction
+                            "strength": min(relevance, 1.0),
+                            "source": "news",
+                            "timestamp": ts,
+                            "detail": f"thesis={thesis_name}: {item.get('headline', '')[:60]}",
+                        })
+
+            # Urgent news with detected symbols
+            if item.get("is_urgent") and item.get("symbols"):
+                for symbol in item["symbols"]:
+                    signals.append({
+                        "symbol": symbol,
+                        "direction": "bullish",  # Urgent mentions = attention signal
+                        "strength": 0.6,
+                        "source": "news",
+                        "timestamp": ts,
+                        "detail": f"urgent: {item.get('headline', '')[:60]}",
+                    })
+    except Exception as e:
+        logger.warning(f"Error loading news signals: {e}")
+
+    return signals
+
+
 def detect_convergences(signals: list[dict]) -> list[dict]:
-    """Find symbols with 3+ sources aligned in same direction."""
+    """Find symbols with 2+ sources aligned in same direction."""
     from collections import defaultdict
 
     # Group by symbol + direction
@@ -319,7 +367,7 @@ def detect_convergences(signals: list[dict]) -> list[dict]:
     convergences = []
     for (symbol, direction), sigs in groups.items():
         sources = list({s["source"] for s in sigs})
-        if len(sources) >= 3:
+        if len(sources) >= 2:
             avg_strength = sum(s["weighted_strength"] for s in sigs) / len(sigs)
             convergences.append({
                 "symbol": symbol,
@@ -359,6 +407,7 @@ def get_source_freshness(sources: dict[str, str]) -> dict:
         "signals": RESULTS_DIR / "live" / "research" / "signals.json",
         "alt_data": RESULTS_DIR / "live" / "research" / "alt_data.json",
         "prediction_markets": RESULTS_DIR / "social" / "prediction_markets.json",
+        "news_cache": RESULTS_DIR / "live" / "news_cache.json",
         "state": RESULTS_DIR / "live" / "state.json",
     }
 
@@ -384,15 +433,17 @@ def main():
     statistical = load_statistical_signals()
     alt_data = load_alt_data_signals()
     prediction = load_prediction_market_signals()
+    news = load_news_signals()
 
-    raw_total = len(social) + len(statistical) + len(alt_data) + len(prediction)
+    raw_total = len(social) + len(statistical) + len(alt_data) + len(prediction) + len(news)
     logger.info(
         f"Raw signals: {len(social)} social, {len(statistical)} statistical, "
-        f"{len(alt_data)} alt-data, {len(prediction)} prediction = {raw_total} total"
+        f"{len(alt_data)} alt-data, {len(prediction)} prediction, "
+        f"{len(news)} news = {raw_total} total"
     )
 
     # Process: weight, decay, deduplicate
-    all_signals = social + statistical + alt_data + prediction
+    all_signals = social + statistical + alt_data + prediction + news
     processed = process_signals(all_signals)
     logger.info(f"After processing: {len(processed)} signals (from {raw_total} raw)")
 

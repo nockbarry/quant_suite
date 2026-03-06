@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% set active_page = "reviews" %}
+{% block title %}Reviews{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div>
+        <h1 class="text-xl font-bold text-gray-100">Reviews & Briefings</h1>
+        <p class="text-xs text-gray-500 mt-1">EOD reviews, internal reviews, morning briefings</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: EOD Reviews (primary) -->
+        <div class="lg:col-span-2 space-y-4">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">End-of-Day Reviews</h2>
+
+            {% for r in eod_reviews %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-gray-700 transition-colors">
+                <div class="flex items-center justify-between mb-3">
+                    <a href="/reviews/eod/{{ r._date }}" class="text-sm font-bold text-emerald-400 hover:text-emerald-300">
+                        {{ r._date }}
+                    </a>
+                    <div class="flex items-center gap-3 text-xs">
+                        {% if r.benchmarks %}
+                        <span class="{% if (r.benchmarks.alpha_vs_spy or 0) > 0 %}text-emerald-400{% else %}text-red-400{% endif %} mono">
+                            Alpha: {{ "%+.2f"|format(r.benchmarks.alpha_vs_spy or 0) }}%
+                        </span>
+                        <span class="text-gray-500">SPY: {{ "%+.2f"|format(r.benchmarks.spy_pnl_pct or 0) }}%</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Key metrics row -->
+                {% if r.account %}
+                <div class="flex gap-4 mb-3 text-xs">
+                    <span class="text-gray-400">Equity: <span class="mono text-gray-200">${{ "{:,.0f}"|format(r.account.equity or 0) }}</span></span>
+                    <span class="text-gray-400">P&L: <span class="mono {% if (r.account.day_pnl or 0) >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">${{ "{:,.0f}"|format(r.account.day_pnl or 0) }}</span></span>
+                    <span class="text-gray-400">VIX: <span class="mono text-gray-200">{{ "%.1f"|format(r.benchmarks.vix_close or 0) }}</span></span>
+                </div>
+                {% endif %}
+
+                <!-- Learnings -->
+                {% if r.learnings %}
+                <div class="space-y-1.5 mb-3">
+                    {% for l in r.learnings[:3] %}
+                    <div class="flex gap-2 text-xs">
+                        <span class="text-yellow-500 mt-0.5">*</span>
+                        <span class="text-gray-400">{{ l.learning[:120] }}{% if l.learning|length > 120 %}...{% endif %}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <!-- Tomorrow focus -->
+                {% if r.tomorrow_focus %}
+                <div class="bg-gray-800/50 rounded px-3 py-2 text-xs">
+                    <span class="text-gray-500">Tomorrow:</span>
+                    {% for f in r.tomorrow_focus[:3] %}
+                    <span class="text-gray-300 ml-1">{{ f }}{% if not loop.last %};{% endif %}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-500">No EOD reviews found</p>
+            {% endfor %}
+        </div>
+
+        <!-- Right: Briefings + Internal Reviews -->
+        <div class="space-y-4">
+            <!-- Briefings -->
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">Morning Briefings</h2>
+            {% for b in briefings %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold text-blue-400 mono">{{ b._date }}</span>
+                    {% if b.market_sentiment %}
+                    <span class="text-[10px] {% if b.market_sentiment == 'bullish' %}text-emerald-400{% elif b.market_sentiment == 'bearish' %}text-red-400{% else %}text-yellow-400{% endif %} uppercase">
+                        {{ b.market_sentiment }}
+                    </span>
+                    {% endif %}
+                </div>
+                {% if b.focus_areas %}
+                <div class="space-y-0.5">
+                    {% for f in b.focus_areas[:3] %}
+                    <p class="text-[10px] text-gray-400 truncate">{{ f }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if b.risk_warnings %}
+                <div class="mt-2">
+                    {% for w in b.risk_warnings[:2] %}
+                    <p class="text-[10px] text-red-400 truncate">{{ w }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="text-xs text-gray-500">No briefings found</p>
+            {% endfor %}
+
+            <!-- Internal Reviews -->
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mt-6">Internal Reviews</h2>
+            {% for ir in internal_reviews %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold text-purple-400 mono">{{ ir._filename[:40] }}</span>
+                    <span class="text-[10px] {% if ir.overall_status == 'healthy' %}text-emerald-400{% elif ir.overall_status == 'warning' %}text-yellow-400{% else %}text-red-400{% endif %}">
+                        {{ ir.overall_status or 'unknown' }}
+                    </span>
+                </div>
+                {% if ir.action_items %}
+                <div class="space-y-0.5">
+                    {% for a in ir.action_items[:3] %}
+                    <p class="text-[10px] text-gray-400 truncate">{{ a }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <p class="text-xs text-gray-500">No internal reviews found</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

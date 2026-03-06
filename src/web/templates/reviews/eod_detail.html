@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% set active_page = "reviews" %}
+{% block title %}Review {{ review._date }}{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center gap-4">
+        <a href="/reviews" class="text-gray-500 hover:text-gray-300 text-sm">&larr; All Reviews</a>
+        <h1 class="text-xl font-bold text-gray-100">EOD Review: {{ review._date }}</h1>
+    </div>
+
+    <!-- Summary Metrics -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        {% if review.account %}
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Equity</p>
+            <p class="mono text-lg font-bold text-gray-200">${{ "{:,.0f}"|format(review.account.equity or 0) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Day P&L</p>
+            <p class="mono text-lg font-bold {% if (review.account.day_pnl or 0) >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">${{ "{:,.0f}"|format(review.account.day_pnl or 0) }}</p>
+        </div>
+        {% endif %}
+        {% if review.benchmarks %}
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Alpha vs SPY</p>
+            <p class="mono text-lg font-bold {% if (review.benchmarks.alpha_vs_spy or 0) > 0 %}text-emerald-400{% else %}text-red-400{% endif %}">{{ "%+.2f"|format(review.benchmarks.alpha_vs_spy or 0) }}%</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">SPY</p>
+            <p class="mono text-lg font-bold {% if (review.benchmarks.spy_pnl_pct or 0) >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">{{ "%+.2f"|format(review.benchmarks.spy_pnl_pct or 0) }}%</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">VIX Close</p>
+            <p class="mono text-lg font-bold {% if (review.benchmarks.vix_close or 0) > 25 %}text-red-400{% elif (review.benchmarks.vix_close or 0) > 20 %}text-yellow-400{% else %}text-emerald-400{% endif %}">{{ "%.1f"|format(review.benchmarks.vix_close or 0) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Regime</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ review.benchmarks.regime or '?' }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Left Column -->
+        <div class="space-y-4">
+            <!-- Decisions Made -->
+            {% if review.decisions_made %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Decisions Made</h2>
+                <div class="space-y-2">
+                    {% for d in review.decisions_made %}
+                    <div class="flex items-center justify-between bg-gray-800/50 rounded px-3 py-2 text-sm">
+                        <span class="mono text-gray-200">{{ d.symbol }}</span>
+                        <span class="{% if d.action in ['BUY','ADD'] %}text-emerald-400{% elif d.action in ['SELL','CLOSE'] %}text-red-400{% else %}text-gray-400{% endif %}">
+                            {{ d.action }}
+                        </span>
+                        <span class="mono text-xs text-gray-400">{{ d.confidence or '' }}%</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Thesis Performance -->
+            {% if review.thesis_performance %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Thesis Performance</h2>
+                <div class="space-y-1">
+                    {% for tp in review.thesis_performance %}
+                    <div class="flex items-center justify-between px-2 py-1 text-xs">
+                        <span class="text-gray-300 truncate max-w-[200px]">{{ tp.thesis or tp.name or '?' }}</span>
+                        <span class="mono {% if (tp.day_pnl_pct or tp.pnl_pct or 0) >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                            {{ "%+.2f"|format(tp.day_pnl_pct or tp.pnl_pct or 0) }}%
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Swarm Performance -->
+            {% if review.swarm_performance %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Swarm Performance</h2>
+                <div class="text-xs text-gray-400 space-y-1">
+                    {% for key, val in review.swarm_performance.items() %}
+                    <div class="flex justify-between">
+                        <span>{{ key | replace('_', ' ') | title }}</span>
+                        <span class="mono text-gray-300">{{ val }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column -->
+        <div class="space-y-4">
+            <!-- Learnings -->
+            {% if review.learnings %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-yellow-400 uppercase tracking-wider mb-3">Learnings</h2>
+                <div class="space-y-3">
+                    {% for l in review.learnings %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-[10px] bg-yellow-900/50 text-yellow-400 px-1.5 py-0.5 rounded">{{ l.pattern }}</span>
+                            {% if l.tags %}
+                            {% for t in l.tags %}
+                            <span class="text-[10px] text-gray-600">{{ t }}</span>
+                            {% endfor %}
+                            {% endif %}
+                        </div>
+                        <p class="text-xs text-gray-300">{{ l.learning }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Key Observations -->
+            {% if review.key_observations %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Key Observations</h2>
+                <div class="space-y-1">
+                    {% for obs in review.key_observations %}
+                    <p class="text-xs text-gray-400 px-2 py-1">{{ obs }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Tomorrow Focus -->
+            {% if review.tomorrow_focus %}
+            <div class="bg-blue-900/20 border border-blue-800/50 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-3">Tomorrow's Focus</h2>
+                <div class="space-y-1">
+                    {% for f in review.tomorrow_focus %}
+                    <p class="text-xs text-gray-300 px-2 py-1">{{ f }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Alerts -->
+            {% if review.alerts %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-red-400 uppercase tracking-wider mb-3">Alerts</h2>
+                <div class="space-y-1">
+                    {% for a in review.alerts %}
+                    <p class="text-xs text-gray-400 px-2 py-1">{{ a }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -79,6 +79,71 @@
         </div>
     </div>
 
+    <!-- Regime Context + Signal Digest Row -->
+    {% if board.regime_context or not digest.get('missing') %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% if board.regime_context and board.regime_context.current %}
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-2">Market Regime</h2>
+            <div class="flex items-center gap-3">
+                <span class="mono text-lg font-bold {% if board.regime_context.current == 'risk_off' %}text-red-400{% elif board.regime_context.current == 'risk_on' %}text-emerald-400{% else %}text-yellow-400{% endif %}">
+                    {{ board.regime_context.current | replace('_', ' ') | title }}
+                </span>
+                {% if board.regime_context.vix_trend_5d %}
+                <span class="text-xs text-gray-500">VIX 5d: {{ board.regime_context.vix_trend_5d }}</span>
+                {% endif %}
+            </div>
+            {% if board.regime_context.interpretation %}
+            <p class="text-xs text-gray-400 mt-2">{{ board.regime_context.interpretation }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if not digest.get('missing') %}
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-2">
+                Signal Digest
+                <span class="text-[10px] text-gray-500 ml-1">{% if digest._age_display %}{{ digest._age_display }} ago{% endif %}</span>
+            </h2>
+            <div class="flex items-center gap-4">
+                <div>
+                    <span class="mono text-lg font-bold text-gray-200">{{ digest.signal_count or 0 }}</span>
+                    <span class="text-xs text-gray-500 ml-1">signals</span>
+                </div>
+                <div>
+                    <span class="mono text-lg font-bold {% if (digest.convergence_count or 0) > 0 %}text-yellow-400{% else %}text-gray-500{% endif %}">{{ digest.convergence_count or 0 }}</span>
+                    <span class="text-xs text-gray-500 ml-1">convergences</span>
+                </div>
+            </div>
+            {% if digest._source_summary %}
+            <div class="flex flex-wrap gap-2 mt-2">
+                {% for s in digest._source_summary %}
+                <span class="text-[10px] bg-gray-800 px-2 py-0.5 rounded text-gray-400">{{ s.source }}: {{ s.count }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Active Analyses -->
+    {% set pending = (board.active_analyses or []) | selectattr('status', 'eq', 'pending') | list %}
+    {% if pending %}
+    <div class="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-yellow-400 uppercase tracking-wider mb-2">Pending Analyses ({{ pending | length }})</h2>
+        <div class="space-y-1">
+            {% for a in pending %}
+            <div class="flex items-center gap-3 text-xs">
+                <span class="text-yellow-400 mono">{{ a.trigger }}</span>
+                <span class="text-gray-300 flex-1">{{ a.context }}</span>
+                <span class="text-[10px] text-gray-500">{{ a.requested_at or '' }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Left: Situation Board (auto-refreshes) -->
         <div class="lg:col-span-2 space-y-4"
@@ -208,6 +273,23 @@
                 <p class="text-xs text-gray-500">No upcoming catalysts</p>
                 {% endif %}
             </div>
+
+            <!-- Signal Source Trends -->
+            {% if context.signal_source_trends %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Signal Source Quality</h2>
+                <div class="space-y-1">
+                    {% for source, info in context.signal_source_trends.items() %}
+                    <div class="flex items-center justify-between px-2 py-1 rounded hover:bg-gray-800/50">
+                        <span class="text-xs text-gray-300">{{ source }}</span>
+                        <span class="mono text-xs {% if (info.hit_rate or 0) >= 0.6 %}text-emerald-400{% elif (info.hit_rate or 0) >= 0.4 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                            {{ "%.0f"|format((info.hit_rate or 0) * 100) }}% hit rate
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Research Hypotheses -->
             {% if context.research_hypotheses %}
