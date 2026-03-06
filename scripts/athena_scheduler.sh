@@ -4,15 +4,17 @@
 # Manages a tmux session "athena-auto" with three windows:
 #   Window 0: "operator"  — Long-running operator session
 #   Window 1: "oneshot"   — Sequential one-shot sessions (briefing, trade, eod)
-#   Window 2: "monitor"   — health_monitor.py + log tail
+#   Window 2: "monitor"   — sentinel.py (or legacy health_monitor.py)
 #
 # Usage:
 #   athena_scheduler.sh setup          — Create tmux session with all windows
 #   athena_scheduler.sh operator-start — Launch operator in window 0
 #   athena_scheduler.sh operator-stop  — Graceful shutdown of operator
 #   athena_scheduler.sh oneshot <type>  — Run a one-shot session in window 1
-#   athena_scheduler.sh monitor-start  — Start health monitor in window 2
-#   athena_scheduler.sh monitor-stop   — Stop health monitor
+#   athena_scheduler.sh sentinel-start — Start sentinel daemon in window 2
+#   athena_scheduler.sh sentinel-stop  — Stop sentinel daemon
+#   athena_scheduler.sh monitor-start  — Start sentinel (backward compat alias)
+#   athena_scheduler.sh monitor-stop   — Stop sentinel (backward compat alias)
 #   athena_scheduler.sh status         — Show all active sessions
 #   athena_scheduler.sh kill-all       — Emergency stop everything
 
@@ -164,40 +166,44 @@ cmd_oneshot() {
     log "One-shot session $SESSION_TYPE started in tmux window 1"
 }
 
-# --- Health Monitor ---
+# --- Sentinel (replaces Health Monitor) ---
 
-cmd_monitor_start() {
+cmd_sentinel_start() {
     if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
         cmd_setup
     fi
 
     local DATE=$(date '+%Y%m%d')
-    local LOG_FILE="$LOG_DIR/health_monitor_${DATE}.log"
+    local LOG_FILE="$LOG_DIR/sentinel_${DATE}.log"
 
-    log "Starting health monitor"
+    log "Starting sentinel daemon"
 
     # Respawn the monitor pane if its shell is dead
     _respawn_pane_if_dead "monitor"
 
     tmux send-keys -t "$TMUX_SESSION:monitor" \
-        "cd $PROJECT_DIR && PYTHONPATH=$PROJECT_DIR python3 $SCRIPT_DIR/health_monitor.py 2>&1 | tee -a $LOG_FILE" C-m
+        "cd $PROJECT_DIR && PYTHONPATH=$PROJECT_DIR python3 $SCRIPT_DIR/sentinel.py 2>&1 | tee -a $LOG_FILE" C-m
 
-    _update_scheduler_state "health_monitor" "running"
-    log "Health monitor started in tmux window 2"
+    _update_scheduler_state "sentinel" "running"
+    log "Sentinel started in tmux window 2"
 }
 
-cmd_monitor_stop() {
+cmd_sentinel_stop() {
     if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
         log "No tmux session found"
         return 1
     fi
 
-    log "Stopping health monitor..."
+    log "Stopping sentinel..."
     tmux send-keys -t "$TMUX_SESSION:monitor" C-c
     sleep 2
-    _update_scheduler_state "health_monitor" "stopped"
-    log "Health monitor stopped"
+    _update_scheduler_state "sentinel" "stopped"
+    log "Sentinel stopped"
 }
+
+# Backward compatible aliases
+cmd_monitor_start() { cmd_sentinel_start; }
+cmd_monitor_stop() { cmd_sentinel_stop; }
 
 # --- Status ---
 
@@ -385,6 +391,12 @@ case "${1:-}" in
     oneshot)
         cmd_oneshot "${2:-}"
         ;;
+    sentinel-start)
+        cmd_sentinel_start
+        ;;
+    sentinel-stop)
+        cmd_sentinel_stop
+        ;;
     monitor-start)
         cmd_monitor_start
         ;;
@@ -409,9 +421,11 @@ case "${1:-}" in
         echo "  setup           Create tmux session with all windows"
         echo "  operator-start  Launch operator in window 0"
         echo "  operator-stop   Graceful shutdown of operator"
-        echo "  oneshot <type>  Run one-shot session (morning-briefing, trade-decision, etc.)"
-        echo "  monitor-start   Start health monitor in window 2"
-        echo "  monitor-stop    Stop health monitor"
+        echo "  oneshot <type>  Run one-shot session (morning-briefing, trade-decision, analyst, etc.)"
+        echo "  sentinel-start  Start sentinel daemon in window 2"
+        echo "  sentinel-stop   Stop sentinel daemon"
+        echo "  monitor-start   Start sentinel (backward compat alias)"
+        echo "  monitor-stop    Stop sentinel (backward compat alias)"
         echo "  status          Show all active sessions"
         echo "  kill-all        Emergency stop everything"
         echo "  wsl-info        WSL setup instructions for autonomous trading"

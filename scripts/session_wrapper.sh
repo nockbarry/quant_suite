@@ -87,9 +87,9 @@ is_market_day() {
     return 0
 }
 
-# Skip non-market days for trading sessions (allow research/thesis/brainstorm/research-theory on any day)
+# Skip non-market days for trading sessions (allow research/thesis/brainstorm/research-theory/theorist on any day)
 case "$SESSION_TYPE" in
-    morning-briefing|trade-decision|eod-review|operator)
+    morning-briefing|trade-decision|eod-review|operator|analyst)
         if ! is_market_day; then
             log "Not a market day, skipping $SESSION_TYPE"
             exit 0
@@ -218,6 +218,14 @@ cleanup() {
     clear_autonomous_mode
     release_lock
 
+    # Update situation board with session completion
+    PYTHONPATH="$PROJECT_DIR" python3 -c "
+from src.swarm.situation_board import SituationBoard
+board = SituationBoard.load_or_create()
+board.add_observation('$SESSION_TYPE', 'session_complete', 'Session $SESSION_TYPE completed (exit=$EXIT_CODE)')
+board.save()
+" 2>/dev/null || true
+
     if [ $EXIT_CODE -eq 0 ]; then
         write_completion "True" "$EXIT_CODE"
         update_state "completed"
@@ -312,6 +320,8 @@ get_timeout() {
         signal-scan)       echo 15 ;;
         research-theory)   echo 15 ;;
         internal-review)   echo 10 ;;
+        analyst)           echo 5 ;;
+        theorist)          echo 15 ;;
         operator)          echo 480 ;;  # 8 hours
         *)                 echo 15 ;;
     esac
@@ -328,6 +338,8 @@ get_model() {
         signal-scan)       echo "sonnet" ;;
         research-theory)   echo "sonnet" ;;
         internal-review)   echo "sonnet" ;;
+        analyst)           echo "sonnet" ;;
+        theorist)          echo "opus" ;;
         operator)          echo "opus" ;;
         *)                 echo "sonnet" ;;
     esac
@@ -344,6 +356,8 @@ get_skill_prompt() {
         signal-scan)       echo "/social-signals" ;;
         research-theory)   echo "/social-signals" ;;
         internal-review)   echo "/internal-review" ;;
+        analyst)           echo "/analyst" ;;
+        theorist)          echo "/theorist" ;;
         *)                 echo "" ;;
     esac
 }
@@ -364,6 +378,35 @@ TIMEOUT=$(get_timeout)
 MODEL=$(get_model)
 SKILL_PROMPT=$(get_skill_prompt)
 AUTO_PROMPT=$(build_autonomous_prompt "$SESSION_TYPE" "$TIMEOUT")
+
+# --- Inject Swarm Context ---
+# Append situation board and strategic context summaries to the system prompt
+# so every Claude session starts with awareness of today's events and multi-day patterns.
+
+SWARM_CONTEXT=""
+if [ -f "$HOME/quant_results/scheduler/situation_board.json" ]; then
+    SWARM_CONTEXT=$(PYTHONPATH="$PROJECT_DIR" python3 -c "
+from src.swarm.situation_board import SituationBoard
+board = SituationBoard.load()
+print(board.get_summary())
+" 2>/dev/null || echo "")
+fi
+
+STRATEGIC_CONTEXT=""
+if [ -f "$HOME/quant_results/scheduler/strategic_context.json" ]; then
+    STRATEGIC_CONTEXT=$(PYTHONPATH="$PROJECT_DIR" python3 -c "
+from src.swarm.strategic_context import StrategicContext
+ctx = StrategicContext.load()
+print(ctx.get_summary())
+" 2>/dev/null || echo "")
+fi
+
+if [ -n "$SWARM_CONTEXT" ]; then
+    AUTO_PROMPT="${AUTO_PROMPT} SITUATION BOARD (today so far): ${SWARM_CONTEXT}"
+fi
+if [ -n "$STRATEGIC_CONTEXT" ]; then
+    AUTO_PROMPT="${AUTO_PROMPT} STRATEGIC CONTEXT (multi-day): ${STRATEGIC_CONTEXT}"
+fi
 
 log "Starting $SESSION_TYPE session (model=$MODEL, timeout=${TIMEOUT}m)"
 

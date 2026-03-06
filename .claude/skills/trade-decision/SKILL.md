@@ -43,6 +43,41 @@ EOF
 Review this context and factor it into your confidence level. If the calibration
 data says you're overconfident by 12%, discount your confidence accordingly.
 
+### Step 0b: Read Swarm Context (Today's Events + Multi-Day Patterns)
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+# Situation board — what happened today so far
+from src.swarm.situation_board import SituationBoard
+board = SituationBoard.load()
+snap = board.data.get("market_snapshot", {})
+print("=== TODAY'S SITUATION BOARD ===")
+print(f"Market: SPY={snap.get('spy', 0):.1f} ({snap.get('spy_change', 0):+.1f}%), VIX={snap.get('vix', 0):.1f}, regime={snap.get('regime', '?')}")
+for obs in board.data.get("today_observations", [])[-10:]:
+    symbols = ", ".join(obs.get("symbols", []))
+    print(f"  [{obs['time']}] {obs['source']}: {obs['text'][:100]} {symbols}")
+print(f"\nDecisions already made today: {len(board.data.get('decisions_today', []))}")
+for d in board.data.get("decisions_today", []):
+    print(f"  {d['symbol']} {d['action']} conf={d['confidence']}")
+print(f"Pending analyses: {len(board.get_pending_analyses())}")
+print(f"Portfolio alerts: {len(board.data.get('portfolio_alerts', []))}")
+for a in board.data.get("portfolio_alerts", [])[:5]:
+    print(f"  {a['symbol']}: {a['type']} ({a.get('current_pnl', '')})")
+
+# Strategic context — multi-day patterns
+from src.swarm.strategic_context import StrategicContext
+ctx = StrategicContext.load()
+print("\n=== STRATEGIC CONTEXT (Multi-Day) ===")
+print(ctx.get_summary())
+for p in ctx.data.get("developing_patterns", [])[:3]:
+    print(f"  Pattern: {p['name']} ({p.get('days_active', 0)}d) — {p['interpretation'][:80]}")
+for c in ctx.data.get("upcoming_catalysts", [])[:3]:
+    print(f"  Catalyst: {c['date']}: {c['event']}")
+EOF
+```
+
+Use this context to understand what's already happened today and what multi-day patterns are developing. Avoid duplicating decisions already made today. Factor developing patterns and upcoming catalysts into your trade analysis.
+
 ### Step 1: Load Context
 
 ```bash
@@ -326,6 +361,18 @@ decision = create_decision(
 # 4. Log the decision
 logger = DecisionLogger()
 logger.log_decision(decision)
+
+# 4b. Record decision on situation board for cross-session awareness
+from src.swarm.situation_board import SituationBoard
+board = SituationBoard.load_or_create()
+board.add_decision(
+    symbol=decision.symbol,
+    action=decision.action.value,
+    confidence=decision.confidence,
+    status="pending",
+    reasoning_summary=decision.reasoning[:100] if decision.reasoning else "",
+)
+board.save()
 
 # 5. Log signals that influenced this decision (for quality tracking)
 from src.monitoring.signal_quality_tracker import log_signal_outcome

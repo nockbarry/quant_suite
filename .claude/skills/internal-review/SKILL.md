@@ -71,23 +71,77 @@ from src.knowledge.thesis import ThesisTracker
 from src.core.paths import paths
 from datetime import datetime
 tracker = ThesisTracker(paths.theses)
-theses = tracker.list_theses()
+theses = tracker.get_all_theses()
 for t in theses:
-    if t.get('status') != 'active':
+    if t.status != 'active':
         continue
-    name = t.get('name', '')
-    conv = t.get('conviction', 0)
-    updated = t.get('last_updated', 'unknown')
-    print(f'{name}: conviction={conv}%, last_updated={updated}')
-    # Flag issues
-    if conv < 40:
-        print(f'  WARNING: Low conviction ({conv}%) - consider invalidating')
-    if conv > 90:
-        print(f'  NOTE: Very high conviction ({conv}%) - verify not anchoring')
+    last_review = t.last_review.strftime('%Y-%m-%d') if t.last_review else 'never'
+    last_conv_update = t.conviction_history[-1].timestamp.strftime('%Y-%m-%d') if t.conviction_history else 'never'
+    print(f'{t.name}: conviction={t.conviction:.0f}%, last_review={last_review}, last_conviction_update={last_conv_update}')
+    if t.conviction < 40:
+        print(f'  WARNING: Low conviction ({t.conviction:.0f}%) - will auto-invalidate in Step 3b')
+    if t.conviction > 90:
+        print(f'  NOTE: Very high conviction ({t.conviction:.0f}%) - verify not anchoring')
 "
 ```
 
 For each thesis: check last signpost evaluation date, days since conviction update, any new contrary evidence from recent briefings.
+
+### Step 3b: Act on Thesis Issues
+
+**Do not just report — fix.** For any issues found in Step 3, take action immediately:
+
+```bash
+PYTHONPATH=. python3 -c "
+from src.knowledge.thesis import ThesisTracker
+from src.core.paths import paths
+from src.autonomy.provenance import log_event
+from datetime import datetime, timedelta
+
+tracker = ThesisTracker(paths.theses)
+theses = tracker.get_all_theses()
+actions_taken = []
+
+for t in theses:
+    if t.status != 'active':
+        continue
+
+    # Auto-invalidate theses below 40% conviction (per Trading Rules)
+    if t.conviction < 40:
+        success = tracker.invalidate_thesis(t.id, f'Auto-invalidated by internal-review: conviction {t.conviction:.0f}% below 40% threshold')
+        if success:
+            actions_taken.append(f'INVALIDATED {t.name} (conviction={t.conviction:.0f}%)')
+            log_event('thesis_auto_invalidated', source='skill:internal-review',
+                      severity='warning', title=f'Auto-invalidated: {t.name} ({t.conviction:.0f}%)')
+
+    # Flag anchoring risk for very high conviction (>90%) — log warning, don't auto-act
+    elif t.conviction > 90:
+        log_event('thesis_anchoring_risk', source='skill:internal-review',
+                  severity='info', title=f'High conviction check: {t.name} ({t.conviction:.0f}%) — verify not anchoring')
+
+    # Flag stale theses (no conviction update in 14+ days) — add note, don't invalidate
+    if t.conviction_history:
+        last_update = t.conviction_history[-1].timestamp
+        days_stale = (datetime.now() - last_update).days
+        if days_stale >= 14:
+            t.add_note(f'[internal-review] No conviction update in {days_stale} days — needs review')
+            tracker._save_thesis(t)
+            actions_taken.append(f'FLAGGED STALE: {t.name} ({days_stale} days since conviction update)')
+            log_event('thesis_stale', source='skill:internal-review',
+                      severity='info', title=f'Stale thesis: {t.name} ({days_stale}d without update)')
+
+for a in actions_taken:
+    print(f'ACTION TAKEN: {a}')
+if not actions_taken:
+    print('No automatic actions needed')
+"
+```
+
+**Rules for auto-action:**
+- **conviction < 40%** → Auto-invalidate (per Trading Rules exit checklist)
+- **conviction > 90%** → Log warning only (human should verify anchoring)
+- **Stale thesis (no update in 14+ days)** → Log warning, add note to thesis asking for review
+- All actions are logged to ProcessEvent for audit trail
 
 ### Step 4: System Diagnostics
 
@@ -176,6 +230,7 @@ report = {
     },
     "overall_status": "healthy|warning|critical",
     "action_items": [<prioritized list of things to fix>],
+    "actions_taken": [<list of auto-fixes applied in Step 3b>],
 }
 
 reviews_dir = Path.home() / "quant_results" / "reviews"
@@ -185,7 +240,91 @@ with open(reviews_dir / filename, "w") as f:
     json.dump(report, f, indent=2)
 ```
 
-### Step 6: Write Enriched Completion Record
+### Step 6: Update Strategic Context
+
+After writing the review report, update the multi-day strategic context with findings from this review. This is how cross-session learning accumulates.
+
+```bash
+PYTHONPATH=. python3 -c "
+from src.swarm.strategic_context import StrategicContext
+from src.swarm.situation_board import SituationBoard
+from src.knowledge.thesis import ThesisTracker
+from src.core.paths import paths
+
+ctx = StrategicContext.load()
+
+# 1. Update thesis momentum from Step 3 findings
+tracker = ThesisTracker(paths.theses)
+for t in tracker.get_all_theses():
+    if t.status == 'active':
+        ctx.update_thesis_momentum(t.name, t.conviction)
+
+# 2. Update signal source trends from Step 2 findings
+# (Fill in hit_rate from signal quality data if available)
+import json
+from pathlib import Path
+sq_path = Path.home() / 'quant_results' / 'signal_quality' / 'signal_outcomes.json'
+if sq_path.exists():
+    with open(sq_path) as f:
+        outcomes = json.load(f)
+    for source_name, records in outcomes.items():
+        if records:
+            recent = records[-20:]
+            hits = sum(1 for r in recent if r.get('outcome') == 'correct')
+            hit_rate = hits / len(recent) if recent else 0.5
+            ctx.update_signal_source_trend(source_name, hit_rate)
+
+# 3. Look for developing multi-day patterns in today's observations
+board = SituationBoard.load()
+observations = board.data.get('today_observations', [])
+
+# Count symbol mentions across observations
+from collections import Counter
+symbol_counts = Counter()
+for obs in observations:
+    for sym in obs.get('symbols', []):
+        symbol_counts[sym] += 1
+
+# Symbols mentioned 3+ times today may indicate developing patterns
+for sym, count in symbol_counts.most_common(5):
+    if count >= 3:
+        obs_texts = [o['text'][:60] for o in observations if sym in o.get('symbols', [])]
+        ctx.add_developing_pattern(
+            name=f'{sym} multi-signal day',
+            evidence=f'{count} observations today: {obs_texts[0]}...',
+            interpretation=f'{sym} saw {count} signals across sources — may indicate developing trend',
+            affected_theses=[],
+        )
+
+ctx.save()
+print('Strategic context updated with thesis momentum + signal trends + patterns')
+"
+```
+
+If any action items from the review suggest deeper investigation, flag them as research hypotheses:
+
+```bash
+PYTHONPATH=. python3 -c "
+from src.swarm.strategic_context import StrategicContext
+ctx = StrategicContext.load()
+
+# Add research hypotheses from action items that suggest investigation
+# (Replace these with actual findings from Step 5 report)
+action_items = []  # Fill from report['action_items']
+for item in action_items:
+    lower = item.lower()
+    if any(kw in lower for kw in ['investigate', 'research', 'test', 'check why', 'verify']):
+        ctx.add_research_hypothesis(
+            hypothesis=item,
+            suggested_by='internal-review',
+            test_plan='Quantitative analysis needed',
+        )
+
+ctx.save()
+"
+```
+
+### Step 7: Write Enriched Completion Record
 
 ```python
 from src.monitoring.autonomous_mode import write_session_completion

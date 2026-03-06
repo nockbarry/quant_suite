@@ -97,15 +97,15 @@ install_auto() {
     echo ""
 
     # Get existing crontab (without our auto entries)
-    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "cron_signal_scan.py")
+    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py")
 
     # Create new crontab — consolidated from 13 entries to 11
     {
         echo "$EXISTING"
         echo ""
-        echo "$CRON_AUTO_MARKER - Health Monitor Start"
-        echo "# Start health monitor at 5:55 AM ET (Mon-Fri)"
-        echo "55 5 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh setup >> ~/quant_results/logs/scheduler.log 2>&1 && $SCRIPT_DIR/athena_scheduler.sh monitor-start >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo "$CRON_AUTO_MARKER - Sentinel Start"
+        echo "# Start sentinel daemon at 5:55 AM ET (Mon-Fri)"
+        echo "55 5 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh setup >> ~/quant_results/logs/scheduler.log 2>&1 && $SCRIPT_DIR/athena_scheduler.sh sentinel-start >> ~/quant_results/logs/scheduler.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Morning Briefing"
         echo "# Run morning briefing at 6:30 AM ET (Mon-Fri)"
@@ -131,9 +131,9 @@ install_auto() {
         echo "# Run end-of-day review at 4:30 PM ET (Mon-Fri)"
         echo "30 16 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot eod-review >> ~/quant_results/logs/scheduler.log 2>&1"
         echo ""
-        echo "$CRON_AUTO_MARKER - Health Monitor Stop"
-        echo "# Stop health monitor at 5:10 PM ET (Mon-Fri)"
-        echo "10 17 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh monitor-stop >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo "$CRON_AUTO_MARKER - Sentinel Stop"
+        echo "# Stop sentinel at 5:10 PM ET (Mon-Fri)"
+        echo "10 17 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh sentinel-stop >> ~/quant_results/logs/scheduler.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Signal Scan (Python + Prediction Markets)"
         echo "# Scan WSB, Stocktwits, prediction markets, thesis suggestions every 2 hours"
@@ -147,10 +147,11 @@ install_auto() {
         echo "# Automated self-assessment at 12:00 PM and 3:00 PM ET (Mon-Fri)"
         echo "0 12,15 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot internal-review >> ~/quant_results/logs/scheduler.log 2>&1"
         echo ""
-        echo "$CRON_AUTO_MARKER - Weekly Thesis + Brainstorm"
-        echo "# Weekly thesis review (6 PM) then brainstorm (7 PM) on Sundays"
+        echo "$CRON_AUTO_MARKER - Weekly Thesis + Brainstorm + Theorist"
+        echo "# Weekly thesis review (6 PM), brainstorm (7 PM), theorist (8 PM) on Sundays"
         echo "0 18 * * 0 $SCRIPT_DIR/athena_scheduler.sh oneshot thesis >> ~/quant_results/logs/scheduler.log 2>&1"
         echo "0 19 * * 0 $SCRIPT_DIR/athena_scheduler.sh oneshot brainstorm >> ~/quant_results/logs/scheduler.log 2>&1"
+        echo "0 20 * * 0 $SCRIPT_DIR/athena_scheduler.sh oneshot theorist >> ~/quant_results/logs/scheduler.log 2>&1"
     } | crontab -
 
     echo "Autonomous cron jobs installed (12 entries). Current schedule:"
@@ -160,7 +161,7 @@ install_auto() {
 remove_auto() {
     echo "Removing autonomous Claude session cron jobs..."
 
-    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "cron_signal_scan.py" | crontab -
+    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | crontab -
 
     echo "Autonomous cron jobs removed."
 }
