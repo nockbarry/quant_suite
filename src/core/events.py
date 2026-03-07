@@ -185,10 +185,14 @@ def _handle_signal_provenance(
     except Exception as e:
         logger.debug(f"DB signal provenance write failed: {e}")
 
-    try:
-        sync_signal_provenance_to_file(record_data)
-    except Exception as e:
-        logger.debug(f"File signal provenance sync failed: {e}")
+    # Only sync to file if an explicit signal_id was provided.
+    # Events without a signal_id use the event_id (evt_*) as fallback,
+    # which creates thousands of noise files in signal_provenance/.
+    if kwargs.get("signal_id"):
+        try:
+            sync_signal_provenance_to_file(record_data)
+        except Exception as e:
+            logger.debug(f"File signal provenance sync failed: {e}")
 
     # Auto-link corroborations (same symbol, same direction, different source)
     try:

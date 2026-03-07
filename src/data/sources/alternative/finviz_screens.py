@@ -63,12 +63,12 @@ SCREEN_DEFINITIONS = {
     },
     "insider_buying": {
         "description": "Recent insider buying activity",
-        "url_params": "v=111&f=it_latestbuys,sh_avgvol_o100",
+        "url_params": "v=111&f=it_latestbuys,sh_avgvol_o100&o=-change",
         "priority": 2,
     },
     "institutional_accumulation": {
         "description": "Increasing institutional ownership",
-        "url_params": "v=111&f=sh_instown_o60,sh_insttrans_pos,ta_sma50_pa",
+        "url_params": "v=111&f=sh_instown_o60,sh_insttrans_pos,ta_sma50_pa&o=-change",
         "priority": 2,
     },
     "high_short_squeeze": {
@@ -330,17 +330,27 @@ class FinvizScreener:
                                     if symbol and 1 <= len(symbol) <= 5 and symbol.isalpha() and symbol.isupper():
                                         symbols.append(symbol)
 
-                # Strategy 4 (last resort): Look for quote.ashx links, but ONLY
-                # within the screener-content container to avoid picking up the
-                # alphabetical ticker index/navigation that Finviz displays on
-                # every page. Without this restriction, the fallback would return
-                # tickers sorted alphabetically from 'A' (the page directory),
-                # not actual screen results.
+                # Strategy 4 (last resort): Look for quote.ashx links inside
+                # table rows with enough columns to be real results (not nav).
+                # Finviz results tables have 10+ columns; navigation tables
+                # have 1-2 columns with alphabetical ticker links.
                 if not symbols and screener_content:
-                    for link in screener_content.find_all("a", href=re.compile(r"quote\.ashx\?t=")):
-                        symbol = link.text.strip()
-                        if symbol and 1 <= len(symbol) <= 5 and symbol.isalpha() and symbol.isupper():
-                            symbols.append(symbol)
+                    for table in screener_content.find_all("table"):
+                        rows = table.find_all("tr")
+                        if len(rows) < 2:
+                            continue
+                        # Check if this table has enough columns to be real results
+                        sample_cells = rows[1].find_all("td") if len(rows) > 1 else []
+                        if len(sample_cells) < 5:
+                            continue  # Skip narrow nav tables
+                        for row in rows:
+                            cells = row.find_all("td")
+                            if len(cells) >= 5:
+                                link = cells[1].find("a", href=re.compile(r"quote\.ashx\?t="))
+                                if link:
+                                    symbol = link.text.strip()
+                                    if symbol and 1 <= len(symbol) <= 5 and symbol.isalpha() and symbol.isupper():
+                                        symbols.append(symbol)
 
                 if not symbols:
                     logger.warning(
