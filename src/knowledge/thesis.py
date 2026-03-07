@@ -92,6 +92,54 @@ class ConvictionUpdate:
 
 
 @dataclass
+class PriceTarget:
+    """Bull/base/bear price targets for a thesis vehicle."""
+
+    symbol: str
+    bull_target: float
+    base_target: float
+    bear_target: float
+    entry_price: float
+    timeframe_days: int = 90
+    set_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    notes: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "symbol": self.symbol,
+            "bull_target": self.bull_target,
+            "base_target": self.base_target,
+            "bear_target": self.bear_target,
+            "entry_price": self.entry_price,
+            "timeframe_days": self.timeframe_days,
+            "set_at": self.set_at,
+            "updated_at": self.updated_at,
+            "notes": self.notes,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PriceTarget":
+        return cls(
+            symbol=data.get("symbol", ""),
+            bull_target=data.get("bull_target", 0),
+            base_target=data.get("base_target", 0),
+            bear_target=data.get("bear_target", 0),
+            entry_price=data.get("entry_price", 0),
+            timeframe_days=data.get("timeframe_days", 90),
+            set_at=data.get("set_at"),
+            updated_at=data.get("updated_at"),
+            notes=data.get("notes", ""),
+        )
+
+    def progress_pct(self, current_price: float) -> float:
+        """How far from entry_price toward base_target (0-100+)."""
+        if self.base_target == self.entry_price:
+            return 100.0 if current_price >= self.base_target else 0.0
+        return ((current_price - self.entry_price) / (self.base_target - self.entry_price)) * 100
+
+
+@dataclass
 class Thesis:
     """An investment thesis with tracking."""
 
@@ -112,6 +160,9 @@ class Thesis:
     signposts: list[Signpost] = field(default_factory=list)
     invalidation_triggers: list[str] = field(default_factory=list)
     positions: list[str] = field(default_factory=list)  # Symbols
+
+    # Price targets per vehicle
+    price_targets: dict[str, PriceTarget] = field(default_factory=dict)
 
     # Review
     last_review: Optional[datetime] = None
@@ -191,6 +242,31 @@ class Thesis:
         """Get signposts that haven't been triggered."""
         return [s for s in self.signposts if s.status == "pending"]
 
+    def set_price_target(
+        self, symbol: str, bull: float, base: float, bear: float,
+        entry_price: float, timeframe_days: int = 90, notes: str = "",
+    ) -> PriceTarget:
+        """Set or update price targets for a vehicle."""
+        now = datetime.now().isoformat()
+        existing = self.price_targets.get(symbol)
+        pt = PriceTarget(
+            symbol=symbol,
+            bull_target=bull,
+            base_target=base,
+            bear_target=bear,
+            entry_price=entry_price,
+            timeframe_days=timeframe_days,
+            set_at=existing.set_at if existing else now,
+            updated_at=now,
+            notes=notes,
+        )
+        self.price_targets[symbol] = pt
+        return pt
+
+    def get_price_target(self, symbol: str) -> Optional[PriceTarget]:
+        """Get price target for a specific vehicle."""
+        return self.price_targets.get(symbol)
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -204,6 +280,7 @@ class Thesis:
             "signposts": [s.to_dict() for s in self.signposts],
             "invalidation_triggers": self.invalidation_triggers,
             "positions": self.positions,
+            "price_targets": {sym: pt.to_dict() for sym, pt in self.price_targets.items()},
             "last_review": self.last_review.isoformat() if self.last_review else None,
             "next_review": self.next_review.isoformat() if self.next_review else None,
             "review_interval_days": self.review_interval_days,
@@ -225,6 +302,10 @@ class Thesis:
             signposts=[Signpost.from_dict(s) for s in data.get("signposts", [])],
             invalidation_triggers=data.get("invalidation_triggers", []),
             positions=data.get("positions", []),
+            price_targets={
+                sym: PriceTarget.from_dict(pt)
+                for sym, pt in data.get("price_targets", {}).items()
+            },
             last_review=datetime.fromisoformat(data["last_review"]) if data.get("last_review") else None,
             next_review=datetime.fromisoformat(data["next_review"]) if data.get("next_review") else None,
             review_interval_days=data.get("review_interval_days", 7),
@@ -476,6 +557,45 @@ class ThesisTracker:
             thesis.positions.remove(symbol)
             self._save_thesis(thesis)
 
+        return True
+
+    def set_price_targets(
+        self, thesis_id: str, targets: dict[str, dict],
+    ) -> bool:
+        """Set price targets for thesis vehicles and create predictions.
+
+        Args:
+            thesis_id: Thesis to update
+            targets: Dict of symbol -> {bull_target, base_target, bear_target, entry_price, ...}
+        """
+        thesis = self.get_thesis(thesis_id)
+        if not thesis:
+            logger.warning(f"Thesis {thesis_id} not found for price targets")
+            return False
+
+        for symbol, t in targets.items():
+            thesis.set_price_target(
+                symbol=symbol,
+                bull=t["bull_target"],
+                base=t["base_target"],
+                bear=t["bear_target"],
+                entry_price=t["entry_price"],
+                timeframe_days=t.get("timeframe_days", 90),
+                notes=t.get("notes", ""),
+            )
+
+        self._save_thesis(thesis)
+
+        # Create/update price_target predictions
+        try:
+            from src.db.write_api import athena_db
+            athena_db.update_price_targets(thesis_id, {
+                sym: pt.to_dict() for sym, pt in thesis.price_targets.items()
+            })
+        except Exception as e:
+            logger.warning(f"Price target prediction creation failed: {e}")
+
+        logger.info(f"Set price targets for thesis '{thesis.name}': {list(targets.keys())}")
         return True
 
     def invalidate_thesis(self, thesis_id: str, reason: str) -> bool:

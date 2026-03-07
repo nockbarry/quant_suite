@@ -80,10 +80,11 @@ class AthenaWriteAPI:
                             setattr(existing, field, data[field])
                     for field in (
                         "positions", "invalidation_triggers", "conviction_history", "notes",
+                        "price_targets",
                     ):
                         if field in data:
                             val = data[field]
-                            setattr(existing, field, json.dumps(val) if isinstance(val, list) else val)
+                            setattr(existing, field, json.dumps(val) if isinstance(val, (list, dict)) else val)
                     for field in ("created", "last_review", "next_review"):
                         if field in data and data[field]:
                             val = data[field]
@@ -117,6 +118,83 @@ class AthenaWriteAPI:
             logger.warning(f"File sync failed for thesis {thesis_id}: {e}")
 
         return thesis_id
+
+    def update_price_targets(self, thesis_id: str, price_targets: dict) -> bool:
+        """Update price targets for a thesis and auto-create price_target predictions."""
+        from src.db.database import get_db
+        from src.db.models import ThesisRecord
+
+        try:
+            with get_db() as session:
+                thesis = session.query(ThesisRecord).filter(
+                    ThesisRecord.id == thesis_id
+                ).first()
+                if not thesis:
+                    return False
+                thesis.price_targets = json.dumps(price_targets)
+        except Exception as e:
+            logger.warning(f"DB update_price_targets failed for {thesis_id}: {e}")
+            return False
+
+        # Auto-create price_target predictions for each vehicle
+        for symbol, pt in price_targets.items():
+            self._create_price_target_prediction(thesis_id, symbol, pt)
+
+        return True
+
+    def _create_price_target_prediction(self, thesis_id: str, symbol: str, pt: dict):
+        """Create or update a price_target prediction from thesis targets."""
+        base_target = pt.get("base_target")
+        if not base_target:
+            return
+
+        entry_price = pt.get("entry_price", 0)
+        direction = "bullish" if base_target > entry_price else "bearish"
+        timeframe = pt.get("timeframe_days", 90)
+
+        from src.db.database import get_db
+        from src.db.models import PredictionRecord
+
+        try:
+            with get_db() as session:
+                existing = session.query(PredictionRecord).filter(
+                    PredictionRecord.thesis_id == thesis_id,
+                    PredictionRecord.symbol == symbol,
+                    PredictionRecord.prediction_type == "price_target",
+                    PredictionRecord.status == "open",
+                ).first()
+
+                desc = (
+                    f"Thesis target: bull=${pt.get('bull_target', 0):.2f}, "
+                    f"base=${base_target:.2f}, bear=${pt.get('bear_target', 0):.2f}"
+                )
+
+                if existing:
+                    existing.target_value = base_target
+                    existing.direction = direction
+                    existing.timeframe_days = timeframe
+                    existing.target_description = desc
+                    existing.resolve_by = datetime.utcnow() + timedelta(days=timeframe)
+                    logger.info(f"Updated price_target prediction for {symbol} -> ${base_target:.2f}")
+                    return
+
+            # No existing — create new
+            self.save_prediction({
+                "thesis_id": thesis_id,
+                "symbol": symbol,
+                "prediction_type": "price_target",
+                "direction": direction,
+                "target_value": base_target,
+                "target_description": desc,
+                "confidence": 0.6,
+                "timeframe_days": timeframe,
+                "reasoning_category": "thesis_driven",
+                "setup_type": "price_target",
+                "key_reasoning": pt.get("notes", ""),
+            })
+            logger.info(f"Created price_target prediction for {symbol} -> ${base_target:.2f}")
+        except Exception as e:
+            logger.warning(f"Failed to create price_target prediction for {symbol}: {e}")
 
     def update_conviction(self, thesis_id: str, value: float, reason: str) -> bool:
         """Update thesis conviction and broadcast event."""

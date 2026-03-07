@@ -108,6 +108,24 @@ due = thesis.check_review_due()           # bool
 signpost.description    # str
 signpost.status         # str ("pending", "triggered", "invalidated")
 signpost.trigger_date   # Optional[datetime]
+
+# Price targets (bull/base/bear per vehicle)
+thesis.price_targets    # dict[str, PriceTarget]
+pt = thesis.get_price_target("SLB")  # Optional[PriceTarget]
+pt.bull_target          # float
+pt.base_target          # float
+pt.bear_target          # float
+pt.entry_price          # float
+pt.progress_pct(50.0)   # float (0-100+)
+
+# Set price targets (auto-creates predictions)
+tracker.set_price_targets(thesis.id, {
+    "SLB": {
+        "bull_target": 62.0, "base_target": 55.0, "bear_target": 42.0,
+        "entry_price": 47.5, "timeframe_days": 90,
+        "notes": "Venezuela contracts + oil recovery",
+    },
+})
 ```
 
 ---

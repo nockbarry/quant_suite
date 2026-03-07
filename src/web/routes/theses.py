@@ -90,8 +90,9 @@ async def thesis_detail(request: Request, thesis_id: str):
     except Exception:
         thesis_predictions = []
 
-    # Position P&L from state.json portfolio
+    # Position P&L and current prices from state.json
     position_pnl = {}
+    position_prices = {}
     try:
         import json
         from src.core.paths import paths
@@ -99,14 +100,32 @@ async def thesis_detail(request: Request, thesis_id: str):
         if state_file.exists():
             with open(state_file) as f:
                 state_data = json.load(f)
-            positions_data = state_data.get("portfolio", {}).get("positions", [])
+            positions_data = state_data.get("positions", []) or state_data.get("portfolio", {}).get("positions", []) or []
             for pos in positions_data:
                 sym = pos.get("symbol", "")
-                pnl_pct = pos.get("unrealized_pnl_pct", 0)
                 if sym:
-                    position_pnl[sym] = pnl_pct
+                    position_pnl[sym] = pos.get("unrealized_pnl_pct", 0)
+                    position_prices[sym] = pos.get("current_price", 0)
     except Exception:
         pass
+
+    # Price target progress
+    price_target_progress = {}
+    thesis_dict = thesis if isinstance(thesis, dict) else thesis
+    pts = thesis_dict.get("price_targets", {}) if isinstance(thesis_dict, dict) else {}
+    for sym, pt in pts.items():
+        current_price = position_prices.get(sym, 0)
+        if current_price and pt.get("base_target"):
+            entry = pt.get("entry_price", 0)
+            base = pt["base_target"]
+            bull = pt.get("bull_target", base)
+            bear = pt.get("bear_target", entry)
+            progress = ((current_price - entry) / (base - entry) * 100) if base != entry else 0
+            price_target_progress[sym] = {
+                **pt,
+                "current_price": current_price,
+                "progress_pct": round(max(-100, min(200, progress)), 1),
+            }
 
     return templates.TemplateResponse(
         request,
@@ -119,6 +138,7 @@ async def thesis_detail(request: Request, thesis_id: str):
             "related_docs": related_docs,
             "thesis_predictions": thesis_predictions,
             "position_pnl": position_pnl,
+            "price_target_progress": price_target_progress,
             "breadcrumbs": [
                 {"label": "Theses", "url": "/theses"},
                 {"label": thesis.get("name", thesis_id) if isinstance(thesis, dict) else getattr(thesis, "name", thesis_id)},

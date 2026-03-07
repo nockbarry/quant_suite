@@ -157,12 +157,33 @@ def score_prediction(pred: dict, current_price: float | None, baseline: float | 
         outcome = 1.0 if hit else 0.0
         brier = (confidence - outcome) ** 2
 
+        # Proximity scoring: continuous 0-1+ metric (how close to target)
+        # Parse entry price from target_description if available
+        desc = pred.get("target_description", "")
+        entry_price = baseline
+        if not entry_price and "bear=$" in desc:
+            # Extract bear price as rough entry proxy
+            import re
+            bear_match = re.search(r'bear=\$([\d.]+)', desc)
+            if bear_match:
+                entry_price = float(bear_match.group(1))
+
+        proximity_score = None
+        if entry_price and entry_price > 0 and target_value != entry_price:
+            if direction == "bullish":
+                proximity_score = (current_price - entry_price) / (target_value - entry_price)
+            else:
+                proximity_score = (entry_price - current_price) / (entry_price - target_value)
+            proximity_score = round(max(0.0, proximity_score), 4)
+
+        prox_note = f", proximity={proximity_score:.1%}" if proximity_score is not None else ""
+
         return {
             "status": "hit" if hit else "miss",
             "actual_value": current_price,
-            "notes": f"Target ${target_value:.2f}, actual ${current_price:.2f}",
+            "notes": f"Target ${target_value:.2f}, actual ${current_price:.2f}{prox_note}",
             "brier_score": round(brier, 4),
-            "accuracy_score": outcome,
+            "accuracy_score": proximity_score if proximity_score is not None else outcome,
         }
 
     elif pred_type == "timeframe_move":

@@ -78,6 +78,7 @@ class ThesisContext:
     total_decisions: int = 0
     win_rate: float = 0.0
     total_pnl: float = 0.0
+    price_targets: dict = field(default_factory=dict)  # symbol -> {bull, base, bear, entry, ...}
 
 
 @dataclass
@@ -389,6 +390,16 @@ class DecisionContextBuilder:
                     tc.win_rate = wins / len(decisions)
                     tc.total_pnl = sum(d.realized_pnl or 0 for d in decisions)
 
+                # Load price targets
+                try:
+                    pt_raw = thesis.price_targets
+                    if pt_raw and isinstance(pt_raw, str):
+                        tc.price_targets = json.loads(pt_raw)
+                    elif pt_raw and isinstance(pt_raw, dict):
+                        tc.price_targets = pt_raw
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
                 return tc
         except Exception as e:
             logger.warning(f"Thesis context query failed: {e}")
@@ -471,6 +482,20 @@ class DecisionContextBuilder:
             lines.append(f"  Conviction {tc.conviction:.0f}%, {tc.total_decisions} decisions, {tc.win_rate:.0%} win rate")
             if tc.total_pnl:
                 lines.append(f"  Total P&L: ${tc.total_pnl:,.0f}")
+            # Price targets
+            if tc.price_targets and symbol in tc.price_targets:
+                pt = tc.price_targets[symbol]
+                lines.append(f"  PRICE TARGETS for {symbol}:")
+                lines.append(f"    Bear: ${pt.get('bear_target', 0):.2f}  |  Base: ${pt.get('base_target', 0):.2f}  |  Bull: ${pt.get('bull_target', 0):.2f}")
+                entry = pt.get('entry_price', 0)
+                if entry > 0:
+                    lines.append(f"    Entry: ${entry:.2f}  |  Timeframe: {pt.get('timeframe_days', 90)} days")
+                if pt.get('notes'):
+                    lines.append(f"    Notes: {pt['notes'][:100]}")
+            elif tc.price_targets:
+                lines.append(f"  Price targets set for: {', '.join(tc.price_targets.keys())}")
+            else:
+                lines.append(f"  ** No price targets set — use tracker.set_price_targets() **")
             lines.append("")
 
         return "\n".join(lines)

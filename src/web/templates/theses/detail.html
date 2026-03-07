@@ -165,6 +165,64 @@
                 {% endif %}
             </div>
 
+            <!-- Price Targets -->
+            {% if price_target_progress %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 mb-3">Price Targets</h2>
+                <div class="space-y-4">
+                    {% for sym, pt in price_target_progress.items() %}
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="mono text-sm text-emerald-400 font-medium">{{ sym }}</span>
+                            <span class="mono text-xs text-gray-400">
+                                Now: ${{ "%.2f"|format(pt.current_price) }}
+                            </span>
+                        </div>
+                        <!-- Three-zone progress bar -->
+                        {% set range_total = pt.bull_target - pt.bear_target %}
+                        {% if range_total > 0 %}
+                        <div class="relative w-full h-6 bg-gray-800 rounded-lg overflow-hidden">
+                            <!-- Bear zone -->
+                            {% set bear_width = ((pt.entry_price - pt.bear_target) / range_total * 100) %}
+                            <div class="absolute left-0 top-0 h-full bg-red-900/30" style="width: {{ bear_width }}%;"></div>
+                            <!-- Base zone -->
+                            {% set base_left = bear_width %}
+                            {% set base_width = ((pt.base_target - pt.entry_price) / range_total * 100) %}
+                            <div class="absolute top-0 h-full bg-emerald-900/30" style="left: {{ base_left }}%; width: {{ base_width }}%;"></div>
+                            <!-- Bull zone -->
+                            {% set bull_width = ((pt.bull_target - pt.base_target) / range_total * 100) %}
+                            <div class="absolute right-0 top-0 h-full bg-emerald-800/40" style="width: {{ bull_width }}%;"></div>
+                            <!-- Current price marker -->
+                            {% set marker_pct = ((pt.current_price - pt.bear_target) / range_total * 100) %}
+                            {% set marker_clamped = [0, [marker_pct, 100] | min] | max %}
+                            <div class="absolute top-0 h-full w-0.5 bg-white z-10" style="left: {{ marker_clamped }}%;"></div>
+                            <!-- Entry marker (dimmer) -->
+                            <div class="absolute top-0 h-full w-px bg-gray-500 z-10" style="left: {{ bear_width }}%;"></div>
+                        </div>
+                        {% endif %}
+                        <!-- Labels -->
+                        <div class="flex justify-between text-[10px] text-gray-500 mt-1">
+                            <span class="text-red-400">${{ "%.0f"|format(pt.bear_target) }}</span>
+                            <span>${{ "%.0f"|format(pt.entry_price) }} entry</span>
+                            <span class="text-emerald-400">${{ "%.0f"|format(pt.base_target) }} base</span>
+                            <span class="text-emerald-300">${{ "%.0f"|format(pt.bull_target) }} bull</span>
+                        </div>
+                        <!-- Progress -->
+                        <p class="text-xs mt-1
+                            {% if pt.progress_pct >= 100 %}text-emerald-400
+                            {% elif pt.progress_pct >= 50 %}text-yellow-400
+                            {% elif pt.progress_pct >= 0 %}text-gray-400
+                            {% else %}text-red-400{% endif %}">
+                            {{ "%.0f"|format(pt.progress_pct) }}% toward base target
+                            {% if pt.timeframe_days %} | {{ pt.timeframe_days }}d timeframe{% endif %}
+                            {% if pt.notes %} | {{ pt.notes[:60] }}{% endif %}
+                        </p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Related Documents -->
             {% if related_docs %}
             <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">

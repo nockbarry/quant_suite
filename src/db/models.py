@@ -191,6 +191,7 @@ class ThesisRecord(Base):
 
     conviction_history = Column(Text, default="[]")  # JSON list of updates
     notes = Column(Text, default="[]")  # JSON list
+    price_targets = Column(Text, default="{}")  # JSON dict: symbol -> {bull, base, bear, ...}
 
     # Relationships
     signposts = relationship("SignpostRecord", back_populates="thesis", cascade="all, delete-orphan")
@@ -228,6 +229,7 @@ class ThesisRecord(Base):
             "review_interval_days": self.review_interval_days,
             "conviction_history": self._safe_json_list(self.conviction_history),
             "notes": self._safe_json_list(self.notes),
+            "price_targets": json.loads(self.price_targets) if self.price_targets else {},
             "signposts": [s.to_dict() for s in self.signposts] if self.signposts else [],
         }
 
@@ -245,6 +247,8 @@ class ThesisRecord(Base):
         for field in ("positions", "invalidation_triggers", "conviction_history", "notes"):
             if isinstance(d.get(field), list):
                 d[field] = json.dumps(d[field])
+        if isinstance(d.get("price_targets"), dict):
+            d["price_targets"] = json.dumps(d["price_targets"])
         record = cls(**d)
         record.signposts = [SignpostRecord.from_dict(s, d["id"]) for s in signpost_data]
         return record

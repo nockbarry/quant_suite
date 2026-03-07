@@ -374,6 +374,21 @@ board.add_decision(
 )
 board.save()
 
+# 4c. Set/update price targets for the vehicle (ALWAYS do this on BUY/ADD)
+# Use your thesis knowledge to estimate bull/base/bear scenarios
+current_price = 47.50  # Get from quote or state.json
+tracker.set_price_targets(thesis_id, {
+    "SLB": {
+        "bull_target": 62.00,    # Best case: Venezuela contracts + oil $85
+        "base_target": 55.00,    # Most likely: gradual recovery
+        "bear_target": 40.00,    # Downside: policy reversal
+        "entry_price": current_price,
+        "timeframe_days": 90,
+        "notes": "Venezuela reconstruction + Hormuz disruption upside",
+    },
+})
+# This auto-creates a price_target PredictionRecord that gets scored daily
+
 # 5. Log signals that influenced this decision (for quality tracking)
 from src.monitoring.signal_quality_tracker import log_signal_outcome
 
@@ -399,6 +414,10 @@ log_signal_outcome(
 
 **After every decision, log explicit predictions.** This is what makes the system
 get smarter over time.
+
+**Note:** If you set price targets in Step 4c, `price_target` predictions are
+auto-created. You only need to manually log predictions for additional things like
+event outcomes, timeframe-specific moves, or thesis validation.
 
 ```python
 from src.db.write_api import athena_db
