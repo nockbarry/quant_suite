@@ -407,6 +407,51 @@ for name, status in freshness.sources.items():
         print(f"  [{status.status[:3]}] {name}: {status.top_signal[:50]}")
 ```
 
+### Step 1.10: Check Market Movers (NEW - Added 2026-03-07)
+
+Review the latest market mover scan for significant price moves and context:
+
+```python
+from src.web.services.mover_service import get_latest_scan
+
+scan = get_latest_scan()
+if not scan.get("missing"):
+    print(f"=== MARKET MOVERS ({scan.get('movers_found', 0)} found from {scan.get('universe_size', 0)} universe) ===")
+    print(f"Scan: {scan.get('timestamp', 'unknown')}")
+
+    # Top context-enriched movers (most actionable)
+    for m in scan.get("top_context", [])[:5]:
+        signals = []
+        if m.get("news_matches"): signals.append(f"news={len(m['news_matches'])}")
+        if m.get("finviz_screens"): signals.append(f"finviz={len(m['finviz_screens'])}")
+        if m.get("wsb_status"): signals.append(f"wsb={m['wsb_status'].get('phase', '?')}")
+        if m.get("thesis_alignment"): signals.append(f"thesis={m['thesis_alignment'].get('thesis_name', '?')[:15]}")
+        print(f"  {m['symbol']:6s} {m.get('change_1d_pct', 0):+6.1f}% ctx={m.get('context_score', 0):.0%} [{', '.join(signals)}]")
+
+    # Top gainers
+    print("\nTop Gainers:")
+    for m in scan.get("gainers", [])[:3]:
+        print(f"  {m['symbol']:6s} {m.get('change_1d_pct', 0):+6.1f}%  vol={m.get('volume_ratio', 0):.1f}x")
+
+    # Top losers
+    print("\nTop Losers:")
+    for m in scan.get("losers", [])[:3]:
+        print(f"  {m['symbol']:6s} {m.get('change_1d_pct', 0):+6.1f}%  vol={m.get('volume_ratio', 0):.1f}x")
+
+    # Thesis-aligned movers (most important for portfolio)
+    thesis_movers = [m for cat in ("top_context", "gainers", "losers", "volume_spikes")
+                     for m in scan.get(cat, []) if m.get("thesis_alignment")]
+    if thesis_movers:
+        seen = set()
+        print("\nThesis-Aligned Movers:")
+        for m in thesis_movers:
+            if m["symbol"] not in seen:
+                seen.add(m["symbol"])
+                print(f"  {m['symbol']:6s} {m.get('change_1d_pct', 0):+6.1f}% → {m['thesis_alignment'].get('thesis_name', '')}")
+else:
+    print("No market mover data available. Run: PYTHONPATH=. python3 scripts/cron_market_movers.py")
+```
+
 ### Step 2: Web Search for Overnight News
 ```
 Search: "stock market news today [current date]"

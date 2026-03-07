@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}Market Movers{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-100">Market Movers</h1>
+            <p class="text-sm text-gray-400 mt-1">
+                Broad universe scan: significant price moves + context enrichment
+            </p>
+        </div>
+        {% if scan.timestamp %}
+        <div class="text-right">
+            <span class="text-xs {% if scan._fresh %}text-emerald-400{% else %}text-yellow-400{% endif %}">
+                {{ scan._age_display | default('unknown') }}
+            </span>
+            <p class="text-xs text-gray-500">{{ scan.timestamp[:19] }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if scan.missing %}
+    <div class="bg-gray-800 rounded-lg p-8 text-center">
+        <p class="text-gray-400">No market mover data available.</p>
+        <p class="text-gray-500 text-sm mt-2">
+            Run: <code class="text-emerald-400">PYTHONPATH=. python3 scripts/cron_market_movers.py</code>
+        </p>
+    </div>
+    {% else %}
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="bg-gray-800 rounded-lg p-4">
+            <div class="text-2xl font-bold text-gray-100">{{ scan.universe_size }}</div>
+            <div class="text-xs text-gray-400">Universe</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4">
+            <div class="text-2xl font-bold text-emerald-400">{{ scan.movers_found }}</div>
+            <div class="text-xs text-gray-400">Movers Found</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4">
+            {% if scan.gainers %}
+            <div class="text-2xl font-bold text-green-400">
+                {{ "%.1f"|format(scan.gainers[0].change_1d_pct) }}%
+            </div>
+            <div class="text-xs text-gray-400">Top Gainer ({{ scan.gainers[0].symbol }})</div>
+            {% else %}
+            <div class="text-2xl font-bold text-gray-500">-</div>
+            <div class="text-xs text-gray-400">Top Gainer</div>
+            {% endif %}
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4">
+            {% if scan.losers %}
+            <div class="text-2xl font-bold text-red-400">
+                {{ "%.1f"|format(scan.losers[0].change_1d_pct) }}%
+            </div>
+            <div class="text-xs text-gray-400">Top Loser ({{ scan.losers[0].symbol }})</div>
+            {% else %}
+            <div class="text-2xl font-bold text-gray-500">-</div>
+            <div class="text-xs text-gray-400">Top Loser</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="mb-4 flex gap-2" x-data="{ tab: 'context' }">
+        <button @click="tab = 'context'"
+                :class="tab === 'context' ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            Top Context
+        </button>
+        <button @click="tab = 'gainers'"
+                :class="tab === 'gainers' ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            Gainers
+        </button>
+        <button @click="tab = 'losers'"
+                :class="tab === 'losers' ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            Losers
+        </button>
+        <button @click="tab = 'volume'"
+                :class="tab === 'volume' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            Volume Spikes
+        </button>
+
+        <!-- Top Context Table -->
+        <div x-show="tab === 'context'" class="w-full">
+            {{ mover_table(scan.top_context, show_context=true) }}
+        </div>
+
+        <!-- Gainers Table -->
+        <div x-show="tab === 'gainers'" class="w-full">
+            {{ mover_table(scan.gainers) }}
+        </div>
+
+        <!-- Losers Table -->
+        <div x-show="tab === 'losers'" class="w-full">
+            {{ mover_table(scan.losers) }}
+        </div>
+
+        <!-- Volume Spikes Table -->
+        <div x-show="tab === 'volume'" class="w-full">
+            {{ mover_table(scan.volume_spikes, show_volume=true) }}
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+
+{% macro mover_table(movers, show_context=false, show_volume=false) %}
+<div class="bg-gray-800 rounded-lg overflow-hidden mt-4">
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="text-gray-400 text-xs uppercase border-b border-gray-700">
+                <th class="px-4 py-3 text-left">#</th>
+                <th class="px-4 py-3 text-left">Symbol</th>
+                <th class="px-4 py-3 text-left">Sector</th>
+                <th class="px-4 py-3 text-right">1D %</th>
+                <th class="px-4 py-3 text-right">5D %</th>
+                <th class="px-4 py-3 text-right">1M %</th>
+                <th class="px-4 py-3 text-right">Vol Ratio</th>
+                {% if show_context %}
+                <th class="px-4 py-3 text-right">Context</th>
+                <th class="px-4 py-3 text-left">Signals</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for m in movers %}
+            <tr class="border-b border-gray-700/50 hover:bg-gray-700/30">
+                <td class="px-4 py-2 text-gray-500">{{ loop.index }}</td>
+                <td class="px-4 py-2">
+                    <a href="/movers/{{ m.symbol }}" class="text-emerald-400 hover:text-emerald-300 font-medium">
+                        {{ m.symbol }}
+                    </a>
+                    {% if m.name %}
+                    <span class="text-gray-500 text-xs ml-1">{{ m.name[:20] }}</span>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-2 text-gray-400 text-xs">{{ m.sector or '-' }}</td>
+                <td class="px-4 py-2 text-right font-mono
+                    {% if m.change_1d_pct > 0 %}text-green-400{% elif m.change_1d_pct < 0 %}text-red-400{% else %}text-gray-400{% endif %}">
+                    {{ "%.1f"|format(m.change_1d_pct) }}%
+                </td>
+                <td class="px-4 py-2 text-right font-mono text-xs
+                    {% if m.change_5d_pct > 0 %}text-green-300{% elif m.change_5d_pct < 0 %}text-red-300{% else %}text-gray-500{% endif %}">
+                    {{ "%.1f"|format(m.change_5d_pct) }}%
+                </td>
+                <td class="px-4 py-2 text-right font-mono text-xs
+                    {% if m.change_1m_pct > 0 %}text-green-300{% elif m.change_1m_pct < 0 %}text-red-300{% else %}text-gray-500{% endif %}">
+                    {{ "%.1f"|format(m.change_1m_pct) }}%
+                </td>
+                <td class="px-4 py-2 text-right font-mono text-xs
+                    {% if m.volume_ratio >= 2.0 %}text-purple-400{% elif m.volume_ratio >= 1.5 %}text-purple-300{% else %}text-gray-400{% endif %}">
+                    {{ "%.1f"|format(m.volume_ratio) }}x
+                </td>
+                {% if show_context %}
+                <td class="px-4 py-2 text-right font-mono text-emerald-400">
+                    {{ "%.0f"|format(m.context_score * 100) }}%
+                </td>
+                <td class="px-4 py-2">
+                    <div class="flex gap-1 flex-wrap">
+                        {% if m.news_matches %}
+                        <span class="px-1.5 py-0.5 rounded text-xs bg-blue-900/50 text-blue-300">
+                            news={{ m.news_matches | length }}
+                        </span>
+                        {% endif %}
+                        {% if m.finviz_screens %}
+                        <span class="px-1.5 py-0.5 rounded text-xs bg-purple-900/50 text-purple-300">
+                            finviz={{ m.finviz_screens | length }}
+                        </span>
+                        {% endif %}
+                        {% if m.wsb_status %}
+                        <span class="px-1.5 py-0.5 rounded text-xs bg-orange-900/50 text-orange-300">
+                            wsb={{ m.wsb_status.phase | default('?') }}
+                        </span>
+                        {% endif %}
+                        {% if m.thesis_alignment %}
+                        <span class="px-1.5 py-0.5 rounded text-xs bg-emerald-900/50 text-emerald-300">
+                            thesis
+                        </span>
+                        {% endif %}
+                    </div>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            {% if not movers %}
+            <tr>
+                <td colspan="9" class="px-4 py-8 text-center text-gray-500">No movers in this category</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endmacro %}
+
+{% endblock %}
+
+{% block extra_head %}
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+{% endblock %}

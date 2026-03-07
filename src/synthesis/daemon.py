@@ -2024,6 +2024,9 @@ class LiveDaemon:
         # Augment with cached social/screen/congressional data
         result.update(self._read_social_signals())
 
+        # Market movers from cron_market_movers.py
+        result.update(self._read_market_movers())
+
         return result if result else None
 
     def _read_social_signals(self) -> dict:
@@ -2100,6 +2103,39 @@ class LiveDaemon:
         except Exception as e:
             logger.debug(f"Could not read congressional data: {e}")
 
+        return signals
+
+    def _read_market_movers(self) -> dict:
+        """Read cached market mover scan results from cron_market_movers.py output."""
+        signals = {}
+        try:
+            movers_file = paths.base / "live" / "market_movers_latest.json"
+            if movers_file.exists():
+                with open(movers_file) as f:
+                    data = json.load(f)
+                signals["market_movers"] = {
+                    "timestamp": data.get("timestamp"),
+                    "universe_size": data.get("universe_size", 0),
+                    "movers_found": data.get("movers_found", 0),
+                    "top_gainers": [
+                        {"symbol": m["symbol"], "change_1d": m["change_1d_pct"],
+                         "trigger": m["trigger"], "context_score": m["context_score"]}
+                        for m in data.get("gainers", [])[:5]
+                    ],
+                    "top_losers": [
+                        {"symbol": m["symbol"], "change_1d": m["change_1d_pct"],
+                         "trigger": m["trigger"], "context_score": m["context_score"]}
+                        for m in data.get("losers", [])[:5]
+                    ],
+                    "top_context": [
+                        {"symbol": m["symbol"], "change_1d": m.get("change_1d_pct", 0),
+                         "context_score": m["context_score"],
+                         "thesis_alignment": m.get("thesis_alignment")}
+                        for m in data.get("top_context", [])[:5]
+                    ],
+                }
+        except Exception as e:
+            logger.debug(f"Could not read market movers: {e}")
         return signals
 
 

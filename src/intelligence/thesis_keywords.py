@@ -434,3 +434,76 @@ def match_headline(
         )
 
     return results
+
+
+# ---- Symbol Extraction from Headlines ----
+
+_TICKER_RE = re.compile(r'\$([A-Z]{1,5})\b')
+_ALLCAPS_RE = re.compile(r'\b([A-Z]{2,5})\b')
+
+# Common false positives — words that look like tickers but aren't
+_TICKER_FALSE_POSITIVES = {
+    "CEO", "CFO", "CTO", "COO", "IPO", "SEC", "FDA", "FTC", "DOJ",
+    "GDP", "CPI", "PPI", "PMI", "ETF", "NYSE", "FOMC", "OPEC",
+    "FBI", "CIA", "NATO", "IMF", "WHO", "CDC", "EPA", "FCC", "IRS",
+    "AI", "EV", "US", "UK", "EU", "IT", "HR", "PR", "TV", "AM", "PM",
+    "OTC", "PE", "VC", "ESG", "DEI", "ROI", "EPS", "ATH", "OI", "IV",
+    "DD", "WSB", "YTD", "QOQ", "MOM", "RSI", "HQ", "DC", "LA", "NY",
+    "AND", "THE", "FOR", "NEW", "ALL", "HAS", "ARE", "ITS", "NOT",
+    "TOP", "HOW", "WHY", "CAN", "MAY", "GET", "SET", "SAY", "SEE",
+    "BUT", "HIS", "HER", "WHO", "OUT", "OLD", "BIG", "CEO", "LLC",
+    "INC", "LTD", "PLC", "ETF", "USD", "EUR", "GBP", "JPY", "BPS",
+    "GDP", "CPI", "PMI", "ISM", "PCE", "NFP", "API", "CEO", "CFO",
+    "DOE", "DOD", "FAQ", "FED", "FYI", "ICE", "IMO", "IPO", "IRA",
+    "LED", "MBA", "MBS", "NFT", "OEM", "PSI", "RFP", "ROE", "SOP",
+}
+
+
+def extract_symbols_from_headline(
+    headline: str,
+    known_symbols: set[str] | None = None,
+) -> list[str]:
+    """Extract stock ticker symbols from a news headline.
+
+    Recognizes:
+    1. $SYMBOL format (high confidence)
+    2. ALLCAPS words that match known symbol databases
+    3. Company name → symbol reverse lookup from SYMBOL_COMPANY_MAP
+
+    Args:
+        headline: News headline text.
+        known_symbols: Optional set of valid symbols to filter against.
+                       If None, uses SYMBOL_COMPANY_MAP keys.
+
+    Returns:
+        List of extracted symbols, deduplicated.
+    """
+    if not headline:
+        return []
+
+    if known_symbols is None:
+        known_symbols = set(SYMBOL_COMPANY_MAP.keys())
+
+    found = set()
+
+    # 1. $TICKER pattern (high confidence)
+    for match in _TICKER_RE.finditer(headline):
+        ticker = match.group(1)
+        if ticker not in _TICKER_FALSE_POSITIVES:
+            found.add(ticker)
+
+    # 2. ALLCAPS words that match known symbols
+    for match in _ALLCAPS_RE.finditer(headline):
+        word = match.group(1)
+        if word in known_symbols and word not in _TICKER_FALSE_POSITIVES:
+            found.add(word)
+
+    # 3. Company name reverse lookup
+    headline_lower = headline.lower()
+    for symbol, aliases in SYMBOL_COMPANY_MAP.items():
+        for alias in aliases:
+            if alias in headline_lower:
+                found.add(symbol)
+                break
+
+    return sorted(found)

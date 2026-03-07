@@ -260,6 +260,7 @@ class Sentinel:
         self.operator = OperatorLoop()
         self.last_vix: float | None = None
         self.last_convergence_symbols: set[str] = set()
+        self._seen_mover_symbols: set[str] = set()
         self.last_news_count: int = 0
         self.check_count = 0
         self.logged_alert_titles: set[str] = set()  # Track which alert types have been logged
@@ -530,6 +531,31 @@ class Sentinel:
                         "symbols": [s for n in new_urgent for s in n.get("symbols", [])],
                     })
                 self.last_news_count = len(urgent)
+        except Exception:
+            pass
+
+        # 7. Market movers with high context + thesis alignment
+        try:
+            movers_file = RESULTS_DIR / "live" / "market_movers_latest.json"
+            if movers_file.exists():
+                with open(movers_file) as f:
+                    movers_data = json.load(f)
+                for mover in movers_data.get("top_context", [])[:10]:
+                    sym = mover.get("symbol", "")
+                    ctx = mover.get("context_score", 0)
+                    thesis = mover.get("thesis_alignment")
+                    if (ctx >= 0.3 and thesis
+                            and sym not in self._seen_mover_symbols):
+                        fired.append({
+                            "type": "market_mover",
+                            "context": (
+                                f"{sym}: {mover.get('change_1d_pct', 0):+.1f}% day, "
+                                f"ctx={ctx:.0%}, "
+                                f"thesis={thesis.get('thesis_name', '?')}"
+                            ),
+                            "symbols": [sym],
+                        })
+                        self._seen_mover_symbols.add(sym)
         except Exception:
             pass
 
