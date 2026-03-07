@@ -88,7 +88,7 @@ class ThesisSuggester:
     """Generate thesis suggestions from converging signals."""
 
     SUGGESTIONS_PATH = Path.home() / "quant_results" / "suggestions" / "thesis_suggestions.json"
-    MIN_SIGNALS_FOR_SUGGESTION = 3
+    MIN_SIGNALS_FOR_SUGGESTION = 2
     MIN_CONFIDENCE = 0.5
 
     # Source weights for confidence calculation

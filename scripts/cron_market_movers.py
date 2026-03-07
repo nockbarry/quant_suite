@@ -182,21 +182,30 @@ def register_provenance(scan_dict: dict) -> None:
                 f"Context: {'; '.join(ctx_parts) if ctx_parts else 'price move only'}"
             )
 
-            tracker.create_signal(
-                source=SignalSource.STATISTICAL,
-                symbol=sym,
-                confidence=mover.get("context_score", 0.5),
-                direction=direction,
-                description=description,
-                detection_method="market_mover_scan",
-                metadata={
-                    "trigger": mover.get("trigger"),
-                    "change_1d": mover.get("change_1d_pct"),
-                    "volume_ratio": mover.get("volume_ratio"),
-                    "finviz_screens": mover.get("finviz_screens", []),
-                },
+            # Skip if we already have a mover signal for this symbol today
+            today = datetime.now().strftime("%Y-%m-%d")
+            already_exists = any(
+                s.symbol == sym
+                and s.detection_method == "market_mover_scan"
+                and s.first_detected.strftime("%Y-%m-%d") == today
+                for s in tracker._cache.values()
             )
-            registered += 1
+            if not already_exists:
+                tracker.create_signal(
+                    source=SignalSource.STATISTICAL,
+                    symbol=sym,
+                    confidence=mover.get("context_score", 0.5),
+                    direction=direction,
+                    description=description,
+                    detection_method="market_mover_scan",
+                    metadata={
+                        "trigger": mover.get("trigger"),
+                        "change_1d": mover.get("change_1d_pct"),
+                        "volume_ratio": mover.get("volume_ratio"),
+                        "finviz_screens": mover.get("finviz_screens", []),
+                    },
+                )
+                registered += 1
 
         logger.info(f"Registered {registered} provenance signals")
     except Exception as e:
