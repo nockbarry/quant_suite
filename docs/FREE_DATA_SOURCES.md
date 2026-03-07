@@ -47,6 +47,39 @@ This document details the implementation of free data sources added to Project A
 
 ## Data Source Details
 
+### 0. Market Mover Scanner (`src/intelligence/market_movers.py`)
+
+**Purpose**: Scan broad universe (~231 symbols) for significant price moves, enrich with multi-source context, feed signal provenance pipeline
+
+**Data Source**: yfinance batch download (prices), existing cached JSON (news, Finviz screens, WSB, theses)
+
+**Key Outputs**:
+- `~/quant_results/live/market_movers_latest.json` — Latest scan results
+- `~/quant_results/logs/market_movers_history.json` — 30-day history
+- Documents in athena.db (`doc_type="market_mover"`) — Per-mover context records
+- Signal provenance entries — Feeds convergence detection
+
+**Universe Sources**: Portfolio positions, thesis vehicles, Finviz screens, WSB trending, SPY/QQQ holdings, research universe
+
+**Thresholds**:
+- Day move: >3% (intraday: >2%)
+- Week move: >10% (intraday: >8%)
+- Month move: >20% (intraday: >15%)
+- Volume spike: >2x average (intraday: >1.5x)
+
+**Context Enrichment**:
+- News headline matches (thesis keyword index)
+- Finviz screen membership
+- WSB signal status (phase, mentions, sentiment)
+- Thesis alignment (name, conviction)
+- Context score: magnitude\*0.3 + news\*0.25 + finviz\*0.15 + thesis\*0.15 + wsb\*0.1 + volume\*0.05
+
+**Schedule**: 12:30 PM (midday intraday) + 5:20 PM (after close) via `scripts/cron_market_movers.py`
+
+**Web Dashboard**: `/movers` — Tabs for Top Context, Gainers, Losers, Volume Spikes; detail view per symbol
+
+---
+
 ### 1. Market Regime Sources
 
 #### VIX Term Structure (`vix_structure.py`)

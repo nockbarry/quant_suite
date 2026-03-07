@@ -216,6 +216,70 @@ PYTHONPATH=. python3 scripts/context_for_symbol.py NVDA AMD --json
 
 ---
 
+## Market Mover Scanner (src/intelligence/market_movers.py)
+
+```python
+from src.intelligence.market_movers import MarketMoverScanner
+
+scanner = MarketMoverScanner()
+
+# Full scan: build universe → fetch prices → identify movers → enrich → rank
+scan = scanner.scan()  # Returns MarketMoverScan dataclass
+
+# MarketMoverScan attributes
+scan.timestamp          # datetime
+scan.universe_size      # int (~231 symbols)
+scan.movers_found       # int
+scan.gainers            # list[dict] sorted by change_1d_pct desc
+scan.losers             # list[dict] sorted by change_1d_pct asc
+scan.volume_spikes      # list[dict] sorted by volume_ratio desc
+scan.top_context        # list[dict] sorted by context_score desc
+
+# Each mover dict contains:
+# symbol, name, sector, price, change_1d_pct, change_5d_pct, change_1m_pct,
+# volume, avg_volume, volume_ratio, trigger, move_magnitude,
+# news_matches, finviz_screens, wsb_status, thesis_alignment,
+# context_score, rank, timestamp
+
+# Intraday scan (tighter thresholds: 2% day, 8% week)
+scan = scanner.scan(intraday=True)
+
+# Cron script (writes JSON + indexes documents + creates provenance)
+# PYTHONPATH=. python3 scripts/cron_market_movers.py
+# PYTHONPATH=. python3 scripts/cron_market_movers.py --intraday
+
+# Web service (reads latest JSON)
+from src.web.services.mover_service import get_latest_scan, get_mover_detail
+scan = get_latest_scan()     # dict with _fresh, _age_display computed fields
+mover = get_mover_detail("MRVL")  # dict or None
+```
+
+---
+
+## Signal Provenance (src/knowledge/signal_provenance.py)
+
+```python
+from src.knowledge.signal_provenance import get_provenance_tracker, SignalSource
+
+tracker = get_provenance_tracker()
+
+# Create a signal
+tracker.create_signal(
+    source=SignalSource.STATISTICAL,  # WSB, NEWS, INSIDER, CONGRESSIONAL, OPTIONS, etc.
+    symbol="MRVL",
+    detection_method="market_mover_scan",
+    initial_confidence=0.75,
+    initial_direction="bullish",
+    initial_description="MRVL +18.4% with 5.1x volume ratio",
+    metadata={"context_score": 0.36, "trigger": "day_move"},
+)
+
+# Get all signals (loaded from ~/quant_results/signal_provenance/*.json)
+signals = list(tracker._cache.values())  # list[SignalProvenance]
+```
+
+---
+
 ## Scripts to Use Instead of Writing Code
 
 ```bash

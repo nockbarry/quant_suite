@@ -607,7 +607,7 @@ class LiveSignalGenerator:
                 from src.core.events import emit
                 emit(
                     "signal_detected",
-                    source="technical",
+                    source="statistical",
                     symbol=sig.symbol,
                     title=f"{sig.direction.value.upper()} {sig.signal_type.value} on {sig.symbol}",
                     detail={"signal_type": sig.signal_type.value, "trigger_value": sig.trigger_value},
@@ -660,7 +660,7 @@ class LiveSignalGenerator:
                 from src.core.events import emit
                 emit(
                     "signal_convergence",
-                    source="technical",
+                    source="statistical",
                     symbol=conv.symbol,
                     severity="warning",
                     title=conv.summary,
@@ -698,7 +698,7 @@ class LiveSignalGenerator:
                 from src.core.events import emit
                 emit(
                     "signal_convergence",
-                    source="technical",
+                    source="statistical",
                     symbol=conv.symbol,
                     severity="warning",
                     title=conv.summary,

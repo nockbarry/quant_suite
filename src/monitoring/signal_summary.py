@@ -366,7 +366,7 @@ class SignalAggregator:
                     symbol=symbol,
                     direction=direction,
                     strength=min(1.0, abs(composite)),
-                    source="technical_analysis",
+                    source="statistical",
                     description=f"{symbol}: {notes[:100]}",
                     timestamp=now,
                     expires_at=now + timedelta(days=3),

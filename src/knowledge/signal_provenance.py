@@ -36,11 +36,14 @@ class SignalSource(Enum):
     TWITTER = "twitter"
     NEWS = "news"             # News/RSS feeds
     STATISTICAL = "statistical"  # Quantitative signal
+    TECHNICAL = "technical"   # Legacy: maps to statistical signals
+    TECHNICAL_ANALYSIS = "technical_analysis"  # Legacy: signal_summary.py
     AGENT = "agent"           # Claude agent
     MANUAL = "manual"         # Human entered
     INSIDER = "insider"       # Insider trading data
     CONGRESSIONAL = "congressional"  # Congressional trades
     OPTIONS = "options"       # Options flow
+    WSB_TRACKER = "wsb_tracker"  # WSB tracker provenance
 
 
 class SignalOutcome(Enum):
@@ -244,8 +247,10 @@ class SignalProvenanceTracker:
         self._load_all()
 
     def _load_all(self):
-        """Load all provenance records."""
+        """Load all provenance records (skip event files)."""
         for file_path in self.base_path.glob("*.json"):
+            if file_path.name.startswith("evt_"):
+                continue  # Event files, not provenance records
             try:
                 with open(file_path) as f:
                     data = json.load(f)

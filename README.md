@@ -51,6 +51,7 @@ Every Claude session receives both summaries as injected context. Every session 
 16:05  Operator stops
 16:30  /eod-review — outcomes vs predictions, extract learnings
 17:00  Daemons stop, daily signals archived
+17:20  Market mover scan (after close, broad universe)
 17:30  Signal archive for backtesting
 
 Sunday:
@@ -163,6 +164,7 @@ src/
 ├── monitoring/                  ← Operator loop, dashboards, signal quality
 ├── signals/                     ← Live signal generator, candle patterns
 ├── data/                        ← 40+ data sources, intraday features
+│   Note: market mover scanner at src/intelligence/market_movers.py
 ├── execution/                   ← Broker, PDT manager, promotion pipeline
 ├── evaluation/                  ← MCPT, walk-forward, strategy comparison
 ├── web/                         ← FastAPI dashboard (24 routes)
@@ -178,7 +180,8 @@ scripts/
 ├── session_wrapper.sh           ← Per-session wrapper (timeout, model, skill, context)
 ├── setup_cron.sh                ← Install data + autonomous cron schedules
 ├── collect_all_data.py          ← Master data collection (35+ sources)
-└── cron_signal_digest.py        ← Signal aggregation + convergence detection
+├── cron_signal_digest.py        ← Signal aggregation + convergence detection
+└── cron_market_movers.py        ← Broad universe mover scan + context enrichment
 
 .claude/
 ├── skills/                      ← 18 Claude Code skills
@@ -243,7 +246,7 @@ scripts/
 
 | Category | Sources |
 |----------|---------|
-| **Market** | SPY, VIX, sector ETFs, put/call ratios, NYSE breadth, Finviz screens (8) |
+| **Market** | SPY, VIX, sector ETFs, put/call ratios, NYSE breadth, Finviz screens (8), market mover scanner |
 | **Alternative** | Congressional trades, insider trading (Form 4), options flow |
 | **Social** | WSB (Reddit), Stocktwits, social time-series DB |
 | **Sentiment** | AAII survey, newsletter sentiment, COT report, prediction markets |
@@ -260,7 +263,7 @@ Collected every 30 minutes via `collect_all_data.py`. Signal digest built every 
 
 ## Web Dashboard
 
-FastAPI dashboard at `http://localhost:8000` with 24 routes:
+FastAPI dashboard at `http://localhost:8000` with 25 routes:
 
 | Page | What It Shows |
 |------|--------------|
@@ -272,6 +275,7 @@ FastAPI dashboard at `http://localhost:8000` with 24 routes:
 | `/portfolio` | Positions, P&L, thesis attribution |
 | `/decisions` | Decision records with full context panels |
 | `/signals` | Live signals, convergence detection |
+| `/movers` | Market mover scanner: gainers, losers, volume spikes, context enrichment |
 | `/data` | Data source freshness grid (40+ sources) |
 | `/agents` | Agent run metrics and ops center |
 | `/research` | Research experiments and insights |

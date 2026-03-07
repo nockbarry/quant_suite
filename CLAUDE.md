@@ -168,6 +168,13 @@ Feedback loop: decisions → predictions → scored → belief updater adjusts w
 
 Web UI: `/documents`, `/documents/insights/list`, `/documents/experiments/list`
 
+### Market Analysis Layer
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **MarketMoverScanner** | `src/intelligence/market_movers.py` | Broad universe scan + context enrichment |
+| **extract_symbols_from_headline** | `src/intelligence/thesis_keywords.py` | Ticker extraction from news headlines |
+| **mover_service** | `src/web/services/mover_service.py` | Web service for mover dashboard |
+
 ### Monitoring Layer
 | Component | Location | Purpose |
 |-----------|----------|---------|
@@ -295,6 +302,7 @@ Read `docs/TRADING_PATTERNS.md` for accumulated wisdom: vehicle enumeration, con
 | **Research** | `~/quant_results/live/research/` |
 | **News** | `~/quant_results/live/news/` + `live/news_cache.json` |
 | **Social** | `~/quant_results/social/` (wsb.db, stocktwits_cache.json) |
+| **Market Movers** | `~/quant_results/live/market_movers_latest.json` |
 | **Finviz** | `~/quant_results/scraped_data/finviz/screens_latest.json` |
 | **Operator Logs** | `~/quant_results/logs/operator_log.jsonl` |
 | **Credentials** | `config/credentials.yaml` |
@@ -336,13 +344,13 @@ Alerting (`smart_alerter.py`, `mobile_bot.py`), execution rules (`rules_engine.p
 ### Cron Jobs
 | Script | Schedule | Purpose |
 |--------|----------|---------|
-| `research_prep.py` | 6:00 AM Mon-Fri | Pre-market research |
-| `cron_news_collect.py` | Every 4 hours | Market news (16 RSS feeds) |
-| `cron_news_collect_fast.py` | Every 30 min | Fast news + thesis matching |
-| `cron_congressional_collect.py` | 6:30 AM daily | Congressional trades |
-| `cron_insider_collect.py` | 7:00 AM daily | Insider trading (Form 4) |
+| `collect_all_data.py --quick` | Every 30 min Mon-Fri | Fast news + thesis matching |
+| `collect_all_data.py` | Every 2h Mon-Fri | Full data collection (13 sources) |
 | LiveDaemon | Every 5 min Mon-Fri | Update state.json |
-| `cron_thesis_signpost_check.py` | Hourly 6am-5pm | Signpost triggers |
+| `cron_signal_scan.py` | Every 2h Mon-Fri | WSB, Stocktwits, prediction markets |
+| `cron_signal_digest.py` | Every 30 min | Signal aggregation + convergences |
+| `cron_market_movers.py` | 12:30 + 5:20 PM | Broad universe mover scan |
+| `signpost_monitor.py` | Every 10 min (9-3pm) | Thesis signpost price checks |
 | `cron_prediction_scorer.py` | 5:15 PM Mon-Fri | Score predictions |
 | `cron_belief_update.py` | 5:30 PM Mon-Fri | Update signal weights |
 
@@ -358,17 +366,20 @@ Architecture: `cron → athena_scheduler.sh (tmux) → session_wrapper.sh → cl
 
 | Time (ET) | Session | Model |
 |-----------|---------|-------|
+| 05:55 | sentinel-start (Python daemon) | - |
 | 06:30 | `/morning-briefing` | opus |
 | 08:30 | `/operator-session` | opus |
 | 10:00, 13:00 | `/trade-decision` | opus |
-| 10:30, 14:30 | `/research --quick` | sonnet |
+| 10:30, 14:30 | `/signal-scan` | sonnet |
+| 12:00, 15:00 | `/internal-review` | sonnet |
 | 16:30 | `/eod-review` | opus |
+| 17:10 | sentinel-stop | - |
 
 ```bash
 ./scripts/athena_scheduler.sh setup           # Create tmux session
+./scripts/athena_scheduler.sh sentinel-start  # Start Python monitoring daemon
 ./scripts/athena_scheduler.sh operator-start  # Launch operator
 ./scripts/athena_scheduler.sh status          # Show all sessions
-python3 scripts/health_monitor.py             # Watchdog (checks every 60s)
 ```
 
 Session coordination via `~/quant_results/scheduler/` (state, triggers, completions, locks, handoff).
@@ -389,6 +400,10 @@ PYTHONPATH=. python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8000
 
 # Data Collection
 PYTHONPATH=. python scripts/collect_all_data.py --quick
+
+# Market Movers (broad universe scan)
+PYTHONPATH=. python scripts/cron_market_movers.py           # After-close scan
+PYTHONPATH=. python scripts/cron_market_movers.py --intraday # Midday (tighter thresholds)
 ```
 
 ---
