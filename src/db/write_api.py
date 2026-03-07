@@ -120,10 +120,16 @@ class AthenaWriteAPI:
         return thesis_id
 
     def update_price_targets(self, thesis_id: str, price_targets: dict) -> bool:
-        """Update price targets for a thesis and auto-create price_target predictions."""
+        """Update price targets for a thesis and auto-create price_target predictions.
+
+        Also logs ProcessEvents and creates per-symbol research documents
+        for full provenance tracking.
+        """
         from src.db.database import get_db
         from src.db.models import ThesisRecord
 
+        thesis_name = ""
+        thesis_conviction = 50.0
         try:
             with get_db() as session:
                 thesis = session.query(ThesisRecord).filter(
@@ -131,19 +137,70 @@ class AthenaWriteAPI:
                 ).first()
                 if not thesis:
                     return False
+                thesis_name = thesis.name or thesis_id[:8]
+                thesis_conviction = thesis.conviction or 50.0
                 thesis.price_targets = json.dumps(price_targets)
         except Exception as e:
             logger.warning(f"DB update_price_targets failed for {thesis_id}: {e}")
             return False
 
-        # Auto-create price_target predictions for each vehicle
+        # Auto-create price_target predictions + provenance for each vehicle
         for symbol, pt in price_targets.items():
-            self._create_price_target_prediction(thesis_id, symbol, pt)
+            self._create_price_target_prediction(
+                thesis_id, symbol, pt, thesis_conviction
+            )
+
+            # Log ProcessEvent for audit trail
+            try:
+                self.log_event(
+                    event_type="price_target_set",
+                    source="thesis_tracker",
+                    title=f"Price target: {symbol} base=${pt.get('base_target', 0):.2f} ({thesis_name})",
+                    detail=json.dumps({
+                        "symbol": symbol,
+                        "bull": pt.get("bull_target"),
+                        "base": pt.get("base_target"),
+                        "bear": pt.get("bear_target"),
+                        "entry": pt.get("entry_price"),
+                        "timeframe_days": pt.get("timeframe_days", 90),
+                        "notes": pt.get("notes", "")[:500],
+                    }),
+                    symbol=symbol,
+                    thesis_id=thesis_id,
+                    severity="info",
+                )
+            except Exception as e:
+                logger.debug(f"ProcessEvent logging failed for {symbol}: {e}")
+
+            # Create analyst research document for discoverability
+            notes = pt.get("notes", "")
+            if notes:
+                try:
+                    self.save_document(
+                        doc_type="price_target_analysis",
+                        title=f"{symbol} target: bear=${pt.get('bear_target', 0):.2f} / base=${pt.get('base_target', 0):.2f} / bull=${pt.get('bull_target', 0):.2f}",
+                        content_inline=notes[:2000],
+                        source="thesis_tracker:set_price_targets",
+                        thesis_id=thesis_id,
+                        symbols=[symbol],
+                        tags=["price_target", "analyst_consensus"],
+                    )
+                except Exception as e:
+                    logger.debug(f"Document indexing failed for {symbol}: {e}")
 
         return True
 
-    def _create_price_target_prediction(self, thesis_id: str, symbol: str, pt: dict):
-        """Create or update a price_target prediction from thesis targets."""
+    def _create_price_target_prediction(
+        self, thesis_id: str, symbol: str, pt: dict,
+        thesis_conviction: float = 50.0,
+    ):
+        """Create or update a price_target prediction from thesis targets.
+
+        Confidence is derived from thesis conviction (not hardcoded):
+          conviction 95% → confidence 0.74
+          conviction 72% → confidence 0.68
+          conviction 50% → confidence 0.63
+        """
         base_target = pt.get("base_target")
         if not base_target:
             return
@@ -151,6 +208,8 @@ class AthenaWriteAPI:
         entry_price = pt.get("entry_price", 0)
         direction = "bullish" if base_target > entry_price else "bearish"
         timeframe = pt.get("timeframe_days", 90)
+        # Derive confidence from thesis conviction: 0.5 + (conviction/100 * 0.25)
+        confidence = round(min(0.90, 0.50 + (thesis_conviction / 100) * 0.25), 2)
 
         from src.db.database import get_db
         from src.db.models import PredictionRecord
@@ -174,8 +233,9 @@ class AthenaWriteAPI:
                     existing.direction = direction
                     existing.timeframe_days = timeframe
                     existing.target_description = desc
+                    existing.confidence = confidence
                     existing.resolve_by = datetime.utcnow() + timedelta(days=timeframe)
-                    logger.info(f"Updated price_target prediction for {symbol} -> ${base_target:.2f}")
+                    logger.info(f"Updated price_target prediction for {symbol} -> ${base_target:.2f} (conf={confidence})")
                     return
 
             # No existing — create new
@@ -186,13 +246,13 @@ class AthenaWriteAPI:
                 "direction": direction,
                 "target_value": base_target,
                 "target_description": desc,
-                "confidence": 0.6,
+                "confidence": confidence,
                 "timeframe_days": timeframe,
                 "reasoning_category": "thesis_driven",
                 "setup_type": "price_target",
                 "key_reasoning": pt.get("notes", ""),
             })
-            logger.info(f"Created price_target prediction for {symbol} -> ${base_target:.2f}")
+            logger.info(f"Created price_target prediction for {symbol} -> ${base_target:.2f} (conf={confidence})")
         except Exception as e:
             logger.warning(f"Failed to create price_target prediction for {symbol}: {e}")
 
