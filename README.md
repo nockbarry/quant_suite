@@ -38,21 +38,22 @@ Every Claude session receives both summaries as injected context. Every session 
 
 ```
 05:55  Sentinel starts (Python daemon, 15-60s heartbeat)
-06:00  Data collection begins (35+ sources, every 30 min)
+06:00  Data collection begins (40+ sources, every 30 min)
 06:30  /morning-briefing — overnight news, thesis review, signal convergences
 08:30  Operator session starts (persistent monitoring, writes convergences)
 09:31  Scheduled trades execute (from previous day's decisions)
 10:00  /trade-decision — adversarial analysis, thesis alignment, pre-mortem
 10:30  /signal-scan — LLM analysis of social signals (WSB, Stocktwits)
 12:00  /internal-review — prediction accuracy, signal drift, thesis health
+12:30  Market mover scan (midday intraday, tighter thresholds)
 13:00  /trade-decision — afternoon pass
 14:30  /signal-scan — second social signal pass
 15:00  /internal-review — second quality check
 16:05  Operator stops
 16:30  /eod-review — outcomes vs predictions, extract learnings
-17:00  Daemons stop, daily signals archived
+17:10  Sentinel stops, daemons stop
+17:15  Prediction scorer + belief updater
 17:20  Market mover scan (after close, broad universe)
-17:30  Signal archive for backtesting
 
 Sunday:
 18:00  /thesis — weekly thesis review and conviction updates
@@ -129,7 +130,7 @@ The swarm architecture solves the context reset problem:
 ```
 ~/quant_results/
 ├── live/state.json              ← THE source of truth (market + portfolio + signals)
-├── athena.db                    ← SQLite (19 tables: decisions, predictions, theses, etc.)
+├── athena.db                    ← SQLite (19 tables: decisions, predictions, theses, signals, etc.)
 ├── scheduler/
 │   ├── situation_board.json     ← Same-day shared memory (sentinel → all)
 │   ├── strategic_context.json   ← Multi-day persistent memory (reviewer → all)
@@ -157,29 +158,25 @@ src/
 │   ├── situation_board.py       ← SituationBoard: same-day observations
 │   └── strategic_context.py     ← StrategicContext: multi-day patterns
 ├── synthesis/                   ← Unified state (state.py, daemon.py, signals.py)
-├── knowledge/                   ← Theses, learnings, knowledge base
-├── intelligence/                ← Belief updater, context builder, setup scorer
+├── knowledge/                   ← Theses, learnings, signal provenance, convergences
+├── intelligence/                ← Context builder, belief updater, market movers
 ├── decision/                    ← Decision logger, adversary, morning briefing
 ├── context/                     ← Session context preservation
 ├── monitoring/                  ← Operator loop, dashboards, signal quality
 ├── signals/                     ← Live signal generator, candle patterns
-├── data/                        ← 40+ data sources, intraday features
-│   Note: market mover scanner at src/intelligence/market_movers.py
+├── data/                        ← 42 data source modules, intraday features
 ├── execution/                   ← Broker, PDT manager, promotion pipeline
 ├── evaluation/                  ← MCPT, walk-forward, strategy comparison
-├── web/                         ← FastAPI dashboard (24 routes)
-│   ├── routes/swarm.py          ← Situation board + strategic context UI
-│   ├── routes/sessions.py       ← Autonomous session timeline
-│   ├── routes/intelligence.py   ← Prediction tracking + calibration
-│   └── routes/theses.py         ← Thesis management
-└── db/                          ← SQLite models, write API
+├── core/                        ← Paths, types, event bus, universe manager
+├── web/                         ← FastAPI dashboard (26 routes, Jinja2 + HTMX)
+└── db/                          ← SQLite ORM models (19 tables), write API
 
 scripts/
 ├── sentinel.py                  ← Python monitoring daemon (replaces health_monitor)
 ├── athena_scheduler.sh          ← tmux session manager
 ├── session_wrapper.sh           ← Per-session wrapper (timeout, model, skill, context)
 ├── setup_cron.sh                ← Install data + autonomous cron schedules
-├── collect_all_data.py          ← Master data collection (35+ sources)
+├── collect_all_data.py          ← Master data collection (13 collectors, 40+ sources)
 ├── cron_signal_digest.py        ← Signal aggregation + convergence detection
 └── cron_market_movers.py        ← Broad universe mover scan + context enrichment
 
@@ -263,7 +260,7 @@ Collected every 30 minutes via `collect_all_data.py`. Signal digest built every 
 
 ## Web Dashboard
 
-FastAPI dashboard at `http://localhost:8000` with 25 routes:
+FastAPI dashboard at `http://localhost:8000` with 26 routes:
 
 | Page | What It Shows |
 |------|--------------|
@@ -276,9 +273,13 @@ FastAPI dashboard at `http://localhost:8000` with 25 routes:
 | `/decisions` | Decision records with full context panels |
 | `/signals` | Live signals, convergence detection |
 | `/movers` | Market mover scanner: gainers, losers, volume spikes, context enrichment |
+| `/reviews` | EOD reviews, internal reviews, morning briefings |
+| `/documents` | Universal document browser, insights, experiments |
 | `/data` | Data source freshness grid (40+ sources) |
 | `/agents` | Agent run metrics and ops center |
 | `/research` | Research experiments and insights |
+| `/usage` | LLM token usage tracking |
+| `/system` | System health, autonomy status |
 
 HTMX for dynamic updates. Dark theme. Auto-refresh on live data.
 

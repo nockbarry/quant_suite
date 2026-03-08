@@ -27,11 +27,12 @@ This single file contains: market regime, sentiment, portfolio positions, risk, 
 ### Automated (Background)
 
 ```bash
-./scripts/setup_cron.sh install    # One-time cron setup
-./scripts/trading_day.sh start     # Or manually start each day
+./scripts/setup_cron.sh install_all    # One-time cron setup (data + autonomous)
+./scripts/athena_scheduler.sh setup    # Create tmux session
+./scripts/athena_scheduler.sh sentinel-start  # Start sentinel daemon
 ```
 
-Runs automatically: 6:00 AM daemons start, every 5 min state.json updates, 5:00 PM stop.
+Runs automatically: 5:55 AM sentinel starts, 6:00 AM data collection, every 5 min state.json updates, 5:10 PM sentinel stops.
 
 ### Your Workflow (Claude Sessions)
 
@@ -276,7 +277,6 @@ Read `docs/TRADING_PATTERNS.md` for accumulated wisdom: vehicle enumeration, con
 | alpha-discovery-agent | Market inefficiency scanning |
 | hypothesis-generator-agent | Insight to strategy |
 | brainstorm-agent | Feature ideation |
-| text-research-agent | Text analysis and embeddings |
 | macro-research-agent | Geopolitical & macro analysis |
 | news-analyst-agent | Event-driven analysis |
 | regime-detector-agent | Market regime classification |
@@ -284,6 +284,7 @@ Read `docs/TRADING_PATTERNS.md` for accumulated wisdom: vehicle enumeration, con
 | monitor-agent | Portfolio oversight |
 | data-acquisition-agent | Free data acquisition |
 | orchestrator-agent | Multi-agent coordination |
+| text-research-agent | Text analysis and embeddings |
 
 ---
 
@@ -292,7 +293,7 @@ Read `docs/TRADING_PATTERNS.md` for accumulated wisdom: vehicle enumeration, con
 | Category | Path |
 |----------|------|
 | **Unified State** | `~/quant_results/live/state.json` |
-| **Database** | `~/quant_results/athena.db` (19 tables) |
+| **Database** | `~/quant_results/athena.db` (19 tables: decisions, predictions, theses, signals, etc.) |
 | **Theses** | `~/quant_results/theses/` (YAML) + DB |
 | **Learnings** | `~/quant_results/learnings/` |
 | **Knowledge** | `~/quant_results/knowledge/` |
@@ -305,9 +306,11 @@ Read `docs/TRADING_PATTERNS.md` for accumulated wisdom: vehicle enumeration, con
 | **Market Movers** | `~/quant_results/live/market_movers_latest.json` |
 | **Finviz** | `~/quant_results/scraped_data/finviz/screens_latest.json` |
 | **Operator Logs** | `~/quant_results/logs/operator_log.jsonl` |
+| **Signal Provenance** | `~/quant_results/signal_provenance/*.json` |
+| **Scheduler** | `~/quant_results/scheduler/` (board, context, state, triggers) |
 | **Credentials** | `config/credentials.yaml` |
-| **Skills** | `.claude/skills/*/SKILL.md` |
-| **Agents** | `.claude/agents/*.md` |
+| **Skills** | `.claude/skills/*/SKILL.md` (18 skills) |
+| **Agents** | `.claude/agents/*.md` (13 agents) |
 
 ---
 

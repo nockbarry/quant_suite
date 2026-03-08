@@ -8,78 +8,69 @@ This document maps all modules, functions, data flows, and integrations in the q
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    CLAUDE INTERFACE                                     │
+│                           LAYER 1: SENTINEL (Python, zero Claude tokens)                 │
+│                                  scripts/sentinel.py                                     │
 │                                                                                         │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐        │
-│  │  /morning-  │ │ /operator-  │ │  /trade-    │ │  /execute-  │ │   /eod-     │        │
-│  │  briefing   │ │  session    │ │  decision   │ │   trades    │ │   review    │        │
-│  └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘        │
-│         │               │               │               │               │               │
-│  ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐ ┌──────┴──────┐        │
-│  │ /research   │ │ /validate   │ │ /promote    │ │ /monitor    │ │ /brainstorm │        │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘        │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          ▼
+│  30s heartbeat │ Market state monitoring │ Convergence detection │ Trigger rules (6)    │
+│  Writes: situation_board.json (same-day shared memory, auto-resets daily)                │
+│  Triggers: analyst sessions when events need interpretation                             │
+└─────────────────────────────────────────────────────────────┬───────────────────────────┘
+                                                              │ triggers
+                                                              ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                               UNIFIED STATE (state.json)                                │
+│                    LAYER 2: REACTIVE AGENTS (Claude, on-demand, 3-10 min)               │
 │                                                                                         │
-│    THE ONE FILE - Market + Portfolio + Signals + Theses + Decisions + Learnings         │
-│                                                                                         │
-│    ~/quant_results/live/state.json                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          ▼
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐       │
+│  │  /analyst   │ │  /trade-    │ │  /execute-  │ │  /signal-   │ │  /operator-  │       │
+│  │  (Sonnet)   │ │  decision   │ │  trades     │ │  scan       │ │  session     │       │
+│  │  5 min      │ │  (Opus)     │ │  (Opus)     │ │  (Sonnet)   │ │  (Opus)      │       │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘       │
+└─────────────────────────────────────────────────────────────┬───────────────────────────┘
+                                                              │ reads/writes
+                                                              ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   SYNTHESIS LAYER                                       │
-│                                   src/synthesis/                                        │
+│                    LAYER 3: DEEP AGENTS (Claude, scheduled, 10-20 min)                  │
 │                                                                                         │
-│  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐                 │
-│  │    UnifiedState    │  │   SignalAggregator │  │     LiveDaemon     │                 │
-│  │    state.py        │  │    signals.py      │  │     daemon.py      │                 │
-│  │                    │  │                    │  │                    │                 │
-│  │ • MarketSnapshot   │  │ • AggregatedSignal │  │ • Runs continuously│                 │
-│  │ • PortfolioSnapshot│  │ • Composite scores │  │ • Writes state.json│                 │
-│  │ • RiskSnapshot     │  │ • Signal agreement │  │ • 5-min updates    │                 │
-│  │ • ThesisSummary    │  │ • Confidence calc  │  │                    │                 │
-│  │ • LearningSummary  │  │                    │  │                    │                 │
-│  └────────────────────┘  └────────────────────┘  └────────────────────┘                 │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐       │
+│  │  /morning-  │ │  /internal- │ │  /eod-      │ │  /theorist  │ │  /research   │       │
+│  │  briefing   │ │  review     │ │  review     │ │  (Opus)     │ │  (Sonnet)    │       │
+│  │  (Opus)     │ │  (Sonnet)   │ │  (Opus)     │ │  Weekly     │ │  On-demand   │       │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘       │
+└─────────────────────────────────────────────────────────────┬───────────────────────────┘
+                                                              │
+                                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                              SHARED MEMORY (Cross-Session)                               │
+│                                                                                         │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐   │
+│  │   state.json     │ │ situation_board  │ │ strategic_context│ │  signal_digest   │   │
+│  │   (5 min)        │ │  (same-day)     │ │  (multi-day)    │ │  (30 min)        │   │
+│  │                  │ │                  │ │                  │ │                  │   │
+│  │ Market+Portfolio │ │ Observations     │ │ Thesis momentum │ │ Convergences     │   │
+│  │ Signals+Theses  │ │ Alerts, triggers │ │ Patterns, hypos │ │ Signal quality   │   │
+│  └──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘   │
+│                                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐   │
+│  │  athena.db (19 tables) — Permanent record: decisions, predictions, theses,       │   │
+│  │  documents, insights, experiments, agent_runs, signal_provenance, process_events │   │
+│  └──────────────────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
                                           │
                     ┌─────────────────────┼─────────────────────┐
                     ▼                     ▼                     ▼
 ┌───────────────────────────┐ ┌───────────────────────────┐ ┌───────────────────────────┐
-│      KNOWLEDGE LAYER      │ │      DECISION LAYER       │ │     DATA LAYER            │
-│      src/knowledge/       │ │      src/decision/        │ │     src/data/             │
-│                           │ │                           │ │                           │
-│ ┌───────────────────────┐ │ │ ┌───────────────────────┐ │ │ ┌───────────────────────┐ │
-│ │    ThesisTracker      │ │ │ │   DecisionLogger      │ │ │ │    Data Sources       │ │
-│ │    thesis.py          │ │ │ │   decision_logger.py  │ │ │ │                       │ │
-│ │                       │ │ │ │                       │ │ │ │ • Yahoo Finance       │ │
-│ │ • Create thesis       │ │ │ │ • Log decisions       │ │ │ │ • Alpaca API          │ │
-│ │ • Track signposts     │ │ │ │ • Track outcomes      │ │ │ │ • Congressional       │ │
-│ │ • Update conviction   │ │ │ │ • Link to thesis      │ │ │ │ • Insider trades      │ │
-│ │ • Review schedules    │ │ │ │ • Pre-mortem notes    │ │ │ │ • Options flow        │ │
-│ └───────────────────────┘ │ │ └───────────────────────┘ │ │ │ • News/Reddit         │ │
-│                           │ │                           │ │ │ • Prediction markets  │ │
-│ ┌───────────────────────┐ │ │ ┌───────────────────────┐ │ │ └───────────────────────┘ │
-│ │    LearningLog        │ │ │ │  AdversarialAgent     │ │ │                           │
-│ │    learnings.py       │ │ │ │   adversary.py        │ │ │ ┌───────────────────────┐ │
-│ │                       │ │ │ │                       │ │ │ │    Pipelines          │ │
-│ │ • Extract learnings   │ │ │ │ • Challenge trades    │ │ │ │                       │ │
-│ │ • Pattern detection   │ │ │ │ • Timing concerns     │ │ │ │ • market_breadth.py   │ │
-│ │ • Monthly storage     │ │ │ │ • Thesis weaknesses   │ │ │ │ • sentiment.py        │ │
-│ │ • Tag-based retrieval │ │ │ │ • Confidence adjust   │ │ │ │ • intraday_technicals │ │
-│ └───────────────────────┘ │ │ └───────────────────────┘ │ │ │ • options_analytics   │ │
-│                           │ │                           │ │ └───────────────────────┘ │
-│ ┌───────────────────────┐ │ │ ┌───────────────────────┐ │ │                           │
-│ │    KnowledgeBase      │ │ │ │   MorningBriefing     │ │ │ ┌───────────────────────┐ │
-│ │    base.py            │ │ │ │ morning_briefing.py   │ │ │ │  Feature Engineering  │ │
-│ │                       │ │ │ │                       │ │ │ │                       │ │
-│ │ • Company briefs      │ │ │ │ • Generate briefings  │ │ │ │ • 50+ technical feats │ │
-│ │ • Sector contexts     │ │ │ │ • Web search          │ │ │ │ • Feature store       │ │
-│ │ • Trade context       │ │ │ │ • Portfolio summary   │ │ │ │ • Feature registry    │ │
-│ └───────────────────────┘ │ │ └───────────────────────┘ │ │ └───────────────────────┘ │
+│   KNOWLEDGE + INTELLIGENCE│ │      DECISION LAYER       │ │     DATA LAYER            │
+│                           │ │      src/decision/        │ │     src/data/             │
+│ ┌───────────────────────┐ │ │                           │ │                           │
+│ │ ThesisTracker         │ │ │ DecisionLogger            │ │ 42 data source modules    │
+│ │ + PriceTargets        │ │ │ AdversarialAgent          │ │ 16 RSS feeds              │
+│ │ + SignalProvenance    │ │ │ MorningBriefing           │ │ Market mover scanner      │
+│ │ + ThesisSuggester     │ │ │ DecisionContextBuilder    │ │ Finviz screens (8)        │
+│ │ + BeliefUpdater       │ │ │ SessionContext            │ │ Social (WSB, Stocktwits)  │
+│ │ + SetupScorer         │ │ │                           │ │ Geopolitical (5 regions)  │
+│ │ + MarketMoverScanner  │ │ │ Predictions → Scoring →   │ │ Legal (SCOTUS, SEC, FTC)  │
+│ │ + LearningLog         │ │ │ Belief updates → Better   │ │ Innovation (patents, etc) │
+│ └───────────────────────┘ │ │ decisions (feedback loop)  │ │ Prediction markets        │
 └───────────────────────────┘ └───────────────────────────┘ └───────────────────────────┘
 ```
 
@@ -111,26 +102,45 @@ src/synthesis/
 └── daemon.py          ──► LiveDaemon - continuous state updates
 ```
 
-### Knowledge Layer (`src/knowledge/`) - Updated 2026-02-01
+### Knowledge Layer (`src/knowledge/`) - Updated 2026-03-07
 ```
 src/knowledge/
 ├── __init__.py
-├── thesis.py              ──► Thesis, ThesisTracker, Signpost
+├── thesis.py              ──► Thesis, ThesisTracker, Signpost, PriceTarget (bull/base/bear)
 ├── thesis_performance.py  ──► ThesisPerformanceTracker, ThesisPerformanceMetrics
-├── signal_provenance.py   ──► NEW: Track signals from discovery to outcome
-├── thesis_suggester.py    ──► NEW: Auto-suggest theses from converging signals
+├── signal_provenance.py   ──► SignalProvenanceTracker, SignalSource enum, convergence support
+├── thesis_suggester.py    ──► ThesisSuggester — auto-suggest from converging signals (2+ sources)
 ├── learnings.py           ──► Learning, LearningLog
-└── base.py                ──► KnowledgeBase, CompanyBrief, SectorContext
+├── base.py                ──► KnowledgeBase, CompanyBrief, SectorContext
+└── market_calendar.py     ──► MarketCalendar, CalendarEvent, Prediction
 ```
 
-### Intelligence Layer (`src/intelligence/`) - NEW 2026-03-01
+### Swarm Layer (`src/swarm/`) - Added 2026-03-06
+```
+src/swarm/
+├── __init__.py
+├── situation_board.py     ──► SituationBoard: same-day shared memory, auto-resets daily, 5-min dedup
+└── strategic_context.py   ──► StrategicContext: multi-day persistent (thesis momentum, patterns, catalysts)
+```
+
+### Context Layer (`src/context/`) - Added 2026-03-03
+```
+src/context/
+├── __init__.py
+├── session_context.py     ──► SessionContext: singleton accumulator for session events
+└── market_snapshot.py     ──► capture_market_snapshot: SPY, VIX, sectors from state.json
+```
+
+### Intelligence Layer (`src/intelligence/`) - Added 2026-03-01, Updated 2026-03-07
 ```
 src/intelligence/
 ├── __init__.py            ──► Convenience imports
 ├── context_builder.py     ──► DecisionContextBuilder — assembles track record, calibration, learnings
 ├── setup_types.py         ──► Canonical setup type taxonomy (11 types, 10 reasoning categories)
 ├── setup_scorer.py        ──► SetupScorer — performance by setup type from DecisionRecord
-└── belief_updater.py      ──► BeliefUpdater — daily signal weight updates, thesis suggestions, calibration
+├── belief_updater.py      ──► BeliefUpdater — daily signal weight updates, thesis suggestions, calibration
+├── market_movers.py       ──► MarketMoverScanner — broad universe scan + context enrichment
+└── thesis_keywords.py     ──► Thesis keyword matching + extract_symbols_from_headline()
 ```
 
 ### Decision Layer (`src/decision/`)
@@ -435,26 +445,27 @@ src/synthesis/
 └── ... (existing files)
 ```
 
-### Database Layer (`src/db/`) - Added 2026-03-01
+### Database Layer (`src/db/`) - Added 2026-03-01, Updated 2026-03-07
 ```
 src/db/
 ├── __init__.py
 ├── database.py        ──► SQLAlchemy engine, session management, get_db()
-├── models.py          ──► All ORM models (18 tables):
-│                          ├── ThesisRecord, SignpostRecord
-│                          ├── DecisionRecord, LearningRecord
-│                          ├── AgentRun, AgentRunLog
-│                          ├── DataSourceRecord
-│                          ├── Document          ──► NEW: Universal content index
-│                          ├── Insight           ──► NEW: Research insights (from session tracker)
-│                          └── Experiment        ──► NEW: Strategy experiments
+├── models.py          ──► All ORM models (19 tables):
+│                          ├── ThesisRecord, SignpostRecord, thesis_position_links
+│                          ├── DecisionRecord, PredictionRecord
+│                          ├── LearningRecord, learning_tags
+│                          ├── AgentRun, LLMInteraction
+│                          ├── Document, Insight, Experiment
+│                          ├── ProcessEvent, SignalProvenanceRecord
+│                          ├── Company, Sector
+│                          ├── decision_signal_links, decision_convergences
+│                          └── autonomy_checks
 ├── write_api.py       ──► AthenaWriteAPI singleton (athena_db):
-│                          ├── save_document()   ──► Index any file/content
-│                          ├── get_recent_documents()
+│                          ├── save_document(), search_documents()
 │                          ├── get_documents_for_symbol()
-│                          ├── search_documents()
-│                          ├── search_insights()
-│                          └── save_thesis(), save_decision(), etc.
+│                          ├── save_thesis(), save_decision()
+│                          └── update_price_targets()
+├── sync.py            ──► File sync (signal provenance, JSONL append)
 └── migrate.py         ──► Backfill script: scans ~/quant_results/ and indexes all files
 ```
 
@@ -472,46 +483,54 @@ src/monitoring/
 └── signal_quality_tracker.py  ──► Track signal hit rates over time
 ```
 
-### Web Layer (`src/web/`) - Added 2026-03-01
+### Web Layer (`src/web/`) - Added 2026-03-01, Updated 2026-03-07
 ```
 src/web/
 ├── __init__.py
-├── app.py                ──► FastAPI app, router registration, CORS, templates
+├── app.py                ──► FastAPI app, 26 routers, CORS, Jinja2 templates
 │
-├── routes/
-│   ├── dashboard.py      ──► / (main dashboard with portfolio, positions, recent docs)
+├── routes/ (26 modules)
+│   ├── dashboard.py      ──► / (main dashboard with portfolio, activity feed)
 │   ├── portfolio.py      ──► /portfolio (positions, allocation, P&L)
-│   ├── decisions.py      ──► /decisions (list + detail with cross-refs)
-│   ├── theses.py         ──► /theses (CRUD, conviction, signposts)
+│   ├── decisions.py      ──► /decisions (list + detail + context panels)
+│   ├── theses.py         ──► /theses (CRUD, conviction, signposts, price targets)
 │   ├── signals.py        ──► /signals (live signals, convergences)
-│   ├── agents.py         ──► /agents (agent runs, logs, produced documents)
+│   ├── movers.py         ──► /movers (market mover scanner: gainers, losers, volume)
+│   ├── swarm.py          ──► /swarm (situation board, strategic context, sentinel)
+│   ├── sessions.py       ──► /sessions (autonomous session timeline)
+│   ├── intelligence.py   ──► /intelligence (predictions, calibration, setup perf)
+│   ├── reviews.py        ──► /reviews (EOD reviews, internal reviews, briefings)
+│   ├── documents.py      ──► /documents (universal browser + insights + experiments)
+│   ├── agents.py         ──► /agents (agent runs, ops center)
+│   ├── research.py       ──► /research (experiments, insights)
+│   ├── data_sources.py   ──► /data (data source freshness grid)
 │   ├── knowledge.py      ──► /knowledge (company + sector briefs)
 │   ├── learnings.py      ──► /learnings (trade learnings)
-│   ├── data_sources.py   ──► /data (data source freshness)
-│   ├── documents.py      ──► /documents (universal browser + insights + experiments)
-│   ├── research.py       ──► /research (run agents from web UI)
+│   ├── usage.py          ──► /usage (LLM token tracking)
+│   ├── system.py         ──► /system (health, autonomy status)
+│   ├── flows.py          ──► /flows (process events activity feed)
+│   ├── reports.py        ──► /reports
+│   ├── upload.py         ──► /upload
+│   ├── llm.py            ──► /llm
 │   ├── tasks.py          ──► /tasks (background task management)
-│   └── websocket.py      ──► /ws (WebSocket for live feed)
+│   ├── api.py            ──► /api (JSON endpoints)
+│   └── websocket.py      ──► WebSocket for live feed
 │
 ├── services/
 │   ├── state_service.py       ──► Read unified state, portfolio summary
 │   ├── document_service.py    ──► Document queries (list, filter, search)
-│   ├── thesis_service.py      ──► Thesis CRUD with dual-write
-│   ├── decision_service.py    ──► Decision queries
-│   ├── research_service.py    ──► Agent execution + auto-document indexing
+│   ├── thesis_service.py      ──► Thesis CRUD with dual-write (YAML + DB)
+│   ├── decision_service.py    ──► Decision queries + context panels
+│   ├── mover_service.py       ──► Market mover scan data for web UI
+│   ├── swarm_service.py       ──► Situation board + strategic context for web UI
+│   ├── review_service.py      ──► EOD reviews, briefings, internal reviews
+│   ├── intelligence_service.py ──► Predictions, calibration, setup type performance
 │   ├── portfolio_service.py   ──► Portfolio data from Alpaca
 │   ├── flow_service.py        ──► Process events for activity feed
 │   ├── system_service.py      ──► System health, autonomy status
-│   ├── stream_parser.py       ──► Parse agent output streams
 │   └── task_manager.py        ──► Background task lifecycle
 │
-└── templates/                  ──► Jinja2 templates (Tailwind + HTMX)
-    ├── base.html              ──► Layout with nav, dark theme
-    ├── dashboard.html         ──► Main dashboard
-    ├── documents/             ──► Document browser + viewer
-    ├── decisions/             ──► Decision list + detail
-    ├── portfolio/             ──► Portfolio views
-    └── ...                    ──► (theses, signals, agents, knowledge, etc.)
+└── templates/ (21 template directories, Tailwind + HTMX, dark theme)
 ```
 
 ---
@@ -640,151 +659,130 @@ src/web/
 
 ---
 
-## 4. Daily Workflow Diagram
+## 4. Daily Workflow Diagram (Updated 2026-03-08)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                              DAILY TRADING WORKFLOW                                     │
+│                         AUTONOMOUS TRADING DAY (Swarm Architecture)                     │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 
-6:00 AM ET ─── scripts/research_prep.py ───────────────────────────────────────────────────
-                    │
-                    ▼
-           ┌───────────────────────────────────────────────────────────────┐
-           │  PRE-COMPUTE (runs before Claude awakens)                     │
-           │                                                               │
-           │  1. Compute features for watchlist                            │
-           │     └─► ~/quant_results/live/research/features.json           │
-           │                                                               │
-           │  2. Run all strategy signals                                  │
-           │     └─► ~/quant_results/live/research/signals.json            │
-           │                                                               │
-           │  3. Aggregate alternative data                                │
-           │     └─► ~/quant_results/live/research/alt_data.json           │
-           │                                                               │
-           │  4. Run stock screens                                         │
-           │     └─► ~/quant_results/live/research/screens.json            │
-           └───────────────────────────────────────────────────────────────┘
+Architecture: cron → athena_scheduler.sh (tmux) → session_wrapper.sh → claude
+Coordination: ~/quant_results/scheduler/ (state, triggers, completions, locks)
 
-6:30 AM ET ─── /morning-briefing ──────────────────────────────────────────────────────────
-                    │
-                    ▼
-           ┌───────────────────────────────────────────────────────────────┐
-           │  CONTEXT GATHERING                                            │
-           │                                                               │
-           │  1. Read unified state (or trigger daemon update)             │
-           │     └─► UnifiedState.load(paths.live_state)                   │
-           │                                                               │
-           │  2. Web search for overnight news                             │
-           │     └─► "stock market news [date]"                            │
-           │     └─► "[sectors in portfolio] sector news"                  │
-           │                                                               │
-           │  3. Review active theses                                      │
-           │     └─► ThesisTracker.get_active_theses()                     │
-           │     └─► Check pending signposts                               │
-           │                                                               │
-           │  4. Check pre-computed research files                         │
-           │                                                               │
-           │  OUTPUT: ~/quant_results/briefings/briefing_YYYYMMDD.json     │
-           └───────────────────────────────────────────────────────────────┘
+ TIME (ET)     LAYER        SESSION                 MODEL    PURPOSE
+─────────────────────────────────────────────────────────────────────────────────────────
 
-7:00 AM ET ─── /trade-decision ────────────────────────────────────────────────────────────
-                    │
-                    ▼
-           ┌───────────────────────────────────────────────────────────────┐
-           │  DECISION SYNTHESIS                                           │
-           │                                                               │
-           │  For each candidate in watchlist:                             │
-           │                                                               │
-           │  1. Check thesis alignment                                    │
-           │     └─► ThesisTracker.get_theses_for_symbol(symbol)           │
-           │                                                               │
-           │  2. Review signal quality                                     │
-           │     └─► watchlist_signals[symbol]                             │
-           │                                                               │
-           │  3. Get knowledge base context                                │
-           │     └─► KnowledgeBase.get_context_for_trade(symbol)           │
-           │                                                               │
-           │  4. Run adversarial analysis                                  │
-           │     └─► AdversarialAgent.challenge(...)                       │
-           │     └─► Adjust confidence based on concerns                   │
-           │                                                               │
-           │  5. Write pre-mortem                                          │
-           │     └─► "It's 30 days later and I lost. What happened?"       │
-           │                                                               │
-           │  6. Log decision                                              │
-           │     └─► DecisionLogger.log_decision(...)                      │
-           │     └─► Link to thesis_id if applicable                       │
-           │                                                               │
-           │  OUTPUT: ~/quant_results/decisions/decisions_YYYYMMDD.json    │
-           └───────────────────────────────────────────────────────────────┘
+ 05:55         Sentinel     sentinel-start           Python   Start monitoring daemon
+                            │  30s heartbeat, zero Claude tokens
+                            │  Maintains situation_board.json
+                            │  6 trigger rules, regime-adaptive intervals
+                            │
 
-9:30 AM ET ─── /execute-trades ────────────────────────────────────────────────────────────
-                    │
-                    ▼
-           ┌───────────────────────────────────────────────────────────────┐
-           │  EXECUTION (Human Approval Required)                          │
-           │                                                               │
-           │  1. Load pending decisions                                    │
-           │     └─► DecisionLogger.get_pending_decisions()                │
-           │                                                               │
-           │  2. Validate against risk limits                              │
-           │     └─► PositionRiskMonitor.validate_trade(...)               │
-           │                                                               │
-           │  3. Check PDT constraints                                     │
-           │     └─► PDTManager.can_day_trade(symbol)                      │
-           │                                                               │
-           │  4. Present for human approval                                │
-           │     └─► Display decision + reasoning + risk                   │
-           │                                                               │
-           │  5. Execute via Alpaca                                        │
-           │     └─► AlpacaBroker.submit_order(...)                        │
-           │                                                               │
-           │  OUTPUT: ~/quant_results/trades/trades_YYYYMMDD.json          │
-           └───────────────────────────────────────────────────────────────┘
+ 06:00         Background   collect_all_data.py      cron     Data collection begins
+                            │  42 sources, every 30 min (--quick) / 2h (full)
+                            │  cron_signal_digest.py every 30 min
+                            │  signpost_monitor.py every 10 min (9am-3pm)
+                            │
 
-Intraday ─── LiveDaemon (background) ──────────────────────────────────────────────────────
-                    │
-                    ▼
-           ┌───────────────────────────────────────────────────────────────┐
-           │  CONTINUOUS MONITORING (every 5 minutes)                      │
-           │                                                               │
-           │  • Update market snapshot                                     │
-           │  • Update portfolio snapshot                                  │
-           │  • Refresh signals                                            │
-           │  • Check alerts                                               │
-           │  • Write to state.json                                        │
-           └───────────────────────────────────────────────────────────────┘
+ 06:30         Deep Agent   /morning-briefing        Opus     Overnight news, thesis review
+                            │  Reads: state.json + situation_board + strategic_context
+                            │  Searches: overnight news, sector developments
+                            │  Reviews: active theses, signpost triggers, belief updates
+                            │  Checks: market movers, signal convergences, price targets
+                            │  Output: ~/quant_results/briefings/briefing_YYYYMMDD.json
+                            │
 
-4:30 PM ET ─── /eod-review ────────────────────────────────────────────────────────────────
-                    │
-                    ▼
-           ┌───────────────────────────────────────────────────────────────┐
-           │  END-OF-DAY ANALYSIS                                          │
-           │                                                               │
-           │  1. Get portfolio performance                                 │
-           │     └─► Compare to SPY, sector benchmarks                     │
-           │                                                               │
-           │  2. Analyze decision outcomes                                 │
-           │     └─► DecisionLogger.get_today_decisions()                  │
-           │     └─► What worked? What didn't?                             │
-           │                                                               │
-           │  3. Extract learnings from closed positions                   │
-           │     └─► LearningLog.create_learning(...)                      │
-           │     └─► Identify patterns                                     │
-           │                                                               │
-           │  4. Update thesis conviction                                  │
-           │     └─► Check signpost triggers                               │
-           │     └─► thesis.update_conviction(new_value, reason)           │
-           │                                                               │
-           │  5. Update knowledge base                                     │
-           │     └─► KnowledgeBase.save_company(updated_brief)             │
-           │                                                               │
-           │  6. Prepare tomorrow's focus                                  │
-           │                                                               │
-           │  OUTPUT: ~/quant_results/eod_reviews/review_YYYYMMDD.json     │
-           │  OUTPUT: ~/quant_results/learnings/2026-01.json (updated)     │
-           └───────────────────────────────────────────────────────────────┘
+ 08:30         Reactive     /operator-session        Opus     Persistent monitoring
+                            │  Reads situation board every check cycle
+                            │  Pushes observations to SessionContext
+                            │  Writes convergences to situation_board.json
+                            │  Runs until 16:05
+                            │
+
+ 09:31         Execution    Scheduled trades                  From previous day's decisions
+                            │
+
+ 10:00         Deep Agent   /trade-decision          Opus     Morning trade pass
+                            │  Step 0: Context builder (track record, calibration)
+                            │  Step 0b: Situation board + strategic context
+                            │  Step 1-3: Thesis alignment, signals, adversarial challenge
+                            │  Step 4: Decision + pre-mortem + price targets
+                            │  Step 4b: Write to situation board
+                            │  Step 7: Auto-create predictions
+                            │  Output: ~/quant_results/decisions/
+                            │
+
+ 10:30         Reactive     /signal-scan             Sonnet   Social signal analysis
+                            │  WSB, Stocktwits, prediction markets
+                            │  LLM analysis of emerging themes
+                            │
+
+ 12:00         Deep Agent   /internal-review         Sonnet   Self-assessment #1
+                            │  Prediction accuracy, signal drift, thesis health
+                            │  Updates strategic_context.json (thesis momentum, patterns)
+                            │
+
+ 12:30         Background   cron_market_movers.py    cron     Midday mover scan (--intraday)
+                            │  ~400 symbols, tighter thresholds (2% day move)
+                            │  Enriches with news, Finviz, WSB, thesis alignment
+                            │  Registers SignalProvenance (source=STATISTICAL)
+                            │
+
+ 13:00         Deep Agent   /trade-decision          Opus     Afternoon trade pass
+                            │
+
+ 14:30         Reactive     /signal-scan             Sonnet   Second social signal pass
+                            │
+
+ 15:00         Deep Agent   /internal-review         Sonnet   Self-assessment #2
+                            │
+
+ 16:05                      Operator stops
+                            │
+
+ 16:30         Deep Agent   /eod-review              Opus     End-of-day analysis
+                            │  Portfolio performance vs SPY, sector benchmarks
+                            │  Decision outcome analysis
+                            │  Learning extraction → ~/quant_results/learnings/
+                            │  Thesis conviction updates
+                            │  Tomorrow's focus areas
+                            │  Output: ~/quant_results/reviews/eod_review_YYYYMMDD.json
+                            │
+
+ 17:10                      Sentinel stops
+ 17:15         Background   cron_prediction_scorer   cron     Score predictions
+ 17:20         Background   cron_market_movers.py    cron     After-close mover scan (broad)
+ 17:30         Background   cron_belief_update       cron     Update signal weights
+
+
+ SUNDAY (Weekly Deep Sessions)
+─────────────────────────────────────────────────────────────────────────────────────────
+ 18:00         Deep Agent   /thesis                  Opus     Weekly thesis review
+ 19:00         Deep Agent   /brainstorm              Sonnet   Strategy and feature ideation
+ 20:00         Deep Agent   /theorist                Opus     Scenario planning, blind spots
+
+
+ CONTINUOUS (Background Daemons)
+─────────────────────────────────────────────────────────────────────────────────────────
+
+ LiveDaemon    every 5 min    Write state.json (market + portfolio + signals)
+ Sentinel      10-60s         Monitor for trigger events, maintain situation board
+ Data cron     every 30 min   collect_all_data.py --quick (news + thesis matching)
+ Data cron     every 2h       collect_all_data.py (full 13-source collection)
+ Digest cron   every 30 min   cron_signal_digest.py (aggregation + convergences)
+ Signpost      every 10 min   signpost_monitor.py (thesis price signpost checks)
+
+
+ EVENT-DRIVEN (Sentinel Triggers)
+─────────────────────────────────────────────────────────────────────────────────────────
+
+ Sentinel detects:             Spawns:
+   convergence (3+ signals)  →  /analyst (Sonnet, 5 min)
+   signpost_hit              →  /analyst
+   position_alert (±5%)      →  /analyst
+   vix_spike (VIX > 30)      →  /analyst
+   regime_change              →  /analyst
+   urgent_news                →  /analyst
 ```
 
 ---
@@ -977,92 +975,56 @@ Intraday ─── LiveDaemon (background) ────────────�
 ~/quant_results/
 │
 ├── live/                          *** THE SOURCE OF TRUTH ***
-│   ├── state.json                 ◄── Read this first!
-│   └── research/
-│       ├── features.json          ◄── Pre-computed features
-│       ├── signals.json           ◄── Strategy signals
-│       ├── alt_data.json          ◄── Alternative data summary
-│       └── screens.json           ◄── Stock screens
+│   ├── state.json                 ◄── Read this first! (market + portfolio + signals)
+│   ├── market_movers_latest.json  ◄── Latest mover scan (50 movers, 231 universe)
+│   ├── news_cache.json            ◄── Cached news with thesis keyword matches
+│   ├── data_cache/                ◄── VIX, put/call, AAII, COT, Fed, earnings cache
+│   └── research/                  ◄── Pre-computed features, signals, screens
 │
-├── theses/                        *** INVESTMENT THESES ***
-│   ├── venezuela_energy.yaml
-│   ├── fed_pivot.yaml
-│   └── ...
+├── athena.db                      *** SQLITE DATABASE (19 tables) ***
+│                                  ◄── decisions, predictions, theses, signposts
+│                                  ◄── documents, insights, experiments
+│                                  ◄── signal_provenance, process_events
+│                                  ◄── agent_runs, llm_interactions
 │
-├── learnings/                     *** TRADE LEARNINGS ***
-│   ├── 2026-01.json               ◄── Monthly learning files
-│   ├── 2025-12.json
-│   └── ...
+├── scheduler/                     *** SWARM COORDINATION (Added 2026-03-06) ***
+│   ├── situation_board.json       ◄── Same-day shared memory (sentinel → all)
+│   ├── strategic_context.json     ◄── Multi-day persistent memory (reviewer → all)
+│   ├── signal_digest.json         ◄── Aggregated signals with convergences
+│   ├── scheduler_state.json       ◄── Session lifecycle tracking
+│   ├── trade_triggers.json        ◄── Convergences awaiting trade decisions
+│   ├── completions/               ◄── Session completion records
+│   └── locks/                     ◄── Session mutex locks
 │
-├── knowledge/                     *** PERSISTENT KNOWLEDGE ***
-│   ├── companies/
-│   │   ├── SLB.yaml
-│   │   ├── HAL.yaml
-│   │   └── ...
-│   └── sectors/
-│       ├── energy.yaml
-│       ├── technology.yaml
-│       └── ...
+├── theses/                        *** INVESTMENT THESES (YAML, dual-write to DB) ***
 │
-├── decisions/                     *** TRADING DECISIONS ***
-│   ├── decisions_2026-01-06.json
-│   ├── decisions_2026-01-07.json
-│   └── ...
+├── intelligence/                  *** COMPOUNDING INTELLIGENCE (Added 2026-03-01) ***
+│   ├── calibration.json           ◄── Confidence calibration bins
+│   ├── metrics_history.jsonl      ◄── Daily performance metrics
+│   └── daily_update_*.json        ◄── Belief update reports
 │
+├── signal_provenance/             *** SIGNAL TRACKING (22 active signals) ***
+│
+├── decisions/                     *** TRADING DECISIONS (JSON per day) ***
 ├── briefings/                     *** MORNING BRIEFINGS ***
-│   ├── briefing_20260106.json
-│   └── ...
+├── reviews/                       *** Internal + EOD reviews ***
+├── learnings/                     *** MONTHLY TRADE LEARNINGS ***
+├── knowledge/                     *** COMPANY/SECTOR BRIEFS ***
 │
-├── eod_reviews/                   *** END-OF-DAY REVIEWS ***
-│   ├── review_20260106.json
-│   └── ...
+├── social/                        *** SOCIAL SIGNAL TRACKING ***
+│   ├── wsb.db                     ◄── WSB mention database
+│   ├── wsb_signals.json           ◄── Latest WSB signals
+│   └── social_timeseries.db       ◄── Social mention time series
 │
-├── trades/                        *** EXECUTION RECORDS ***
-│   ├── trades_2026-01-06.json
-│   └── ...
+├── scraped_data/finviz/           *** FINVIZ SCREEN CACHE ***
+│   └── screens_latest.json        ◄── 8 screens, sorted by relevance
 │
-├── pdt/                           *** PDT STATE ***
-│   └── pdt_state.json
+├── logs/                          *** OPERATIONAL LOGS ***
+│   ├── operator_log.jsonl
+│   ├── sentinel.log
+│   └── market_movers.log
 │
-├── text_corpus/                   *** TEXT RESEARCH CORPUS ***
-│   ├── corpus.duckdb             ◄── DuckDB with documents
-│   └── embeddings/               ◄── Embedding cache
-│
-├── features/                      *** FEATURE STORE ***
-│   └── features.duckdb           ◄── DuckDB with features
-│
-├── realtime/                      *** INTRADAY DATA ***
-│   ├── news/
-│   ├── technicals/
-│   ├── breadth/
-│   ├── sentiment/
-│   └── alerts/
-│
-├── comprehensive_research/        *** RESEARCH RESULTS ***
-│   ├── research_session_*.json
-│   └── ...
-│
-├── validation_reports/            *** VALIDATION REPORTS ***
-│   ├── validation_*.json
-│   └── ...
-│
-├── research_results/              *** WEB RESEARCH OUTPUT ***
-│   ├── research_*.json            ◄── Auto-indexed in documents table
-│   └── ...
-│
-├── research_tracker/              *** SESSION TRACKER ***
-│   ├── insights.json              ◄── 112+ research insights (indexed)
-│   └── experiments.json           ◄── 61+ strategy experiments (indexed)
-│
-├── athena.db                      *** SQLITE DATABASE (18 tables) ***
-│                                  ◄── documents, insights, experiments tables
-│                                  ◄── theses, decisions, learnings
-│                                  ◄── agent_runs, data_sources
-│
-└── social/                        *** SOCIAL SIGNAL TRACKING ***
-    ├── wsb.db
-    ├── wsb_signals.json
-    └── social_timeseries.db
+└── research_results/              *** AUTO-INDEXED RESEARCH OUTPUT ***
 ```
 
 ---
@@ -1924,4 +1886,5 @@ Sunday ──── cron_weekly_improvement_review.py ────────�
 *Updated: 2026-01-20 - Added Hedge Fund Expansion (15 modules, 5,700 lines)*
 *Updated: 2026-01-20 - Added Monitoring & Operator Layer (6 modules, 3,100+ lines)*
 *Updated: 2026-03-01 - Added Compounding Intelligence Layer (predictions, context builder, belief updater)*
+*Updated: 2026-03-08 - Rewrote high-level architecture (swarm), daily workflow, module map, storage layout, web layer*
 *This document should be updated when major architectural changes are made.*
