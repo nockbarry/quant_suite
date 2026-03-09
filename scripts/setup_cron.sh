@@ -23,7 +23,7 @@ install_cron() {
     echo "Note: Squeeze, news, sector rotation, legal/geo are handled by collect_all_data.py"
 
     # Get existing crontab (without our entries)
-    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | grep -v "trading_day.sh" | grep -v "cron_squeeze_scan" | grep -v "cron_news_collect" | grep -v "collect_all_data" | grep -v "signpost_monitor" | grep -v "cron_trade_wrapper" | grep -v "archive_daily_signals" | grep -v "run_day_trading_signals" | grep -v "cron_weekly_improvement" | grep -v "cron_signal_digest" | grep -v "sector_rotation" | grep -v "legal_tracker" | grep -v "geopolitical")
+    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_MARKER" | grep -v "trading_day.sh" | grep -v "cron_squeeze_scan" | grep -v "cron_news_collect" | grep -v "collect_all_data" | grep -v "signpost_monitor" | grep -v "cron_trade_wrapper" | grep -v "archive_daily_signals" | grep -v "run_day_trading_signals" | grep -v "cron_weekly_improvement" | grep -v "cron_signal_digest" | grep -v "cron_market_movers" | grep -v "sector_rotation" | grep -v "legal_tracker" | grep -v "geopolitical")
 
     # Create new crontab — consolidated from 13 entries to 8
     {

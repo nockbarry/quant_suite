@@ -30,7 +30,11 @@ LOG_DIR="$HOME/quant_results/logs"
 mkdir -p "$SCHEDULER_DIR/locks" "$SCHEDULER_DIR/completions" "$LOG_DIR"
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [scheduler] $*" | tee -a "$LOG_DIR/scheduler.log"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [scheduler] $*"
+    echo "$msg" >> "$LOG_DIR/scheduler.log"
+    # Only print to stdout if running interactively (avoids double-write when cron
+    # redirects stdout to the same scheduler.log)
+    [ -t 1 ] && echo "$msg"
 }
 
 # --- Setup ---
