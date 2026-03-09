@@ -34,7 +34,7 @@ log() {
     echo "$msg" >> "$LOG_DIR/scheduler.log"
     # Only print to stdout if running interactively (avoids double-write when cron
     # redirects stdout to the same scheduler.log)
-    [ -t 1 ] && echo "$msg"
+    [ -t 1 ] && echo "$msg" || true
 }
 
 # --- Setup ---

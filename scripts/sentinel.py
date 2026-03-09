@@ -264,6 +264,8 @@ class Sentinel:
         self.last_news_count: int = 0
         self.check_count = 0
         self.logged_alert_titles: set[str] = set()  # Track which alert types have been logged
+        self._last_analyst_launch: float = 0  # Cooldown: min 5 min between analyst launches
+        self._analyst_trigger_keys: set[str] = set()  # Dedup triggers within a day
 
     def run_check(self) -> dict:
         """Run a single sentinel check cycle.
@@ -318,7 +320,15 @@ class Sentinel:
 
         # 6. Queue analysis requests and spawn analyst if needed
         if triggers_fired:
+            # Dedup: only queue triggers we haven't seen today
+            new_triggers = []
             for trigger in triggers_fired:
+                key = f"{trigger['type']}:{','.join(sorted(trigger.get('symbols', [])))}"
+                if key not in self._analyst_trigger_keys:
+                    self._analyst_trigger_keys.add(key)
+                    new_triggers.append(trigger)
+
+            for trigger in new_triggers:
                 self.board.add_analysis_request(
                     trigger=trigger["type"],
                     context=trigger["context"],
@@ -329,7 +339,11 @@ class Sentinel:
                     text=f"[{trigger['type']}] {trigger['context'][:100]}",
                     symbols=trigger.get("symbols", []),
                 )
-            launch_analyst()
+
+            # Cooldown: min 5 minutes between analyst launches
+            if new_triggers and (time.time() - self._last_analyst_launch) > 300:
+                if launch_analyst():
+                    self._last_analyst_launch = time.time()
 
         # 7. Handle trade triggers (from operator or other sessions)
         if trade_triggers:
