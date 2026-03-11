@@ -231,6 +231,9 @@ report = {
     "overall_status": "healthy|warning|critical",
     "action_items": [<prioritized list of things to fix>],
     "actions_taken": [<list of auto-fixes applied in Step 3b>],
+    "resolved_items": [<previous action items that were addressed>],
+    "unresolved_items": [<previous action items still open>],
+    "board_alerts_pushed": <number of alerts pushed to situation board>,
 }
 
 reviews_dir = Path.home() / "quant_results" / "reviews"
@@ -238,6 +241,90 @@ reviews_dir.mkdir(parents=True, exist_ok=True)
 filename = f"internal_review_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
 with open(reviews_dir / filename, "w") as f:
     json.dump(report, f, indent=2)
+```
+
+### Step 5b: Check Previous Review Action Items
+
+**Before writing this review, check what action items were flagged last time and whether they were addressed:**
+
+```bash
+PYTHONPATH=. python3 -c "
+from pathlib import Path
+import json
+from datetime import datetime
+
+reviews_dir = Path.home() / 'quant_results' / 'reviews'
+review_files = sorted(reviews_dir.glob('internal_review_*.json'), key=lambda p: p.name, reverse=True)
+
+if len(review_files) >= 1:
+    # Read previous review
+    prev_file = review_files[0]  # most recent existing review
+    with open(prev_file) as f:
+        prev = json.load(f)
+
+    prev_items = prev.get('action_items', [])
+    prev_actions = prev.get('actions_taken', [])
+    prev_status = prev.get('overall_status', '?')
+
+    print(f'=== PREVIOUS REVIEW ({prev_file.stem}) ===')
+    print(f'Status: {prev_status}')
+
+    if prev_items:
+        print(f'Action items ({len(prev_items)}):')
+        for item in prev_items:
+            print(f'  [ ] {item[:80]}')
+        print()
+        print('Check each item: was it addressed? Flag unresolved items in this review.')
+
+    if prev_actions:
+        print(f'Auto-actions taken: {len(prev_actions)}')
+        for a in prev_actions:
+            print(f'  [x] {a[:80]}')
+else:
+    print('No previous review found — this is the first run')
+"
+```
+
+**Track action item resolution:** In Step 5's report, include a `resolved_items` field listing which previous action items were addressed and which remain open. This creates accountability across reviews.
+
+### Step 5c: Push Critical Issues to Situation Board
+
+**If this review finds critical or warning-level issues, push them to the situation board so the operator and trade-decision sessions can see them immediately:**
+
+```bash
+PYTHONPATH=. python3 -c "
+from src.swarm.situation_board import SituationBoard
+
+board = SituationBoard.load_or_create()
+
+# Push if overall status is 'warning' or 'critical'
+# (Fill in based on review findings from Steps 1-4)
+#
+# board.add_observation(
+#     source='internal-review',
+#     obs_type='system_alert',
+#     text='<critical finding that affects trading decisions>',
+#     symbols=[],
+# )
+#
+# Example: prediction accuracy dropped
+# board.add_observation(
+#     source='internal-review',
+#     obs_type='system_alert',
+#     text='WARNING: 7-day prediction accuracy dropped to 35% — reduce confidence in new trades',
+#     symbols=[],
+# )
+#
+# Example: stale data
+# board.add_observation(
+#     source='internal-review',
+#     obs_type='data_alert',
+#     text='STALE: state.json is 45 minutes old — daemon may need restart',
+#     symbols=[],
+# )
+
+board.save()
+"
 ```
 
 ### Step 6: Update Strategic Context

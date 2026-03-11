@@ -78,6 +78,91 @@ EOF
 
 Use this context to understand what's already happened today and what multi-day patterns are developing. Avoid duplicating decisions already made today. Factor developing patterns and upcoming catalysts into your trade analysis.
 
+### Step 0c: Read Analyst Assessments & Theorist Insights
+
+**CRITICAL: Consume upstream session outputs before making decisions.**
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.swarm.situation_board import SituationBoard
+from src.swarm.strategic_context import StrategicContext
+
+board = SituationBoard.load()
+
+# 1. Read analyst assessments from today (triggered by sentinel events)
+print("=== ANALYST ASSESSMENTS (Today) ===")
+assessments = [obs for obs in board.data.get("today_observations", [])
+               if obs.get("source") == "analyst" or obs.get("obs_type") == "assessment"]
+if assessments:
+    for a in assessments:
+        symbols = ", ".join(a.get("symbols", []))
+        print(f"  [{a['time']}] {a['text'][:120]}")
+        if symbols:
+            print(f"    Symbols: {symbols}")
+        if a.get("action"):
+            print(f"    Recommendation: {a['action']}")
+else:
+    print("  (No analyst assessments today)")
+
+# 2. Read theorist blind spots and scenario analysis from strategic context
+ctx = StrategicContext.load()
+print("\n=== THEORIST BLIND SPOTS ===")
+blind_spots = ctx.data.get("blind_spots", [])
+if blind_spots:
+    for bs in blind_spots[:5]:
+        print(f"  - {bs.get('description', bs) if isinstance(bs, dict) else bs}")
+else:
+    print("  (No blind spots flagged)")
+
+print("\n=== THEORIST SCENARIOS ===")
+scenarios = ctx.data.get("scenarios", [])
+if scenarios:
+    for s in scenarios[:3]:
+        print(f"  [{s.get('probability', '?')}] {s.get('name', '?')}: {s.get('description', '')[:80]}")
+else:
+    print("  (No active scenarios)")
+
+# 3. Read evening-research findings from last night
+print("\n=== EVENING RESEARCH FINDINGS ===")
+from pathlib import Path
+from datetime import datetime, timedelta
+import json
+
+reviews_dir = Path.home() / "quant_results" / "reviews"
+yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+today = datetime.now().strftime("%Y%m%d")
+
+for date_str in [today, yesterday]:
+    report_path = reviews_dir / f"evening_research_{date_str}.json"
+    if report_path.exists():
+        with open(report_path) as f:
+            report = json.load(f)
+        findings = report.get("web_findings", [])
+        actionable = [f for f in findings if f.get("actionable")]
+        if actionable:
+            print(f"  Actionable findings ({date_str}):")
+            for finding in actionable[:5]:
+                print(f"    - [{finding.get('topic', '?')}] {finding.get('finding', '')[:80]}")
+                if finding.get("affected_theses"):
+                    print(f"      Theses: {', '.join(finding['affected_theses'])}")
+                if finding.get("conviction_impact") != "neutral":
+                    print(f"      Conviction: {finding.get('conviction_impact', '?')}")
+        watch = report.get("tomorrow_watch", [])
+        if watch:
+            print(f"  Tomorrow watch list:")
+            for w in watch[:5]:
+                print(f"    - {w[:80]}")
+        break
+else:
+    print("  (No evening research report found)")
+EOF
+```
+
+**Factor these upstream insights into your decisions:**
+- If an analyst flagged a symbol as `recommend_trade`, prioritize analyzing it
+- If the theorist flagged blind spots, address them explicitly in your reasoning
+- If evening research found actionable news, check if it changes thesis conviction
+
 ### Step 1: Load Context
 
 ```bash

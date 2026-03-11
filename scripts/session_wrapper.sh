@@ -89,7 +89,7 @@ is_market_day() {
 
 # Skip non-market days for trading sessions (allow research/thesis/brainstorm/research-theory/theorist on any day)
 case "$SESSION_TYPE" in
-    morning-briefing|trade-decision|eod-review|operator|analyst)
+    morning-briefing|trade-decision|eod-review|operator|analyst|evening-research)
         if ! is_market_day; then
             log "Not a market day, skipping $SESSION_TYPE"
             exit 0
@@ -322,6 +322,8 @@ get_timeout() {
         internal-review)   echo 10 ;;
         analyst)           echo 5 ;;
         theorist)          echo 15 ;;
+        evening-research)  echo 15 ;;
+        hypothesis-gen)    echo 15 ;;
         operator)          echo 480 ;;  # 8 hours
         *)                 echo 15 ;;
     esac
@@ -334,12 +336,14 @@ get_model() {
         eod-review)        echo "opus" ;;
         research)          echo "sonnet" ;;
         thesis)            echo "sonnet" ;;
-        brainstorm)        echo "sonnet" ;;
+        brainstorm)        echo "opus" ;;
         signal-scan)       echo "sonnet" ;;
         research-theory)   echo "sonnet" ;;
         internal-review)   echo "sonnet" ;;
         analyst)           echo "sonnet" ;;
         theorist)          echo "opus" ;;
+        evening-research)  echo "opus" ;;
+        hypothesis-gen)    echo "opus" ;;
         operator)          echo "opus" ;;
         *)                 echo "sonnet" ;;
     esac
@@ -358,6 +362,8 @@ get_skill_prompt() {
         internal-review)   echo "/internal-review" ;;
         analyst)           echo "/analyst" ;;
         theorist)          echo "/theorist" ;;
+        evening-research)  echo "/evening-research" ;;
+        hypothesis-gen)    echo "/hypothesis-gen" ;;
         *)                 echo "" ;;
     esac
 }
@@ -426,13 +432,15 @@ if [ "$SESSION_TYPE" = "operator" ]; then
     # Operator is long-running — runs with -p but the autonomous prompt
     # instructs Claude to implement a persistent monitoring loop with sleep
     # between checks. The 8-hour timeout acts as the outer boundary.
+    # Use unique timestamp suffix to prevent Claude from detecting "stale task"
+    # when a previous operator session completed earlier the same day.
     log "Launching operator session (persistent loop via autonomous prompt)"
 
     timeout --foreground "${TIMEOUT}m" claude \
         --model "$MODEL" \
         --dangerously-skip-permissions \
         --append-system-prompt "$(cat "$PROMPT_FILE")" \
-        -p "/operator-session --active" \
+        -p "/operator-session --active --session=$(date +%s)" \
         2>&1 | tee -a "$LOG_FILE" || true
 
     log "Operator session ended"

@@ -354,8 +354,14 @@ class Sentinel:
                     consume_trade_triggers(symbols)
 
         # 8. Health actions
+        # Only restart operator AFTER 8:30 AM — before that, the 8:30 cron handles
+        # the initial launch. Restarting too early causes "stale task" when the
+        # cron tries to launch at 8:30.
         actions_taken = []
-        if not operator_alive and is_market_hours():
+        now_hour = datetime.now().hour
+        now_min = datetime.now().minute
+        operator_should_be_running = (now_hour > 8 or (now_hour == 8 and now_min >= 35))
+        if not operator_alive and is_market_hours() and operator_should_be_running:
             if restart_operator():
                 actions_taken.append("restarted_operator")
 

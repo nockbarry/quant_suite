@@ -213,6 +213,19 @@ class LiveDaemon:
             positions = []
             missing_components.append('positions')
 
+        # Fix: Update portfolio.total_positions from actual positions count
+        if positions and hasattr(portfolio, 'total_positions'):
+            portfolio.total_positions = len(positions)
+            # Also compute market exposure
+            if portfolio.equity > 0:
+                total_market_value = sum(
+                    abs(float(getattr(p, 'market_value', 0) or 0))
+                    for p in positions
+                )
+                portfolio.market_exposure_pct = round(
+                    (total_market_value / portfolio.equity) * 100, 2
+                )
+
         try:
             risk = await self._get_risk_snapshot()
             component_timestamps['risk'] = now

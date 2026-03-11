@@ -408,6 +408,22 @@ class StrategicContext:
         if untested:
             parts.append(f"Untested hypotheses: {len(untested)}")
 
+        # Blind spots (from theorist)
+        blind_spots = self.data.get("blind_spots", [])
+        if blind_spots:
+            high = [bs for bs in blind_spots if isinstance(bs, dict) and bs.get("risk_level") == "high"]
+            if high:
+                bs_texts = [bs["description"][:50] for bs in high[:2]]
+                parts.append(f"HIGH RISK blind spots: {', '.join(bs_texts)}")
+
+        # Scenarios (from theorist)
+        scenarios = self.data.get("scenarios", [])
+        if scenarios:
+            high_prob = [s for s in scenarios if isinstance(s, dict) and s.get("probability") == "high"]
+            if high_prob:
+                sc_texts = [s["name"] for s in high_prob[:2]]
+                parts.append(f"High-probability scenarios: {', '.join(sc_texts)}")
+
         # Open questions
         questions = self.data.get("open_questions", [])
         if questions:

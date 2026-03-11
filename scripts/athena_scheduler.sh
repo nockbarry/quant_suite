@@ -145,7 +145,7 @@ cmd_operator_stop() {
 cmd_oneshot() {
     local SESSION_TYPE="${1:-}"
     if [ -z "$SESSION_TYPE" ]; then
-        echo "Usage: athena_scheduler.sh oneshot <morning-briefing|trade-decision|eod-review|research|thesis|brainstorm>"
+        echo "Usage: athena_scheduler.sh oneshot <morning-briefing|trade-decision|eod-review|research|thesis|brainstorm|evening-research>"
         exit 1
     fi
 
@@ -156,6 +156,44 @@ cmd_oneshot() {
 
     local DATE=$(date '+%Y%m%d')
     local LOG_FILE="$LOG_DIR/claude_${SESSION_TYPE}_${DATE}.log"
+
+    # Check if the session_wrapper lock file already exists (another session running)
+    local LOCK_FILE="$SCHEDULER_DIR/locks/${SESSION_TYPE}.lock"
+    if [ -f "$LOCK_FILE" ]; then
+        local LOCK_PID
+        LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+        if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+            log "Session $SESSION_TYPE already running (PID $LOCK_PID), skipping"
+            return 0
+        fi
+    fi
+
+    # Wait for the oneshot pane to be idle (not running a previous session)
+    # This prevents tmux send-keys from being swallowed by a busy shell
+    local wait_count=0
+    while [ $wait_count -lt 30 ]; do
+        # Check if any other oneshot session_wrapper is running
+        local running_wrapper
+        running_wrapper=$(pgrep -f "session_wrapper.sh" 2>/dev/null | while read wpid; do
+            # Don't count the operator wrapper
+            if grep -q "operator" /proc/$wpid/cmdline 2>/dev/null; then
+                continue
+            fi
+            echo "$wpid"
+        done | head -1)
+        if [ -z "$running_wrapper" ]; then
+            break
+        fi
+        wait_count=$((wait_count + 1))
+        if [ $wait_count -eq 1 ]; then
+            log "Waiting for previous oneshot session to finish..."
+        fi
+        sleep 2
+    done
+
+    if [ $wait_count -ge 30 ]; then
+        log "WARNING: Previous oneshot still running after 60s, proceeding anyway"
+    fi
 
     log "Starting one-shot session: $SESSION_TYPE"
 

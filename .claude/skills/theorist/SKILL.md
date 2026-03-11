@@ -237,6 +237,8 @@ Write each hypothesis with a clear test plan.
 
 ### Step 6: Update Strategic Context
 
+**CRITICAL: Write blind spots and scenarios in structured format so trade-decision and hypothesis-gen can consume them.**
+
 ```bash
 PYTHONPATH=. python3 -c "
 from src.swarm.strategic_context import StrategicContext
@@ -244,7 +246,23 @@ from datetime import datetime
 
 ctx = StrategicContext.load()
 
-# Add developing patterns found in Steps 2-3
+# 1. Save blind spots — trade-decision reads these in Step 0c
+# ctx.data.setdefault('blind_spots', [])
+# ctx.data['blind_spots'] = [
+#     {'description': '<unhedged risk or missing exposure>', 'risk_level': 'high|medium|low',
+#      'recommendation': '<what to do about it>', 'updated': datetime.now().isoformat()},
+# ]
+
+# 2. Save scenarios — trade-decision reads these in Step 0c
+# ctx.data.setdefault('scenarios', [])
+# ctx.data['scenarios'] = [
+#     {'name': '<scenario name>', 'probability': '<high|medium|low>',
+#      'description': '<what happens>', 'portfolio_impact': '<estimated impact>',
+#      'trades_if_materializes': ['<trade 1>', '<trade 2>'],
+#      'updated': datetime.now().isoformat()},
+# ]
+
+# 3. Add developing patterns found in Steps 2-3
 # ctx.add_developing_pattern(
 #     name='<pattern name>',
 #     evidence='<what you observed>',
@@ -252,7 +270,7 @@ ctx = StrategicContext.load()
 #     affected_theses=['<thesis1>', '<thesis2>'],
 # )
 
-# Add catalysts identified in Step 4
+# 4. Add catalysts identified in Step 4
 # ctx.add_catalyst(
 #     date='YYYY-MM-DD',
 #     event='<event description>',
@@ -261,20 +279,26 @@ ctx = StrategicContext.load()
 #     scenario_bear='<bear case>',
 # )
 
-# Add research hypotheses from Step 5
+# 5. Add research hypotheses from Step 5
 # ctx.add_research_hypothesis(
 #     hypothesis='<testable hypothesis>',
 #     suggested_by='theorist',
 #     test_plan='<how to test it>',
 # )
 
-# Add open strategic questions
+# 6. Add open strategic questions
 # ctx.add_open_question('<question that needs ongoing monitoring>')
 
 ctx.save()
 print('Strategic context updated by theorist')
 "
 ```
+
+**Downstream consumers of theorist outputs:**
+- **trade-decision Step 0c**: Reads `blind_spots` and `scenarios` to factor into decision reasoning
+- **hypothesis-gen Step 2**: Converts blind spots into testable hypotheses, de-dups with existing scenarios
+- **morning-briefing**: Shows developing patterns and upcoming catalysts
+- **internal-review Step 6**: Tracks pattern evolution over time
 
 ### Step 7: Write Theorist Report
 

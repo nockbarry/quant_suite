@@ -72,6 +72,95 @@ asyncio.run(main())
 EOF
 ```
 
+## Previous Session Insights (Cross-Session Learning)
+
+**CRITICAL: Start by reading what yesterday's EOD review and evening research discovered.**
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+import json
+from pathlib import Path
+from datetime import datetime, timedelta
+
+reviews_dir = Path.home() / "quant_results" / "reviews"
+eod_dir = Path.home() / "quant_results" / "eod_reviews"
+yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+
+# 1. Yesterday's EOD review — learnings, thesis updates, tomorrow's focus
+print("=== YESTERDAY'S EOD REVIEW ===")
+eod_path = eod_dir / f"review_{yesterday}.json"
+if eod_path.exists():
+    with open(eod_path) as f:
+        eod = json.load(f)
+    pnl = eod.get("account", {}).get("day_pnl_pct", 0)
+    print(f"  Day P&L: {pnl:+.2f}%")
+    for learning in eod.get("learnings_extracted", []):
+        print(f"  Learning: [{learning.get('pattern', '?')}] {learning.get('summary', '')[:80]}")
+    for update in eod.get("thesis_updates", []):
+        print(f"  Thesis: {update.get('thesis', '?')} {update.get('old_conviction', '?')}% -> {update.get('new_conviction', '?')}% ({update.get('reason', '')[:50]})")
+    print(f"  Focus for today:")
+    for item in eod.get("tomorrow_focus", []):
+        print(f"    - {item[:80]}")
+else:
+    print("  (No EOD review from yesterday)")
+
+# 2. Evening research — web findings, hypotheses, watch items
+print("\n=== EVENING RESEARCH FINDINGS ===")
+er_path = reviews_dir / f"evening_research_{yesterday}.json"
+if er_path.exists():
+    with open(er_path) as f:
+        er = json.load(f)
+    for finding in er.get("web_findings", []):
+        if finding.get("actionable"):
+            icon = "UP" if finding.get("conviction_impact") == "up" else "DOWN" if finding.get("conviction_impact") == "down" else "--"
+            print(f"  [{icon}] {finding.get('topic', '?')}: {finding.get('finding', '')[:80]}")
+            if finding.get("affected_theses"):
+                print(f"       Theses: {', '.join(finding['affected_theses'])}")
+    rss_gaps = er.get("rss_gaps", [])
+    if rss_gaps:
+        print(f"  RSS gaps (web-only): {len(rss_gaps)} items found via web that RSS missed")
+    for h in er.get("hypotheses", []):
+        print(f"  Hypothesis: {h.get('hypothesis', '')[:80]}")
+    watch = er.get("tomorrow_watch", [])
+    if watch:
+        print(f"  Watch today:")
+        for w in watch:
+            print(f"    - {w[:80]}")
+else:
+    print("  (No evening research from yesterday)")
+
+# 3. Internal review action items (latest)
+print("\n=== INTERNAL REVIEW ACTION ITEMS ===")
+review_files = sorted(reviews_dir.glob("internal_review_*.json"), key=lambda p: p.name, reverse=True)
+if review_files:
+    with open(review_files[0]) as f:
+        review = json.load(f)
+    items = review.get("action_items", [])
+    status = review.get("overall_status", "?")
+    print(f"  Status: {status} ({review_files[0].stem})")
+    for item in items[:5]:
+        print(f"  - {item[:80]}")
+else:
+    print("  (No internal review found)")
+
+# 4. Strategic context developing patterns (multi-day accumulation)
+from src.swarm.strategic_context import StrategicContext
+ctx = StrategicContext.load()
+patterns = ctx.data.get("developing_patterns", [])
+if patterns:
+    print(f"\n=== DEVELOPING PATTERNS ({len(patterns)}) ===")
+    for p in patterns[:5]:
+        days = p.get("days_active", 0)
+        print(f"  [{days}d] {p.get('name', '?')}: {p.get('interpretation', '')[:80]}")
+EOF
+```
+
+**Use these insights to:**
+- Prioritize items from yesterday's "focus for today" list
+- Check if evening research findings need immediate action
+- Address any internal review action items
+- Monitor developing multi-day patterns
+
 ## Belief Update Review (Intelligence Loop)
 
 Read yesterday's belief update report and calibration data to start the day informed:

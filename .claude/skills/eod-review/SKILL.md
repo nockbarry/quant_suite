@@ -377,6 +377,65 @@ Review saved to: /home/nock/quant_results/eod_reviews/review_20260106.json
 Learning saved to: /home/nock/quant_results/learnings/2026-01.json
 ```
 
+## Step 5b: Propagate Learnings to Strategic Context & Situation Board
+
+**CRITICAL: Push today's learnings to shared memory so downstream sessions benefit.**
+
+After extracting learnings in Steps 3-5, propagate key findings:
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.swarm.strategic_context import StrategicContext
+from src.swarm.situation_board import SituationBoard
+
+ctx = StrategicContext.load()
+board = SituationBoard.load_or_create()
+
+# 1. Push significant learnings as developing patterns
+# (Fill these in from learnings extracted in Step 3)
+# For each learning with a pattern_name, add to strategic context:
+#
+# ctx.add_developing_pattern(
+#     name="<pattern_name from learning>",
+#     evidence="<what_happened summary>",
+#     interpretation="<how_this_changes_approach>",
+#     affected_theses=["<thesis names>"],
+# )
+
+# 2. Push today's P&L and key observations to situation board
+# board.add_observation(
+#     source="eod-review",
+#     obs_type="daily_summary",
+#     text=f"Day P&L: ${day_pnl:+,.0f} ({day_pnl_pct:+.2f}%). <key insight>",
+#     symbols=["<symbols discussed>"],
+# )
+
+# 3. Push thesis conviction changes to strategic context momentum
+# (These were already tracked in Step 4 via ThesisTracker, but
+#  also update strategic context for cross-session awareness)
+# ctx.update_thesis_momentum("<thesis_name>", <new_conviction>)
+
+# 4. Push tomorrow's focus items as upcoming catalysts
+# for item in tomorrow_focus:
+#     if it references a specific date/event:
+#         ctx.add_catalyst(
+#             date="<date>",
+#             event=item,
+#             affected=["<symbols>"],
+#         )
+
+ctx.save()
+board.save()
+print("Learnings propagated to strategic context and situation board")
+EOF
+```
+
+**What this enables:**
+- Morning briefing reads yesterday's learnings from strategic context (not just learning log files)
+- Trade decisions see developing patterns from accumulated EOD insights
+- Internal reviews track pattern evolution over multiple days
+- Theorist sees real performance outcomes, not just predictions
+
 ## Step 6: Score Predictions & Run Belief Update (Intelligence Loop)
 
 **CRITICAL: This closes the feedback loop.** Score today's predictions and update beliefs.
