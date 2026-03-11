@@ -127,6 +127,70 @@ day_pnl_pct = (day_pnl / last_equity) * 100
 print(f"Today's P&L: ${day_pnl:+,.2f} ({day_pnl_pct:+.2f}%)")
 ```
 
+### Step 1b: Thesis P&L Attribution
+
+**CRITICAL: Break down today's P&L by thesis to understand WHAT drove performance.**
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+import json
+from pathlib import Path
+
+state_path = Path.home() / "quant_results" / "live" / "state.json"
+with open(state_path) as f:
+    state = json.load(f)
+
+thesis_perf = state.get("thesis_performance", {})
+if thesis_perf:
+    print("=== THESIS P&L ATTRIBUTION ===")
+    print(f"{'Thesis':<35s} {'Day P&L':>10s} {'Total P&L':>10s} {'Weight':>8s} {'Pos':>4s} {'Best':>8s} {'Worst':>8s}")
+    print("─" * 95)
+
+    sorted_theses = sorted(thesis_perf.values(), key=lambda t: t.get("day_pnl", 0), reverse=True)
+    total_day = 0
+    total_pnl = 0
+
+    for tp in sorted_theses:
+        name = tp.get("thesis_name", "?")[:34]
+        day = tp.get("day_pnl", 0)
+        total = tp.get("total_pnl", 0)
+        weight = tp.get("weight_in_portfolio_pct", 0)
+        pos_count = tp.get("position_count", 0)
+        best = tp.get("best_performer_pnl_pct", 0)
+        worst = tp.get("worst_performer_pnl_pct", 0)
+        total_day += day
+        total_pnl += total
+        print(f"  {name:<34s} ${day:>+8,.0f} ${total:>+8,.0f} {weight:>6.1f}% {pos_count:>4d} {best:>+6.1f}% {worst:>+6.1f}%")
+
+    print("─" * 95)
+    print(f"  {'TOTAL':<34s} ${total_day:>+8,.0f} ${total_pnl:>+8,.0f}")
+
+    # Flag divergences > 15% within a thesis (equal weight violation)
+    print("\n=== DIVERGENCE ALERTS ===")
+    for tp in sorted_theses:
+        div = tp.get("divergence_pct", 0)
+        if div > 15 and tp.get("position_count", 0) >= 2:
+            print(f"  WARNING: {tp['thesis_name']}: {div:.0f}% divergence between best/worst")
+            print(f"    Best: {tp.get('best_performer', '?')} ({tp.get('best_performer_pnl_pct', 0):+.1f}%)")
+            print(f"    Worst: {tp.get('worst_performer', '?')} ({tp.get('worst_performer_pnl_pct', 0):+.1f}%)")
+else:
+    print("No thesis performance data in state.json. Daemon may need to run.")
+
+# Orphan positions (not in any thesis)
+positions = state.get("positions", [])
+orphans = [p for p in positions if not p.get("thesis_id")]
+if orphans:
+    orphan_pnl = sum(p.get("day_pnl", 0) for p in orphans)
+    print(f"\n=== ORPHAN POSITIONS ({len(orphans)}) ===")
+    print(f"  Day P&L from orphans: ${orphan_pnl:+,.0f}")
+    for p in sorted(orphans, key=lambda x: abs(x.get("day_pnl", 0)), reverse=True)[:5]:
+        print(f"  {p['symbol']:>6s} ${p.get('day_pnl', 0):>+8,.0f} ({p.get('day_pnl_pct', 0):+.1f}%)")
+    print(f"  ... consider assigning these to theses")
+EOF
+```
+
+Include this thesis breakdown in the EOD report JSON under `thesis_attribution`.
+
 ### Step 2: Decision Outcome Analysis
 
 For each decision made today:

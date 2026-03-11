@@ -26,11 +26,12 @@ DEEP AGENTS (Claude, scheduled, 10-20 min)
   Researcher ─ Test hypotheses, discover patterns (Sonnet)
 ```
 
-Sessions share context through two memory files:
+Sessions share context through structured memory files:
 - **Situation Board** (`situation_board.json`) — Same-day shared memory. Observations, market state, portfolio alerts, analysis requests. Auto-resets daily.
-- **Strategic Context** (`strategic_context.json`) — Multi-day persistent memory. Thesis momentum, developing patterns, signal source trends, upcoming catalysts, research hypotheses.
+- **Strategic Context** (`strategic_context.json`) — Multi-day persistent memory. Thesis momentum, developing patterns, signal source trends, upcoming catalysts, research hypotheses, blind spots, scenarios.
+- **Artifact Flow Log** (`artifact_reads.jsonl`) — Cross-session provenance tracking. Verifies that downstream sessions (morning briefing, trade decision) actually consumed upstream artifacts (EOD review, evening research, analyst assessments).
 
-Every Claude session receives both summaries as injected context. Every session writes back what it learned.
+Every Claude session receives both summaries as injected context. Every session writes back what it learned. The readiness check verifies 5 expected cross-session flows are active.
 
 ---
 
@@ -103,13 +104,17 @@ Every decision creates testable predictions that are auto-scored:
 
 ```
 Decision → Prediction → Daily Scorer → Belief Updater → Context Builder
-                                            │
-                     Signal weights adjusted ─┘
-                     Calibration updated
-                     Setup type performance tracked
+                                            │                  │
+                     Signal weights adjusted ─┘                  │
+                     Calibration updated                         │
+                     Setup type performance tracked              │
+                     Thesis conviction auto-adjusted (±5%)       │
+                                                                 │
+Trade Decision ← Calibration cap applied ────────────────────────┘
+                 (e.g., 40% overconfident → cap at 65%)
 ```
 
-At decision time, the system surfaces: symbol track record, setup type performance, confidence calibration ("when you say 70%, you're right 58% of the time"), and prediction history.
+At decision time, the system surfaces: symbol track record, setup type performance, confidence calibration ("when you say 70%, you're right 58% of the time"), price targets (bull/base/bear), and prediction history. Confidence is hard-capped based on calibration data to prevent overconfident trades.
 
 ### Cross-Session Memory
 
@@ -121,6 +126,9 @@ The swarm architecture solves the context reset problem:
 | `situation_board.json` | Today's observations | Sentinel + all sessions | All sessions |
 | `strategic_context.json` | Multi-day patterns | Reviewer, Theorist | All sessions |
 | `signal_digest.json` | Aggregated signals | Signal digest cron | Sentinel, Operator |
+| `artifact_reads.jsonl` | Cross-session flow verification | All sessions | Readiness check |
+| `research_queue.json` | Pending research tasks | Hypothesis-gen | Research-queue consumer |
+| `calibration.json` | Prediction accuracy by bin | Belief updater | Trade-decision |
 | `athena.db` | Permanent record | All sessions | All sessions |
 
 ---
@@ -156,7 +164,8 @@ The swarm architecture solves the context reset problem:
 src/
 ├── swarm/                       ← Cross-session shared memory
 │   ├── situation_board.py       ← SituationBoard: same-day observations
-│   └── strategic_context.py     ← StrategicContext: multi-day patterns
+│   ├── strategic_context.py     ← StrategicContext: multi-day patterns
+│   └── artifact_log.py          ← Cross-session artifact provenance tracking
 ├── synthesis/                   ← Unified state (state.py, daemon.py, signals.py)
 ├── knowledge/                   ← Theses, learnings, signal provenance, convergences
 ├── intelligence/                ← Context builder, belief updater, market movers
@@ -177,17 +186,22 @@ scripts/
 ├── session_wrapper.sh           ← Per-session wrapper (timeout, model, skill, context)
 ├── setup_cron.sh                ← Install data + autonomous cron schedules
 ├── collect_all_data.py          ← Master data collection (13 collectors, 40+ sources)
-├── cron_signal_digest.py        ← Signal aggregation + convergence detection
-└── cron_market_movers.py        ← Broad universe mover scan + context enrichment
+├── cron_signal_digest.py        ← Signal aggregation + convergence detection (thesis-matched news)
+├── cron_market_movers.py        ← Broad universe mover scan + context enrichment
+├── readiness_check.py           ← 11-category system health check with auto-fix
+└── smart_completion.py          ← Fallback session completion extraction
 
 .claude/
 ├── skills/                      ← 18 Claude Code skills
 │   ├── analyst/                 ← Event-driven analysis (Sonnet, 5 min)
 │   ├── theorist/                ← Strategic thinking (Opus, 15 min)
-│   ├── trade-decision/          ← Trade decisions with adversarial check
+│   ├── trade-decision/          ← Trade decisions with calibration cap + adversarial check
 │   ├── internal-review/         ← Self-assessment + strategic context update
-│   ├── morning-briefing/        ← Pre-market research
-│   ├── eod-review/              ← End-of-day learning extraction
+│   ├── morning-briefing/        ← Pre-market research (reads prior session artifacts)
+│   ├── eod-review/              ← End-of-day learning + thesis P&L attribution
+│   ├── evening-research/        ← Post-market web research + hypothesis generation
+│   ├── hypothesis-gen/          ← Generate testable hypotheses from accumulated signals
+│   ├── research-queue/          ← Consumer for research queue (backtests, validation)
 │   ├── operator-session/        ← Persistent monitoring
 │   └── ...                      ← 11 more (research, brainstorm, thesis, etc.)
 └── agents/                      ← 13 specialized Claude Code agents
@@ -197,28 +211,30 @@ scripts/
 
 ## Skills and Agents
 
-### Skills (18)
+### Skills (20)
 
 | Skill | Model | Duration | Trigger |
 |-------|-------|----------|---------|
-| `/morning-briefing` | Opus | 10 min | Cron 6:30 AM |
+| `/morning-briefing` | Opus | 15 min | Cron 6:30 AM |
 | `/trade-decision` | Opus | 10 min | Cron 10:00/13:00 + sentinel trigger |
 | `/analyst` | Sonnet | 5 min | Sentinel event trigger |
 | `/operator-session` | Opus | 8 hours | Cron 8:30 AM |
-| `/eod-review` | Opus | 10 min | Cron 4:30 PM |
-| `/internal-review` | Opus | 10 min | Cron 12:00/15:00 |
+| `/eod-review` | Opus | 15 min | Cron 4:30 PM |
+| `/internal-review` | Sonnet | 10 min | Cron 12:00/15:00 |
+| `/evening-research` | Opus | 15 min | Cron 5:30 PM |
 | `/theorist` | Opus | 15 min | Cron Sunday 8 PM |
-| `/signal-scan` | Sonnet | 5 min | Cron 10:30/14:30 |
-| `/thesis` | Opus | 10 min | Cron Sunday 6 PM |
-| `/research` | Sonnet | 15 min | On-demand + triggered |
-| `/brainstorm` | Sonnet | 10 min | Cron Sunday 7 PM |
+| `/hypothesis-gen` | Opus | 15 min | On-demand + triggered |
+| `/research-queue` | Sonnet | 30 min | On-demand |
+| `/signal-scan` | Sonnet | 15 min | Cron 10:30/14:30 |
+| `/thesis` | Sonnet | 10 min | Cron Sunday 6 PM |
+| `/research` | Sonnet | 20 min | On-demand + triggered |
+| `/brainstorm` | Opus | 15 min | Cron Sunday 7 PM |
 | `/execute-trades` | Opus | 5 min | After trade-decision |
 | `/social-signals` | Sonnet | 5 min | On-demand |
 | `/monitor` | Sonnet | 5 min | On-demand |
 | `/critic` | Sonnet | 10 min | Before promotion |
 | `/validate` | Sonnet | 15 min | Before promotion |
 | `/promote` | Opus | 10 min | After validation |
-| `/report` | Sonnet | 10 min | On-demand |
 
 ### Agents (13)
 
@@ -278,7 +294,7 @@ FastAPI dashboard at `http://localhost:8000` with 26 routes:
 | `/data` | Data source freshness grid (40+ sources) |
 | `/agents` | Agent run metrics and ops center |
 | `/research` | Research experiments and insights |
-| `/usage` | LLM token usage tracking |
+| `/usage` | LLM token usage, cost-per-session-type, capacity projection |
 | `/system` | System health, autonomy status |
 
 HTMX for dynamic updates. Dark theme. Auto-refresh on live data.
@@ -327,6 +343,8 @@ claude /eod-review
 ./scripts/athena_scheduler.sh setup     # Create tmux session
 ./scripts/athena_scheduler.sh sentinel-start  # Start sentinel daemon
 ./scripts/athena_scheduler.sh status    # Verify everything running
+python3 scripts/readiness_check.py      # Full system health check (11 categories)
+python3 scripts/readiness_check.py --fix # Auto-fix known issues
 
 # Web dashboard
 PYTHONPATH=. uvicorn src.web.app:app --host 0.0.0.0 --port 8000

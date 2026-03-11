@@ -324,6 +324,7 @@ get_timeout() {
         theorist)          echo 15 ;;
         evening-research)  echo 15 ;;
         hypothesis-gen)    echo 15 ;;
+        research-queue)    echo 30 ;;
         operator)          echo 480 ;;  # 8 hours
         *)                 echo 15 ;;
     esac
@@ -344,6 +345,7 @@ get_model() {
         theorist)          echo "opus" ;;
         evening-research)  echo "opus" ;;
         hypothesis-gen)    echo "opus" ;;
+        research-queue)    echo "sonnet" ;;
         operator)          echo "opus" ;;
         *)                 echo "sonnet" ;;
     esac
@@ -364,6 +366,7 @@ get_skill_prompt() {
         theorist)          echo "/theorist" ;;
         evening-research)  echo "/evening-research" ;;
         hypothesis-gen)    echo "/hypothesis-gen" ;;
+        research-queue)    echo "/research-queue" ;;
         *)                 echo "" ;;
     esac
 }

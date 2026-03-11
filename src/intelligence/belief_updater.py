@@ -101,11 +101,66 @@ class BeliefUpdater:
         report.thesis_suggestions = self._suggest_thesis_updates()
         report.calibration = self._update_calibration()
         report.metrics = self._compute_metrics()
+
+        # Auto-apply small conviction changes (±5%) from thesis suggestions
+        self._auto_apply_suggestions(report.thesis_suggestions)
+
         report.learning_summary = self._generate_learning_summary(report)
         self._persist_report(report)
         self._append_metrics_history(report.metrics)
 
         return report
+
+    def _auto_apply_suggestions(self, suggestions: list[ThesisSuggestion]):
+        """Auto-apply thesis conviction changes within ±5%. Larger changes are flagged only."""
+        if not suggestions:
+            return
+
+        try:
+            from src.knowledge.thesis import ThesisTracker
+            from src.core.paths import paths
+
+            tracker = ThesisTracker(paths.theses)
+
+            for s in suggestions:
+                if abs(s.suggested_change) > 5:
+                    logger.info(
+                        f"Belief updater: {s.thesis_name} needs {s.suggested_change:+}% "
+                        f"(too large for auto-apply, flagged for review)"
+                    )
+                    continue
+
+                thesis = tracker.get_thesis(s.thesis_id)
+                if not thesis or thesis.status != "active":
+                    continue
+
+                new_conviction = max(15, min(100, thesis.conviction + s.suggested_change))
+                if new_conviction == thesis.conviction:
+                    continue
+
+                thesis.update_conviction(
+                    new_value=new_conviction,
+                    reason=f"[auto] Belief updater: {s.reason}",
+                )
+                tracker._save_thesis(thesis)
+                logger.info(
+                    f"Belief updater auto-applied: {s.thesis_name} "
+                    f"{thesis.conviction - s.suggested_change:.0f}% → {new_conviction:.0f}% "
+                    f"({s.suggested_change:+}%)"
+                )
+
+                # Audit trail
+                try:
+                    from src.autonomy.provenance import log_event
+                    log_event(
+                        "conviction_auto_adjusted",
+                        source="belief_updater",
+                        title=f"{s.thesis_name}: {s.suggested_change:+}% ({s.reason})",
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning(f"Auto-apply suggestions failed: {e}")
 
     def _update_signal_quality(self) -> list[SignalUpdate]:
         """Read signal outcome history, compute new weights, write weights.json."""

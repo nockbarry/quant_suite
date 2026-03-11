@@ -489,8 +489,27 @@ class LiveDaemon:
             pdt_restricted=False,
         )
 
+    def _lookup_thesis_for_symbol(self, symbol: str) -> str | None:
+        """Find the thesis ID for a position symbol. Cached per update cycle."""
+        if not hasattr(self, '_thesis_symbol_map'):
+            self._thesis_symbol_map = {}
+            try:
+                from src.knowledge.thesis import ThesisTracker
+                tracker = ThesisTracker(paths.theses)
+                for thesis in tracker.get_active_theses():
+                    for pos_sym in (thesis.positions or []):
+                        self._thesis_symbol_map[pos_sym] = thesis.id
+            except Exception as e:
+                logger.debug(f"Thesis lookup init failed: {e}")
+        # Handle options: "SLB 250321C00050000" → "SLB"
+        base = symbol.split()[0] if ' ' in symbol else symbol
+        return self._thesis_symbol_map.get(base) or self._thesis_symbol_map.get(symbol)
+
     async def _get_positions(self) -> list[PositionSnapshot]:
         """Get current positions from Alpaca."""
+        # Clear thesis cache so it's rebuilt fresh each update cycle
+        if hasattr(self, '_thesis_symbol_map'):
+            del self._thesis_symbol_map
         positions = []
 
         try:
@@ -523,7 +542,7 @@ class LiveDaemon:
                     weight_pct=0.0,  # Compute later
                     sector=self._get_sector(p.symbol),
                     days_held=0,  # Would need trade history
-                    thesis_id=None,  # Would need to look up
+                    thesis_id=self._lookup_thesis_for_symbol(p.symbol),
                     distance_to_stop_pct=None,
                     distance_to_target_pct=None,
                 ))

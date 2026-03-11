@@ -155,6 +155,28 @@ if patterns:
 EOF
 ```
 
+```bash
+# Log which upstream artifacts were found (for flow health monitoring)
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.swarm.artifact_log import log_artifact_read
+from pathlib import Path
+from datetime import datetime, timedelta
+
+yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+eod_dir = Path.home() / "quant_results" / "eod_reviews"
+reviews_dir = Path.home() / "quant_results" / "reviews"
+
+log_artifact_read("morning-briefing", "eod_review",
+    str(eod_dir / f"review_{yesterday}.json"),
+    found=(eod_dir / f"review_{yesterday}.json").exists())
+log_artifact_read("morning-briefing", "evening_research",
+    str(reviews_dir / f"evening_research_{yesterday}.json"),
+    found=(reviews_dir / f"evening_research_{yesterday}.json").exists())
+log_artifact_read("morning-briefing", "internal_review",
+    detail=f"checked {len(list(reviews_dir.glob('internal_review_*.json')))} review files")
+EOF
+```
+
 **Use these insights to:**
 - Prioritize items from yesterday's "focus for today" list
 - Check if evening research findings need immediate action

@@ -65,19 +65,32 @@ This prevents common errors like:
 ### Available Skills
 ```bash
 # Daily Trading Workflow
-/morning-briefing    # Pre-market research and briefing
+/morning-briefing    # Pre-market research and briefing (reads prior session artifacts)
 /operator-session    # Persistent monitoring with configurable intervals
-/swarm-operator      # Orchestrate multi-agent swarms
-/social-signals      # Check WSB, Stocktwits for early alpha signals
-/trade-decision      # Generate trade decisions with adversarial check
+/trade-decision      # Generate trade decisions with calibration enforcement + adversarial check
 /execute-trades      # Execute with human approval
-/eod-review          # End-of-day learning extraction
+/eod-review          # End-of-day learning extraction with thesis P&L attribution
 /monitor             # Check portfolio and position status
-/thesis              # Create/review/update investment theses
 
-# Research & Validation
+# Analysis & Signals
+/analyst             # Event-driven analysis triggered by sentinel (Sonnet, 5min)
+/internal-review     # Self-assessment: prediction accuracy, signal drift, thesis health
+/signal-scan         # LLM analysis of WSB, Stocktwits social signals
+/social-signals      # Check social signal landscape across platforms
+
+# Research & Strategy
 /research            # Run research cycles
+/research-queue      # Consume research queue — run backtests, validate hypotheses
+/hypothesis-gen      # Generate testable hypotheses from accumulated signals
 /brainstorm          # Generate feature and strategy ideas
+/evening-research    # Post-market web research, news synthesis, macro analysis
+
+# Strategic Planning
+/thesis              # Create/review/update investment theses
+/theorist            # Weekly scenario planning, blind spots, strategic context
+/swarm-operator      # Orchestrate multi-agent swarms
+
+# Validation & Production
 /critic              # Safety validation for strategies
 /validate            # Full validation suite (MCPT, walk-forward)
 /promote             # Move strategy to production
@@ -117,11 +130,20 @@ All layers have code examples in `docs/API_QUICK_REF.md`. Component tables below
 
 `create_decision()` auto-enriches context. `operator_check()` auto-pushes observations. Web UI shows context at `/decisions/{id}/context/`.
 
+### Swarm Layer (Cross-Session Memory)
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **SituationBoard** | `src/swarm/situation_board.py` | Same-day shared memory, auto-resets daily, 5-min dedup |
+| **StrategicContext** | `src/swarm/strategic_context.py` | Multi-day persistent (thesis momentum, patterns, catalysts, blind spots) |
+| **artifact_log** | `src/swarm/artifact_log.py` | Cross-session artifact provenance (verify information flow) |
+
+All sessions injected with board + context summaries via `--append-system-prompt`. `check_flow_health()` verifies 5 expected cross-session flows.
+
 ### Synthesis Layer
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | **UnifiedState** | `src/synthesis/state.py` | Everything in one dataclass |
-| **LiveDaemon** | `src/synthesis/daemon.py` | Writes state.json every 5 min |
+| **LiveDaemon** | `src/synthesis/daemon.py` | Writes state.json every 5 min (auto-links positions to theses) |
 | **SignalAggregator** | `src/synthesis/signals.py` | Combines all signal sources |
 
 ### Live Signal Layer
@@ -146,12 +168,12 @@ Validated signals: Bollinger Bounce (IC=0.31, 61.4%), RSI Extreme (IC=0.20, 53.8
 ### Intelligence Layer
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| **DecisionContextBuilder** | `src/intelligence/context_builder.py` | Track record + calibration + learnings at decision time |
+| **DecisionContextBuilder** | `src/intelligence/context_builder.py` | Track record + calibration + price targets + learnings at decision time |
 | **SetupScorer** | `src/intelligence/setup_scorer.py` | Performance analytics by setup type |
-| **BeliefUpdater** | `src/intelligence/belief_updater.py` | Daily signal weight updates, calibration |
+| **BeliefUpdater** | `src/intelligence/belief_updater.py` | Daily signal weight updates, calibration, auto-applies small conviction changes |
 | **PredictionRecord** | `src/db/models.py` | Testable predictions linked to decisions |
 
-Feedback loop: decisions → predictions → scored → belief updater adjusts weights → context builder surfaces at decision time. Web dashboard at `/intelligence`.
+Feedback loop: decisions → predictions → scored → belief updater adjusts weights (auto-applies ±5% conviction) → context builder surfaces at decision time. Calibration enforcement caps confidence in `/trade-decision`. Web dashboard at `/intelligence`.
 
 ### Decision Layer
 | Component | Location | Purpose |
@@ -181,6 +203,7 @@ Web UI: `/documents`, `/documents/insights/list`, `/documents/experiments/list`
 |-----------|----------|---------|
 | **ComprehensiveDashboard** | `src/monitoring/comprehensive_dashboard.py` | Full system view with Claude activity |
 | **OperatorLoop** | `src/monitoring/operator_loop.py` | Persistent monitoring checks |
+| **UsageMonitor** | `src/monitoring/usage_monitor.py` | Token usage, cost-per-session-type, capacity tracking |
 | **DataFreshnessTracker** | `src/monitoring/data_freshness_tracker.py` | Data source health |
 | **SignalQualityTracker** | `src/monitoring/signal_quality_tracker.py` | Track signal hit rates over time |
 
@@ -307,9 +330,12 @@ Read `docs/TRADING_PATTERNS.md` for accumulated wisdom: vehicle enumeration, con
 | **Finviz** | `~/quant_results/scraped_data/finviz/screens_latest.json` |
 | **Operator Logs** | `~/quant_results/logs/operator_log.jsonl` |
 | **Signal Provenance** | `~/quant_results/signal_provenance/*.json` |
-| **Scheduler** | `~/quant_results/scheduler/` (board, context, state, triggers) |
+| **Scheduler** | `~/quant_results/scheduler/` (board, context, state, triggers, completions) |
+| **Artifact Flow Log** | `~/quant_results/scheduler/artifact_reads.jsonl` |
+| **Calibration** | `~/quant_results/intelligence/calibration.json` |
+| **Research Queue** | `~/quant_results/scheduler/research_queue.json` |
 | **Credentials** | `config/credentials.yaml` |
-| **Skills** | `.claude/skills/*/SKILL.md` (18 skills) |
+| **Skills** | `.claude/skills/*/SKILL.md` (20 skills) |
 | **Agents** | `.claude/agents/*.md` (13 agents) |
 
 ---
@@ -377,6 +403,10 @@ Architecture: `cron → athena_scheduler.sh (tmux) → session_wrapper.sh → cl
 | 12:00, 15:00 | `/internal-review` | sonnet |
 | 16:30 | `/eod-review` | opus |
 | 17:10 | sentinel-stop | - |
+| 17:30 | `/evening-research` | opus |
+| Sun 18:00 | `/thesis` | sonnet |
+| Sun 19:00 | `/brainstorm` | opus |
+| Sun 20:00 | `/theorist` | opus |
 
 ```bash
 ./scripts/athena_scheduler.sh setup           # Create tmux session
@@ -397,14 +427,18 @@ PYTHONPATH=. python scripts/full_research_cycle.py --quick
 PYTHONPATH=. python scripts/run_daily.py --mode signals
 PYTHONPATH=. python scripts/context_for_symbol.py SLB
 
-# Monitoring
+# Monitoring & Health
 PYTHONPATH=. python -m src.monitoring.comprehensive_dashboard --watch
 PYTHONPATH=. python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8000
+python3 scripts/readiness_check.py                # Full system readiness check (11 categories)
+python3 scripts/readiness_check.py --fix           # Auto-fix known issues
+python3 scripts/readiness_check.py --category flow # Check cross-session flow only
 
 # Data Collection
 PYTHONPATH=. python scripts/collect_all_data.py --quick
 
-# Market Movers (broad universe scan)
+# Signal Pipeline
+PYTHONPATH=. python scripts/cron_signal_digest.py  # Aggregate all signals + convergences
 PYTHONPATH=. python scripts/cron_market_movers.py           # After-close scan
 PYTHONPATH=. python scripts/cron_market_movers.py --intraday # Midday (tighter thresholds)
 ```

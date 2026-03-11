@@ -32,15 +32,16 @@ DIGEST_FILE = RESULTS_DIR / "scheduler" / "signal_digest.json"
 SOURCE_WEIGHTS = {
     "congressional": 1.4,
     "insider": 1.3,
+    "news_thesis_match": 1.2,
     "statistical": 1.2,
     "agent": 1.1,
     "options_flow": 1.1,
     "news": 1.0,
     "prediction_market": 1.0,
+    "thesis_suggestion": 0.9,
     "wsb": 0.8,
     "stocktwits": 0.7,
     "social_sentiment": 0.7,
-    "thesis_suggestion": 0.9,
 }
 
 # Recency half-life in hours (strength halves every this many hours)
@@ -260,9 +261,11 @@ def process_signals(raw_signals: list[dict]) -> list[dict]:
     processed = []
 
     for sig in raw_signals:
-        # Parse timestamp
+        # Parse timestamp (strip timezone info to match naive `now`)
         try:
             ts = datetime.fromisoformat(sig["timestamp"])
+            if ts.tzinfo is not None:
+                ts = ts.replace(tzinfo=None)
         except (ValueError, TypeError, KeyError):
             ts = now
 
@@ -306,13 +309,44 @@ def process_signals(raw_signals: list[dict]) -> list[dict]:
     return deduped
 
 
+def _build_thesis_position_map() -> dict[str, list[str]]:
+    """Build thesis_id → [symbols] map from ThesisTracker. Cached per run."""
+    if hasattr(_build_thesis_position_map, "_cache"):
+        return _build_thesis_position_map._cache
+
+    thesis_map: dict[str, list[str]] = {}
+    try:
+        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from src.knowledge.thesis import ThesisTracker
+        from src.core.paths import paths
+
+        tracker = ThesisTracker(paths.theses)
+        for thesis in tracker.get_active_theses():
+            if thesis.positions:
+                thesis_map[thesis.id] = thesis.positions
+                # Also map short IDs (first 8 chars)
+                thesis_map[thesis.id[:8]] = thesis.positions
+    except Exception as e:
+        logger.debug(f"Thesis position map build failed: {e}")
+
+    _build_thesis_position_map._cache = thesis_map
+    return thesis_map
+
+
 def load_news_signals() -> list[dict]:
-    """Load signals from news_cache.json (headlines with symbol/thesis matches)."""
+    """Load signals from news_cache.json (headlines with symbol/thesis matches).
+
+    Thesis-matched news is a distinct source ('news_thesis_match') with higher weight
+    than generic news. When a thesis match has no symbols, we resolve them from the
+    thesis's position list.
+    """
     signals = []
     news_file = RESULTS_DIR / "live" / "news_cache.json"
 
     if not news_file.exists():
         return signals
+
+    thesis_positions = _build_thesis_position_map()
 
     try:
         with open(news_file) as f:
@@ -321,28 +355,47 @@ def load_news_signals() -> list[dict]:
         for item in data.get("items", []):
             ts = item.get("timestamp", datetime.now().isoformat())
 
-            # Use thesis matches to infer direction and symbols
+            # Thesis-matched news → higher-weight source
             thesis_matches = item.get("thesis_matches", {})
             if thesis_matches:
-                for thesis_name, match_info in thesis_matches.items():
-                    symbols = match_info.get("symbols", []) if isinstance(match_info, dict) else []
-                    relevance = match_info.get("relevance", 0.5) if isinstance(match_info, dict) else 0.5
-                    for symbol in symbols:
+                for thesis_id, match_info in thesis_matches.items():
+                    if not isinstance(match_info, dict):
+                        continue
+                    relevance = match_info.get("relevance", 0.5)
+                    if relevance < 0.3:
+                        continue  # Skip low-relevance matches
+
+                    # Use direction from match data, default to bullish
+                    direction = match_info.get("direction", "bullish")
+                    if direction == "neutral":
+                        direction = "bullish"  # Thesis attention = mild bullish
+
+                    thesis_name = match_info.get("name", thesis_id[:8])
+
+                    # Get symbols: from match, or resolve from thesis positions
+                    symbols = match_info.get("symbols", [])
+                    if not symbols:
+                        symbols = thesis_positions.get(thesis_id, [])
+                        if not symbols:
+                            symbols = thesis_positions.get(thesis_id[:8], [])
+
+                    # Cap at top 5 positions per thesis match to avoid signal flood
+                    for symbol in symbols[:5]:
                         signals.append({
                             "symbol": symbol,
-                            "direction": "bullish",  # Thesis-matched news = thesis direction
+                            "direction": direction,
                             "strength": min(relevance, 1.0),
-                            "source": "news",
+                            "source": "news_thesis_match",
                             "timestamp": ts,
                             "detail": f"thesis={thesis_name}: {item.get('headline', '')[:60]}",
                         })
 
-            # Urgent news with detected symbols
+            # Urgent news with detected symbols (generic news source)
             if item.get("is_urgent") and item.get("symbols"):
                 for symbol in item["symbols"]:
                     signals.append({
                         "symbol": symbol,
-                        "direction": "bullish",  # Urgent mentions = attention signal
+                        "direction": "bullish",
                         "strength": 0.6,
                         "source": "news",
                         "timestamp": ts,

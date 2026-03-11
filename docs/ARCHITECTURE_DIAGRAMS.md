@@ -115,12 +115,19 @@ src/knowledge/
 └── market_calendar.py     ──► MarketCalendar, CalendarEvent, Prediction
 ```
 
-### Swarm Layer (`src/swarm/`) - Added 2026-03-06
+### Swarm Layer (`src/swarm/`) - Added 2026-03-06, Updated 2026-03-11
 ```
 src/swarm/
 ├── __init__.py
 ├── situation_board.py     ──► SituationBoard: same-day shared memory, auto-resets daily, 5-min dedup
-└── strategic_context.py   ──► StrategicContext: multi-day persistent (thesis momentum, patterns, catalysts)
+├── strategic_context.py   ──► StrategicContext: multi-day persistent (thesis momentum, patterns, catalysts,
+│                               blind spots, scenarios). get_summary() includes high-risk blind spots and
+│                               high-probability scenarios for session injection.
+└── artifact_log.py        ──► Cross-session artifact provenance logging. Tracks when sessions read upstream
+                                artifacts. check_flow_health() verifies 5 expected flows:
+                                  morning-briefing → eod_review, evening_research
+                                  trade-decision → analyst_assessment, calibration
+                                  internal-review → previous_review
 ```
 
 ### Context Layer (`src/context/`) - Added 2026-03-03
@@ -1880,6 +1887,92 @@ Sunday ──── cron_weekly_improvement_review.py ────────�
 
 ---
 
+## 17. Cross-Session Information Flow (Added 2026-03-11)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                    CROSS-SESSION INFORMATION FLOW                                       │
+│                                                                                         │
+│  PRODUCERS                         ARTIFACTS                      CONSUMERS             │
+│  ─────────                         ─────────                      ─────────             │
+│                                                                                         │
+│  /eod-review ─────────────────► reviews/eod_review_*.json ──────► /morning-briefing     │
+│    (P&L, learnings, patterns)      thesis_performance              (previous day context)│
+│                                                                                         │
+│  /evening-research ───────────► briefings/evening_research_*.json ► /morning-briefing   │
+│    (web research, hypotheses)                                       (overnight findings) │
+│                                                                                         │
+│  /analyst ────────────────────► situation_board.json ────────────► /trade-decision       │
+│    (event assessments)             pending_analyses                 (analyst assessments)│
+│                                                                                         │
+│  /trade-decision ─────────────► calibration.json ────────────────► /trade-decision       │
+│    (predictions)                   (via belief updater)             (confidence cap)     │
+│                                                                                         │
+│  /internal-review ────────────► reviews/internal_review_*.json ──► /internal-review     │
+│    (action items, issues)          strategic_context.json           (prior action items) │
+│                                                                                         │
+│  /theorist ───────────────────► strategic_context.json ──────────► ALL sessions          │
+│    (blind spots, scenarios)        blind_spots[], scenarios[]       (via system prompt)  │
+│                                                                                         │
+│  /hypothesis-gen ─────────────► research_queue.json ─────────────► /research-queue       │
+│    (testable hypotheses)                                           (backtest consumer)   │
+│                                                                                         │
+│  cron_signal_digest.py ───────► signal_digest.json ──────────────► sentinel, operator    │
+│    (thesis-matched news +          convergences[]                   (convergence trigger) │
+│     social + statistical)                                                                │
+│                                                                                         │
+│  LiveDaemon ──────────────────► state.json ──────────────────────► ALL sessions          │
+│    (positions with thesis_id)      thesis_performance{}            (thesis P&L in EOD)   │
+│                                                                                         │
+│  PROVENANCE TRACKING                                                                    │
+│  ────────────────────                                                                   │
+│  src/swarm/artifact_log.py                                                              │
+│    log_artifact_read(session, artifact, path, found) → artifact_reads.jsonl             │
+│    check_flow_health() → {flows: {name: bool}, health: healthy|degraded|disconnected}   │
+│    Verified by: scripts/readiness_check.py --category flow                              │
+│                                                                                         │
+│  CALIBRATION ENFORCEMENT (in /trade-decision Step 0a)                                   │
+│  ─────────────────────────────────────────────────                                      │
+│  1. Read calibration.json (predicted confidence vs actual hit rate per bin)              │
+│  2. Find worst bin ratio (e.g., 80-90% predicted → 25% actual = 0.31 ratio)            │
+│  3. Hard cap = worst_ratio × 100 (e.g., cap at 31%)                                    │
+│  4. Clamp cap to [30%, 90%] range                                                       │
+│  5. Apply: confidence = min(raw_confidence, cap) for all decisions                      │
+│                                                                                         │
+│  BELIEF UPDATER AUTO-APPLY (in cron_belief_update.py)                                   │
+│  ─────────────────────────────────────────────────                                      │
+│  ThesisSuggestion with |change| ≤ 5% → auto-applied via ThesisTracker                  │
+│  ThesisSuggestion with |change| > 5% → flagged for review                               │
+│  All changes logged to ProcessEvent for audit trail                                      │
+│                                                                                         │
+│  THESIS-NEWS CONVERGENCE (in cron_signal_digest.py)                                     │
+│  ──────────────────────────────────────────────────                                     │
+│  news_cache.json thesis_matches → resolve thesis positions → create signals             │
+│  source="news_thesis_match" (weight 1.2) vs source="news" (weight 1.0)                 │
+│  Enables convergence detection: statistical + news_thesis_match + social → 3 sources    │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Readiness Check Categories (11)
+
+| Category | What It Checks |
+|----------|---------------|
+| `cron` | Data + auto cron blocks installed, expected entries present |
+| `sentinel` | Process running, situation board fresh |
+| `operator` | Lock alive, not "stale task" bug |
+| `state` | state.json exists, fresh, has positions/signals/news |
+| `data` | RSS, Finviz, signal digest, market movers, WSB data freshness |
+| `flow` | Cross-session artifact provenance (5 expected flows), artifact freshness |
+| `predictions` | Total/scored/open counts, short-horizon (3-day) feedback, resolving this week |
+| `strategy` | Strategic context hypotheses, patterns, upcoming catalysts |
+| `sessions` | Expected sessions ran today (morning-briefing, trade-decision, eod-review, etc.) |
+| `database` | athena.db tables (decisions, predictions, theses, process_events, documents) |
+| `credentials` | Alpaca API keys present + connection test |
+
+Auto-fix capabilities: reinstall cron, restart sentinel/operator, clean stale locks, trigger daemon update, recreate tmux session, spawn Claude fixer for unfixable failures.
+
+---
+
 *Generated: 2026-01-07*
 *Updated: 2026-01-10 - Added Data Collection Daemon and 20+ free data sources*
 *Updated: 2026-01-11 - Added Promotion Pipeline, Thesis Performance, Strategy Dashboard, Holiday Calendar*
@@ -1887,4 +1980,5 @@ Sunday ──── cron_weekly_improvement_review.py ────────�
 *Updated: 2026-01-20 - Added Monitoring & Operator Layer (6 modules, 3,100+ lines)*
 *Updated: 2026-03-01 - Added Compounding Intelligence Layer (predictions, context builder, belief updater)*
 *Updated: 2026-03-08 - Rewrote high-level architecture (swarm), daily workflow, module map, storage layout, web layer*
+*Updated: 2026-03-11 - Added Cross-Session Information Flow, artifact provenance, calibration enforcement, research queue lifecycle, readiness check categories*
 *This document should be updated when major architectural changes are made.*

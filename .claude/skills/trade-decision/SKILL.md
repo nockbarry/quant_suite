@@ -40,8 +40,61 @@ print(ctx.summary)
 EOF
 ```
 
-Review this context and factor it into your confidence level. If the calibration
-data says you're overconfident by 12%, discount your confidence accordingly.
+Review this context and factor it into your confidence level.
+
+### Step 0a: Calibration Enforcement (MANDATORY)
+
+**You MUST apply calibration adjustments to every confidence level you assign.**
+
+```bash
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+import json
+from pathlib import Path
+
+cal_path = Path.home() / "quant_results" / "intelligence" / "calibration.json"
+if cal_path.exists():
+    cal = json.loads(cal_path.read_text())
+    print("=== CALIBRATION ENFORCEMENT ===")
+    print(f"Overconfident: {cal.get('overconfident', False)}")
+    print(f"Calibration error: {cal.get('calibration_error', 0):.0%}")
+    print(f"Total resolved predictions: {cal.get('total_resolved', 0)}")
+
+    # Build adjustment table from calibration bins
+    print("\nConfidence Adjustment Table:")
+    print(f"  {'Stated':>10s} {'Actual Hit%':>12s} {'Adjusted To':>12s}")
+    print(f"  {'─'*10} {'─'*12} {'─'*12}")
+    for b in cal.get("bins", []):
+        predicted = b.get("predicted", 0.5)
+        actual = b.get("actual", 0.5)
+        n = b.get("n", 0)
+        if n >= 2:  # Need at least 2 samples for meaningful adjustment
+            adjusted = min(predicted, actual + 0.05)  # Allow 5% grace above actual
+            print(f"  {predicted:>9.0%} {actual:>11.0%} {adjusted:>11.0%}  (n={n})")
+        else:
+            print(f"  {predicted:>9.0%} {actual:>11.0%}   (insufficient data, n={n})")
+
+    if cal.get("overconfident"):
+        # Calculate the maximum safe confidence
+        bins_with_data = [b for b in cal.get("bins", []) if b.get("n", 0) >= 2]
+        if bins_with_data:
+            worst_ratio = min(b["actual"] / b["predicted"] for b in bins_with_data if b["predicted"] > 0)
+            cap = min(0.75, max(0.50, worst_ratio + 0.10))
+            print(f"\n  ** CONFIDENCE CAP: {cap:.0%} **")
+            print(f"  Until calibration improves, cap ALL confidence levels at {cap:.0%}")
+            print(f"  Example: You think 85% → assign {min(0.85, cap):.0%}")
+        else:
+            print("\n  ** CONFIDENCE CAP: 70% (default, insufficient calibration data) **")
+else:
+    print("No calibration data yet. Use default confidence levels.")
+EOF
+```
+
+**RULES:**
+1. Look up your stated confidence in the Adjustment Table above
+2. Use the "Adjusted To" value, NOT your stated confidence
+3. If the cap is 60%, you CANNOT assign confidence above 60% to ANY trade
+4. Position sizing follows from the ADJUSTED confidence (not your gut feeling)
+5. This cap lifts automatically as prediction accuracy improves
 
 ### Step 0b: Read Swarm Context (Today's Events + Multi-Day Patterns)
 
@@ -155,6 +208,19 @@ for date_str in [today, yesterday]:
         break
 else:
     print("  (No evening research report found)")
+EOF
+```
+
+```bash
+# Log artifact reads for flow health monitoring
+PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+from src.swarm.artifact_log import log_artifact_read
+from pathlib import Path
+
+log_artifact_read("trade-decision", "analyst_assessment", detail="checked situation board")
+log_artifact_read("trade-decision", "theorist_blind_spots", detail="checked strategic context")
+cal_path = Path.home() / "quant_results" / "intelligence" / "calibration.json"
+log_artifact_read("trade-decision", "calibration", str(cal_path), found=cal_path.exists())
 EOF
 ```
 

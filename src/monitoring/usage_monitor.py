@@ -435,8 +435,59 @@ def get_usage_summary(days: int = 30) -> UsageSummary:
     )
 
 
-def get_session_breakdown() -> list[dict]:
-    """Get session type breakdown from scheduler completions."""
+# Session type → model mapping (mirrors session_wrapper.sh get_model)
+SESSION_MODEL_MAP = {
+    "morning-briefing": "opus",
+    "trade-decision": "opus",
+    "eod-review": "opus",
+    "operator": "opus",
+    "brainstorm": "opus",
+    "theorist": "opus",
+    "evening-research": "opus",
+    "hypothesis-gen": "opus",
+    "research": "sonnet",
+    "thesis": "sonnet",
+    "signal-scan": "sonnet",
+    "research-theory": "sonnet",
+    "internal-review": "sonnet",
+    "analyst": "sonnet",
+    "research-queue": "sonnet",
+}
+
+# Session type → timeout in minutes (mirrors session_wrapper.sh get_timeout)
+SESSION_TIMEOUT_MAP = {
+    "morning-briefing": 15,
+    "trade-decision": 10,
+    "eod-review": 15,
+    "research": 20,
+    "thesis": 10,
+    "brainstorm": 15,
+    "signal-scan": 15,
+    "research-theory": 15,
+    "internal-review": 10,
+    "analyst": 5,
+    "theorist": 15,
+    "evening-research": 15,
+    "hypothesis-gen": 15,
+    "research-queue": 30,
+    "operator": 480,
+}
+
+# Estimated output tokens per minute by model tier (from empirical observation)
+# These approximate how many output tokens Claude generates per minute of session
+_EST_OUTPUT_TOKENS_PER_MIN = {
+    "opus": 800,
+    "sonnet": 1200,
+    "haiku": 2000,
+}
+
+
+def get_session_breakdown(days: int = 30) -> list[dict]:
+    """Get session type breakdown from scheduler completions with cost estimates.
+
+    Cross-references completion records with model assignments and durations
+    to estimate per-session-type API-equivalent cost.
+    """
     completions_dir = Path(os.environ.get(
         "QUANT_RESULTS_DIR", Path.home() / "quant_results"
     )) / "scheduler" / "completions"
@@ -444,9 +495,12 @@ def get_session_breakdown() -> list[dict]:
     if not completions_dir.exists():
         return []
 
+    cutoff = (datetime.now() - timedelta(days=days)).timestamp()
     type_stats: dict[str, dict] = {}
 
     for fp in sorted(completions_dir.glob("*.json")):
+        if fp.stat().st_mtime < cutoff:
+            continue
         try:
             with open(fp) as f:
                 data = json.load(f)
@@ -457,9 +511,12 @@ def get_session_breakdown() -> list[dict]:
             if stype not in type_stats:
                 type_stats[stype] = {
                     "session_type": stype,
+                    "model": SESSION_MODEL_MAP.get(stype, "sonnet"),
+                    "timeout_min": SESSION_TIMEOUT_MAP.get(stype, 15),
                     "count": 0,
                     "successes": 0,
                     "total_duration_s": 0,
+                    "est_total_cost_usd": 0.0,
                 }
             type_stats[stype]["count"] += 1
             if success:
@@ -473,7 +530,26 @@ def get_session_breakdown() -> list[dict]:
         r["avg_duration_s"] = r["total_duration_s"] / r["count"] if r["count"] > 0 else 0
         r["success_rate"] = r["successes"] / r["count"] * 100 if r["count"] > 0 else 0
 
-    return sorted(result, key=lambda x: x["count"], reverse=True)
+        # Estimate cost per session based on model and typical duration
+        model_tier = r["model"]
+        timeout_min = r["timeout_min"]
+        rates = PRICING.get(model_tier, PRICING["sonnet"])
+        est_tokens_per_min = _EST_OUTPUT_TOKENS_PER_MIN.get(model_tier, 1000)
+
+        # Use actual avg duration if available, otherwise timeout * 0.7
+        avg_min = r["avg_duration_s"] / 60 if r["avg_duration_s"] > 0 else timeout_min * 0.7
+        est_output_tokens = avg_min * est_tokens_per_min
+        # Assume 3:1 input:output ratio (typical for Claude with tool use)
+        est_input_tokens = est_output_tokens * 3
+
+        est_cost_per_session = (
+            est_output_tokens / 1_000_000 * rates["output"]
+            + est_input_tokens / 1_000_000 * rates["input"]
+        )
+        r["est_cost_per_session"] = round(est_cost_per_session, 2)
+        r["est_total_cost_usd"] = round(est_cost_per_session * r["count"], 2)
+
+    return sorted(result, key=lambda x: x["est_total_cost_usd"], reverse=True)
 
 
 def format_tokens(n: int) -> str:

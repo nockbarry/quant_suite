@@ -7,11 +7,12 @@ Checks:
 3. Operator session health (running, not stale)
 4. state.json freshness and completeness (positions, signals, convergences)
 5. Data collection pipeline (RSS, Finviz, WSB, signals)
-6. Prediction scoring loop (scorable predictions, baselines)
-7. Strategic context (hypotheses, patterns, catalysts)
-8. Session scheduling (all sessions running on time)
-9. Database integrity (tables, row counts, orphans)
-10. Credential validation (Alpaca, data sources)
+6. Cross-session information flow (artifact provenance, freshness)
+7. Prediction scoring loop (scorable predictions, baselines)
+8. Strategic context (hypotheses, patterns, catalysts)
+9. Session scheduling (all sessions running on time)
+10. Database integrity (tables, row counts, orphans)
+11. Credential validation (Alpaca, data sources)
 
 Usage:
     python3 scripts/readiness_check.py              # Full check
@@ -455,6 +456,68 @@ def check_strategic_context() -> list[Check]:
     return checks
 
 
+# ===== CROSS-SESSION FLOW CHECKS =====
+
+def check_cross_session_flow() -> list[Check]:
+    checks = []
+
+    c = Check("Cross-session artifact flow", "flow")
+    try:
+        from src.swarm.artifact_log import check_flow_health
+
+        health = check_flow_health()
+        active = health["active"]
+        total = health["total"]
+        status = health["health"]
+
+        if status == "healthy":
+            c.passed(f"{active}/{total} flows active")
+        elif status == "degraded":
+            missing = [k for k, v in health["flows"].items() if not v]
+            c.warn(f"{active}/{total} flows active — missing: {', '.join(missing)}")
+        else:
+            c.fail(f"No cross-session flows detected in last 24h")
+    except Exception as e:
+        c.warn(f"Can't check flow health: {e}")
+    checks.append(c)
+
+    # Check individual artifact freshness
+    artifacts = {
+        "EOD review": RESULTS_DIR / "reviews",
+        "Morning briefing": RESULTS_DIR / "briefings",
+        "Signal digest": SCHEDULER_DIR / "signal_digest.json",
+        "Strategic context": SCHEDULER_DIR / "strategic_context.json",
+        "Situation board": SCHEDULER_DIR / "situation_board.json",
+    }
+
+    for name, path in artifacts.items():
+        c = Check(f"Artifact: {name}", "flow")
+        if path.is_dir():
+            # Find most recent file in directory
+            files = sorted(path.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+            if not files:
+                files = sorted(path.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True)
+            if files:
+                age_h = (time.time() - files[0].stat().st_mtime) / 3600
+                if age_h > 48 and datetime.now().weekday() < 5:
+                    c.warn(f"Latest is {age_h:.0f}h old: {files[0].name}")
+                else:
+                    c.passed(f"{age_h:.1f}h old: {files[0].name}")
+            else:
+                c.warn(f"No files in {path}")
+        elif path.exists():
+            age_h = (time.time() - path.stat().st_mtime) / 3600
+            if age_h > 24 and datetime.now().weekday() < 5:
+                c.warn(f"{age_h:.1f}h old")
+            else:
+                c.passed(f"{age_h:.1f}h old")
+        else:
+            c.warn(f"Missing: {path}")
+        checks.append(c)
+
+    return checks
+
+
 # ===== SESSION SCHEDULING CHECKS =====
 
 def check_sessions() -> list[Check]:
@@ -785,6 +848,7 @@ def run_checks(category: str | None = None, quick: bool = False) -> list[Check]:
         ("operator", check_operator),
         ("state", check_state),
         ("data", check_data_pipeline),
+        ("flow", check_cross_session_flow),
         ("predictions", check_predictions),
         ("strategy", check_strategic_context),
         ("sessions", check_sessions),
