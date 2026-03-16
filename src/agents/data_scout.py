@@ -124,8 +124,8 @@ class ScoutConfig(AgentConfig):
     min_alpha_potential: float = 0.3  # Minimum to propose
 
     # Approval settings
-    require_approval: bool = True
-    auto_approve_threshold: float = 0.9  # Auto-approve if score above this
+    require_approval: bool = False  # Fully autonomous
+    auto_approve_threshold: float = 0.0  # Auto-approve all proposals
 
     # LLM settings
     use_llm_evaluation: bool = True

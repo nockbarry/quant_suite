@@ -33,6 +33,8 @@ from typing import Optional, Any
 from enum import Enum
 import fcntl
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -135,7 +137,7 @@ class ActionQueue:
     Thread-safe via file locking for concurrent daemon access.
     """
 
-    QUEUE_FILE = Path.home() / "quant_results" / "live" / "action_queue.json"
+    QUEUE_FILE = paths.live / "action_queue.json"
 
     def __init__(self):
         self.QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)

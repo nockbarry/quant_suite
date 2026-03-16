@@ -16,6 +16,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import paths
+
 import numpy as np
 import pandas as pd
 
@@ -691,7 +693,7 @@ class DailyReportGenerator:
 
     def __init__(self, output_dir: Path | str | None = None):
         """Initialize daily report generator."""
-        self.output_dir = Path(output_dir or Path.home() / "quant_results" / "daily_reports")
+        self.output_dir = Path(output_dir or paths.daily_reports)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def generate_daily_report(

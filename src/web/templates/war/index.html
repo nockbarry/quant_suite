@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% set active_page = "war" %}
+{% block title %}War Dashboard{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">War Dashboard</h1>
+            <p class="text-xs text-gray-500 mt-1">Geopolitical Monitor -- conflict exposure, escalation, diplomacy</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-500">Updated: {{ last_updated[:16] if last_updated else 'N/A' }}</span>
+        </div>
+    </div>
+
+    <!-- Escalation + Market Stats Row -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Escalation Level -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Escalation Level</h2>
+            <div class="flex items-center gap-4">
+                <div class="relative w-20 h-20">
+                    <svg class="w-20 h-20 -rotate-90" viewBox="0 0 36 36">
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              fill="none" stroke="#374151" stroke-width="3"/>
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              fill="none"
+                              stroke="{% if escalation_level.color == 'emerald' %}#10b981{% elif escalation_level.color == 'yellow' %}#eab308{% elif escalation_level.color == 'orange' %}#f97316{% else %}#ef4444{% endif %}"
+                              stroke-width="3"
+                              stroke-dasharray="{{ (escalation_level.level / escalation_level.max_level * 100) }}, 100"/>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <span class="mono text-2xl font-bold {% if escalation_level.color == 'emerald' %}text-emerald-400{% elif escalation_level.color == 'yellow' %}text-yellow-400{% elif escalation_level.color == 'orange' %}text-orange-400{% else %}text-red-400{% endif %}">
+                            {{ escalation_level.level }}
+                        </span>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-xs {% if escalation_level.color == 'emerald' %}text-emerald-400{% elif escalation_level.color == 'yellow' %}text-yellow-400{% elif escalation_level.color == 'orange' %}text-orange-400{% else %}text-red-400{% endif %} font-medium">
+                        {{ escalation_level.description.split(' — ')[0] if ' — ' in escalation_level.description else 'Level ' ~ escalation_level.level }}
+                    </p>
+                    <p class="text-[10px] text-gray-500 mt-1">{{ escalation_level.description.split(' — ')[1] if ' — ' in escalation_level.description else escalation_level.description }}</p>
+                    <div class="flex items-center gap-3 mt-2">
+                        <span class="text-[10px] text-gray-500">VIX: <span class="mono text-gray-300">{{ "%.1f"|format(escalation_level.vix or 0) }}</span></span>
+                        <span class="text-[10px] text-gray-500">War news: <span class="mono text-gray-300">{{ escalation_level.war_news_count }}</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Market Context -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Market Context</h2>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <p class="text-[10px] text-gray-500">SPY</p>
+                    <p class="mono text-lg font-bold {% if (oil.spy_change_pct or 0) >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                        {{ "%.1f"|format(oil.spy_price or 0) }}
+                    </p>
+                    <p class="text-[10px] {% if (oil.spy_change_pct or 0) >= 0 %}text-emerald-500{% else %}text-red-500{% endif %}">
+                        {{ "%+.2f"|format(oil.spy_change_pct or 0) }}%
+                    </p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-500">VIX</p>
+                    <p class="mono text-lg font-bold {% if (oil.vix or 0) > 25 %}text-red-400{% elif (oil.vix or 0) > 20 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                        {{ "%.1f"|format(oil.vix or 0) }}
+                    </p>
+                    <p class="text-[10px] {% if (oil.vix_change_pct or 0) >= 0 %}text-red-500{% else %}text-emerald-500{% endif %}">
+                        {{ "%+.2f"|format(oil.vix_change_pct or 0) }}%
+                    </p>
+                </div>
+            </div>
+            {% if oil.leading_sectors %}
+            <div class="mt-3">
+                <p class="text-[10px] text-gray-500">Leading</p>
+                <p class="text-xs text-emerald-400">{{ oil.leading_sectors[:3] | join(', ') }}</p>
+            </div>
+            {% endif %}
+            {% if oil.lagging_sectors %}
+            <div class="mt-1">
+                <p class="text-[10px] text-gray-500">Lagging</p>
+                <p class="text-xs text-red-400">{{ oil.lagging_sectors[:3] | join(', ') }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Energy Positions -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Energy Positions</h2>
+            {% if oil.energy_positions %}
+            <div class="space-y-1">
+                {% for pos in oil.energy_positions %}
+                <div class="flex items-center justify-between text-xs">
+                    <span class="mono text-gray-200 w-12">{{ pos.symbol }}</span>
+                    <span class="mono text-gray-400">${{ "%.2f"|format(pos.price or 0) }}</span>
+                    <span class="mono {% if (pos.day_pnl_pct or 0) >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                        {{ "%+.1f"|format(pos.day_pnl_pct or 0) }}%
+                    </span>
+                    <span class="mono {% if (pos.unrealized_pnl_pct or 0) >= 0 %}text-emerald-400{% else %}text-red-400{% endif %}">
+                        {{ "%+.1f"|format(pos.unrealized_pnl_pct or 0) }}%
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-xs text-gray-500">No energy positions</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: News (2 cols) -->
+        <div class="lg:col-span-2 space-y-4">
+            <!-- War/Conflict News -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    Conflict News
+                    <span class="text-[10px] text-gray-500 ml-1">({{ war_news | length }} items)</span>
+                </h2>
+                {% if war_news %}
+                <div class="space-y-2 max-h-96 overflow-y-auto">
+                    {% for item in war_news %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex-1">
+                                {% if item.is_urgent %}
+                                <span class="text-[10px] bg-red-900/50 text-red-400 px-1.5 py-0.5 rounded mr-1">URGENT</span>
+                                {% endif %}
+                                <span class="text-xs text-gray-200">{{ item.headline }}</span>
+                            </div>
+                            <span class="text-[10px] text-gray-500 whitespace-nowrap">{{ item.source }}</span>
+                        </div>
+                        {% if item.thesis_matches %}
+                        <div class="flex flex-wrap gap-1 mt-1">
+                            {% for tid, match in item.thesis_matches.items() %}
+                            <span class="text-[10px] bg-gray-700 px-1.5 py-0.5 rounded text-gray-400">
+                                {{ match.name[:30] }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <p class="text-[10px] text-gray-600 mt-1">{{ item.timestamp[:16] if item.timestamp else '' }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No conflict-related news items</p>
+                {% endif %}
+            </div>
+
+            <!-- Diplomatic Signals -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    Diplomatic Signals
+                    <span class="text-[10px] text-gray-500 ml-1">({{ diplomatic_signals | length }} items)</span>
+                </h2>
+                {% if diplomatic_signals %}
+                <div class="space-y-2">
+                    {% for item in diplomatic_signals %}
+                    <div class="flex items-start justify-between gap-2 px-3 py-2 bg-emerald-900/10 border border-emerald-900/20 rounded">
+                        <span class="text-xs text-gray-200 flex-1">{{ item.headline }}</span>
+                        <div class="text-right whitespace-nowrap">
+                            <p class="text-[10px] text-gray-500">{{ item.source }}</p>
+                            <p class="text-[10px] text-gray-600">{{ item.timestamp[:16] if item.timestamp else '' }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No diplomatic signals detected</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right: Exposure (1 col) -->
+        <div class="space-y-4">
+            <!-- Portfolio Conflict Exposure -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Conflict Thesis Exposure</h2>
+                {% if portfolio_exposure %}
+                <div class="space-y-3">
+                    {% for thesis in portfolio_exposure %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center justify-between">
+                            <a href="/theses/{{ thesis.id }}" class="text-xs text-gray-200 hover:text-emerald-400 font-medium truncate max-w-[180px]" title="{{ thesis.name }}">
+                                {{ thesis.name }}
+                            </a>
+                            <span class="mono text-xs {% if thesis.conviction >= 80 %}text-emerald-400{% elif thesis.conviction >= 60 %}text-yellow-400{% elif thesis.conviction >= 40 %}text-orange-400{% else %}text-red-400{% endif %}">
+                                {{ thesis.conviction }}%
+                            </span>
+                        </div>
+                        <!-- Exposure bar -->
+                        <div class="mt-1.5 flex items-center gap-2">
+                            <div class="flex-1 bg-gray-700 rounded-full h-1.5">
+                                <div class="h-1.5 rounded-full {% if thesis.portfolio_pct > 15 %}bg-red-500{% elif thesis.portfolio_pct > 8 %}bg-yellow-500{% else %}bg-emerald-500{% endif %}"
+                                     style="width: {{ [thesis.portfolio_pct * 2.5, 100] | min }}%"></div>
+                            </div>
+                            <span class="mono text-[10px] text-gray-400 w-12 text-right">{{ thesis.portfolio_pct }}%</span>
+                        </div>
+                        <!-- Positions -->
+                        {% if thesis.positions %}
+                        <div class="flex flex-wrap gap-1 mt-1.5">
+                            {% for pos in thesis.positions[:6] %}
+                            <span class="text-[10px] mono {% if (pos.pnl_pct or 0) >= 0 %}text-emerald-500{% else %}text-red-500{% endif %}">
+                                {{ pos.symbol }} {{ "%+.0f"|format(pos.pnl_pct or 0) }}%
+                            </span>
+                            {% endfor %}
+                            {% if thesis.positions | length > 6 %}
+                            <span class="text-[10px] text-gray-600">+{{ thesis.positions | length - 6 }} more</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <!-- Total exposure -->
+                {% set total_pct = portfolio_exposure | sum(attribute='portfolio_pct') %}
+                <div class="mt-3 pt-3 border-t border-gray-700 flex items-center justify-between">
+                    <span class="text-xs text-gray-400">Total conflict exposure</span>
+                    <span class="mono text-sm font-bold {% if total_pct > 60 %}text-red-400{% elif total_pct > 40 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                        {{ "%.1f"|format(total_pct) }}%
+                    </span>
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No conflict-related thesis positions</p>
+                {% endif %}
+            </div>
+
+            <!-- Commodity Data (if available) -->
+            {% if commodities %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Commodity Data</h2>
+                <div class="space-y-2">
+                    {% for name, data in commodities.items() %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <p class="text-xs text-gray-300 font-medium">{{ name | replace('_', ' ') | title }}</p>
+                        {% if data is mapping %}
+                        <div class="mt-1 space-y-0.5">
+                            {% for key, val in data.items() %}
+                            {% if key != 'timestamp' and key != 'updated_at' %}
+                            <div class="flex justify-between text-[10px]">
+                                <span class="text-gray-500">{{ key | replace('_', ' ') }}</span>
+                                <span class="mono text-gray-300">{{ val }}</span>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Commodity Data</h2>
+                <p class="text-xs text-gray-500">No commodity pipeline data available.</p>
+                <p class="text-[10px] text-gray-600 mt-1">Files checked: fertilizer_prices.json, shipping_rates.json, lng_prices.json, hormuz_status.json</p>
+            </div>
+            {% endif %}
+
+            <!-- Escalation Scale -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Escalation Scale</h2>
+                <div class="space-y-1">
+                    {% for i in range(10, 0, -1) %}
+                    <div class="flex items-center gap-2">
+                        <div class="w-6 h-4 rounded
+                            {% if i <= 2 %}bg-emerald-900/50 border border-emerald-800{% elif i <= 4 %}bg-yellow-900/50 border border-yellow-800{% elif i <= 6 %}bg-orange-900/50 border border-orange-800{% else %}bg-red-900/50 border border-red-800{% endif %}
+                            {% if i == escalation_level.level %}ring-2 {% if i <= 2 %}ring-emerald-400{% elif i <= 4 %}ring-yellow-400{% elif i <= 6 %}ring-orange-400{% else %}ring-red-400{% endif %}{% endif %}
+                            flex items-center justify-center">
+                            <span class="mono text-[10px] {% if i == escalation_level.level %}font-bold text-white{% else %}text-gray-500{% endif %}">{{ i }}</span>
+                        </div>
+                        <span class="text-[10px] {% if i == escalation_level.level %}text-gray-200 font-medium{% else %}text-gray-600{% endif %}">
+                            {% if i == 10 %}Maximum{% elif i == 9 %}Extreme{% elif i == 8 %}Critical{% elif i == 7 %}Severe{% elif i == 6 %}High{% elif i == 5 %}Heightened{% elif i == 4 %}Moderate{% elif i == 3 %}Elevated{% elif i == 2 %}Low{% else %}Calm{% endif %}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

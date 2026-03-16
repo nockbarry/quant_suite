@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
+
+from src.core.paths import paths
 from typing import Any, Literal
 
 import numpy as np
@@ -141,7 +143,7 @@ class MarketScanner:
         self,
         cache_dir: Path | None = None,
     ):
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "scanner"
+        self.cache_dir = cache_dir or paths.base / "scanner"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self._price_cache: dict[str, pd.DataFrame] = {}

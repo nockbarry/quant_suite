@@ -118,17 +118,17 @@ tracker.log_insight(
 
 | Output | Path |
 |--------|------|
-| Research reports | `/home/nock/quant_results/full_research/` |
-| Cycle results | `/home/nock/quant_results/comprehensive_research/` |
-| Insights | `/home/nock/quant_results/research_tracker/insights.json` |
-| Experiments | `/home/nock/quant_results/research_tracker/experiments.json` |
+| Research reports | `~/quant_results/full_research/` |
+| Cycle results | `~/quant_results/comprehensive_research/` |
+| Insights | `~/quant_results/research_tracker/insights.json` |
+| Experiments | `~/quant_results/research_tracker/experiments.json` |
 
 ## Following Up on Leads
 
 After a research cycle, check experiment_leads in the results:
 ```python
 import json
-with open('/home/nock/quant_results/comprehensive_research/cycle_YYYYMMDD_HHMMSS.json') as f:
+with open('~/quant_results/comprehensive_research/cycle_YYYYMMDD_HHMMSS.json') as f:
     results = json.load(f)
 
 for lead in results['experiment_leads'][:5]:

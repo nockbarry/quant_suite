@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import paths
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -122,7 +123,7 @@ class SignalQualityTracker:
     ]
 
     def __init__(self, results_dir: Path | None = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.quality_dir = self.results_dir / "signal_quality"
         self.quality_file = self.quality_dir / "quality.json"
         self.outcomes_file = self.quality_dir / "outcomes.jsonl"

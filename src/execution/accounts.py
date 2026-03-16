@@ -26,6 +26,9 @@ from typing import Optional
 import logging
 import yaml
 
+from src.core.instance import instance_config
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -108,9 +111,7 @@ class AccountManager:
         Args:
             config_path: Path to credentials.yaml
         """
-        self.config_path = config_path or (
-            Path(__file__).parent.parent.parent / "config" / "credentials.yaml"
-        )
+        self.config_path = config_path or instance_config.credentials_path()
         self._accounts: dict[TradingAccount, AccountInfo] = {}
         self._brokers: dict[TradingAccount, any] = {}
         self._load_config()
@@ -228,7 +229,7 @@ class AccountManager:
         Returns:
             Path like ~/quant_results/accounts/live/
         """
-        base = Path.home() / "quant_results" / "accounts" / account.value
+        base = paths.base / "accounts" / account.value
         base.mkdir(parents=True, exist_ok=True)
         return base
 

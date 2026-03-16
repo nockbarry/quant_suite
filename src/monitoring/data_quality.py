@@ -19,6 +19,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import paths
+
 import numpy as np
 import pandas as pd
 
@@ -151,7 +153,7 @@ class DataQualityMonitor:
     """
 
     def __init__(self, results_dir: Path | None = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.cache_dir = self.results_dir / "cache"
         self.live_dir = self.results_dir / "live"
 

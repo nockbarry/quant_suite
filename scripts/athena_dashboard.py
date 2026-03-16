@@ -157,7 +157,8 @@ st.markdown("""
 # DATA
 # =============================================================================
 
-RESULTS_DIR = Path.home() / "quant_results"
+from src.core.paths import paths
+RESULTS_DIR = paths.base
 
 def load_state():
     f = RESULTS_DIR / "live" / "state.json"

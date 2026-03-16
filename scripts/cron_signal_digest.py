@@ -25,7 +25,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [signal-digest] %(message)s")
 logger = logging.getLogger(__name__)
 
-RESULTS_DIR = Path.home() / "quant_results"
+from src.core.paths import paths
+
+RESULTS_DIR = paths.base
 DIGEST_FILE = RESULTS_DIR / "scheduler" / "signal_digest.json"
 
 # Source quality weights (from thesis_suggester + empirical tuning)

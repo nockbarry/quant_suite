@@ -270,4 +270,4 @@ critic_report = {
 }
 ```
 
-Save to: `/home/nock/quant_results/critic_reports/`
+Save to: `~/quant_results/critic_reports/`

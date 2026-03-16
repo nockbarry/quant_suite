@@ -21,7 +21,10 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [smart_completion] %(message)s")
 logger = logging.getLogger(__name__)
 
-RESULTS_DIR = Path.home() / "quant_results"
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.core.paths import paths
+
+RESULTS_DIR = paths.base
 COMPLETIONS_DIR = RESULTS_DIR / "scheduler" / "completions"
 
 

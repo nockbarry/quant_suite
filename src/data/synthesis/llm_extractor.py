@@ -18,6 +18,8 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
+
+from src.core.paths import paths
 from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
@@ -362,7 +364,7 @@ Text:
         cache_dir: Path | None = None,
     ):
         self.api_key = api_key
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "insights"
+        self.cache_dir = cache_dir or paths.base / "insights"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self._rule_extractor = RuleBasedExtractor()
@@ -509,7 +511,7 @@ class InsightTracker:
     """
 
     def __init__(self, knowledge_base_path: Path | None = None):
-        self.kb_path = knowledge_base_path or Path.home() / "quant_results" / "knowledge"
+        self.kb_path = knowledge_base_path or paths.knowledge
         self._predictions: list[dict] = []
         self._load()
 

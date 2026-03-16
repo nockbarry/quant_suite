@@ -20,6 +20,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import paths
+
 import numpy as np
 import pandas as pd
 
@@ -140,7 +142,7 @@ class ModelHealthMonitor:
     """
 
     def __init__(self, results_dir: Path | None = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.models_dir = self.results_dir / "models"
         self.predictions_log = self.results_dir / "logs" / "predictions.jsonl"
 

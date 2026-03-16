@@ -19,12 +19,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import os
+
 import numpy as np
 import pandas as pd
 import yfinance as yf
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 # Time horizons to test
 TIME_HORIZONS = {
@@ -608,7 +612,7 @@ def run_multi_horizon_research(
         print("Consider the MONITOR strategies or adjust criteria.")
 
     # Save results
-    output_dir = Path.home() / "quant_results" / "multi_horizon_research"
+    output_dir = _RESULTS_DIR / "multi_horizon_research"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     results = {

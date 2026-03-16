@@ -19,10 +19,13 @@ Usage:
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 import numpy as np
 import pandas as pd
@@ -361,7 +364,7 @@ class ComprehensiveResearcher:
         min_sharpe: float = 0.5,
         max_p_value: float = 0.05,
     ):
-        self.output_dir = output_dir or Path.home() / "quant_results" / "comprehensive_research"
+        self.output_dir = output_dir or _RESULTS_DIR / "comprehensive_research"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.n_permutations = n_permutations

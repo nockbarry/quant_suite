@@ -19,12 +19,14 @@ from uuid import uuid4
 
 import yaml
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 CLAUDE_PATH = "/home/nock/.local/bin/claude"
-RESULTS_DIR = Path.home() / "quant_results" / "research_results"
+RESULTS_DIR = paths.base / "research_results"
 PROJECT_DIR = "/home/nock/projects/quant_suite"
-QUANT_RESULTS = Path.home() / "quant_results"
+QUANT_RESULTS = paths.base
 
 # Preset research prompts
 RESEARCH_PRESETS = {

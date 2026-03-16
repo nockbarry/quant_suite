@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 from pathlib import Path
+
+from src.core.paths import paths
 import json
 
 import numpy as np
@@ -166,7 +168,7 @@ class FeatureStabilityMonitor:
             ic_window_days: Rolling window for IC calculation
             min_periods: Minimum periods required for analysis
         """
-        self.output_dir = output_dir or Path.home() / "quant_results" / "feature_stability"
+        self.output_dir = output_dir or paths.base / "feature_stability"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.ic_window_days = ic_window_days
         self.min_periods = min_periods

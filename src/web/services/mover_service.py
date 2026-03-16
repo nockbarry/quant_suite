@@ -4,7 +4,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-RESULTS_DIR = Path.home() / "quant_results"
+from src.core.paths import paths
+
+RESULTS_DIR = paths.base
 LATEST_PATH = RESULTS_DIR / "live" / "market_movers_latest.json"
 HISTORY_PATH = RESULTS_DIR / "logs" / "market_movers_history.json"
 

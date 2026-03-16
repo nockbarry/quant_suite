@@ -98,7 +98,7 @@ class DailySignalArchiver:
     """Archives daily signals for future backtesting."""
 
     def __init__(self, results_dir: Path = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.archive_dir = self.results_dir / "signal_archive"
 
     def _get_archive_path(self, archive_date: date) -> Path:

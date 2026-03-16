@@ -18,6 +18,8 @@ import json
 import logging
 import uuid
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -139,7 +141,7 @@ class PaperPositionTracker:
                          Defaults to ~/quant_results/paper_positions.json
         """
         if storage_path is None:
-            storage_path = Path.home() / "quant_results" / "paper_positions.json"
+            storage_path = paths.base / "paper_positions.json"
 
         self.storage_path = storage_path
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)

@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -120,7 +122,7 @@ class DataFreshnessTracker:
     }
 
     def __init__(self, results_dir: Path | None = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.live_dir = self.results_dir / "live"
         self.logs_dir = self.results_dir / "logs"
 

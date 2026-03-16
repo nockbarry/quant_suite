@@ -1,34 +1,34 @@
 ---
 name: execute-trades
-description: Execute approved trading decisions via Alpaca API. Reads pending decisions from /trade-decision, validates against risk limits, and submits orders. Requires explicit approval before execution.
+description: Execute trading decisions via Alpaca API. Reads pending decisions from /trade-decision, validates against risk limits, and submits orders. Fully autonomous — no human approval needed.
 allowed-tools: Read, Bash(PYTHONPATH=*), Glob, Grep, Write
 ---
 
 # Execute Trades Skill
 
-Executes approved trading decisions through the Alpaca broker API.
+Autonomously executes trading decisions through the Alpaca broker API.
 
 ## Purpose
 
 This skill:
 1. Reads pending decisions from `/trade-decision` output
-2. Validates each decision against risk limits
-3. **Requires explicit approval** before execution
+2. Validates each decision against risk limits (safety rails)
+3. **Executes autonomously** — no human approval needed
 4. Submits orders to Alpaca (paper or live)
-5. Logs execution results
+5. Logs execution results and updates decision status
 
 ## Safety Features
 
-- **Explicit approval required** - Never auto-execute without user confirmation
+- **Autonomous execution** within risk limits — quantitative safety rails enforce discipline
 - **Risk limit validation** - Position sizing, sector exposure, daily loss limits
-- **PDT compliance check** - Warns if day trade count is at limit
+- **PDT compliance check** - Blocks if day trade count at limit
 - **Paper trading default** - Uses paper account unless explicitly overridden
 
 ## Quick Start
 
 ```bash
 # Check pending decisions
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.decision.decision_logger import DecisionLogger
 
 logger = DecisionLogger()
@@ -79,7 +79,7 @@ from alpaca.trading.client import TradingClient
 import yaml
 
 # Load credentials
-with open("/home/nock/projects/quant_suite/config/credentials.yaml") as f:
+with open("config/credentials.yaml") as f:
     creds = yaml.safe_load(f)
 
 client = TradingClient(
@@ -117,16 +117,7 @@ for decision in pending:
         print(f"WARNING: PDT limit reached - no day trades allowed")
 ```
 
-### Step 3: User Approval
-
-**CRITICAL: Never execute without explicit user approval.**
-
-Present decisions and ask:
-- "Approve all pending decisions?" → Execute all
-- "Approve specific decisions?" → Execute selected
-- "Cancel" → Do not execute
-
-### Step 4: Execute Orders
+### Step 3: Execute Orders (Autonomous)
 
 ```python
 from alpaca.trading.client import TradingClient
@@ -202,7 +193,7 @@ for decision in approved_decisions:
 ```
 User: /execute-trades
 
-Claude: I'll review pending decisions and execute with your approval.
+Claude: Reviewing pending decisions and executing autonomously.
 
 ## Pending Decisions
 
@@ -212,28 +203,16 @@ Claude: I'll review pending decisions and execute with your approval.
 - **Stop Loss:** -10%
 - **Reasoning:** HAL benefits from Venezuela thesis, insider_technical signal
 
-### Risk Validation
+### Risk Validation — PASSED
 - Account Equity: $95,888
 - Cash Available: $10,000
 - Position Size: $2,877 (within limits)
 - Day Trade Count: 0/3 (OK)
-- Sector Exposure After: Energy 48% (approaching limit)
+- Sector Exposure After: Energy 48% (approaching limit but within 50% max)
 
-### Approval Required
+### Executing...
 
-Do you want to execute this trade?
-
-Options:
-1. **Execute HAL BUY** - Submit market order for ~$2,900
-2. **Modify** - Change size or other parameters
-3. **Skip** - Do not execute this decision
-4. **Cancel all** - Exit without executing
-
----
-
-User: Execute HAL BUY
-
-Claude: Executing HAL BUY order...
+Executing HAL BUY order...
 
 **Order Submitted:**
 - Symbol: HAL
@@ -283,8 +262,8 @@ Run /monitor to check position status.
 
 | File | Purpose |
 |------|---------|
-| `/home/nock/quant_results/decisions/` | Pending decisions |
-| `/home/nock/quant_results/executions/` | Execution logs |
+| `~/quant_results/decisions/` | Pending decisions |
+| `~/quant_results/executions/` | Execution logs |
 | `config/credentials.yaml` | Alpaca credentials |
 
 ## Post-Execution

@@ -14,6 +14,8 @@ from datetime import datetime
 from typing import Optional, Any
 import logging
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -520,7 +522,7 @@ class SignalAggregator:
             from datetime import datetime, timedelta
 
             # Load congressional trades data
-            archive_path = Path.home() / "quant_results" / "congressional_archive" / "processed" / "all_trades.parquet"
+            archive_path = paths.base / "congressional_archive" / "processed" / "all_trades.parquet"
 
             if not archive_path.exists():
                 return None
@@ -598,7 +600,7 @@ class SignalAggregator:
             import pandas as pd
             from pathlib import Path
 
-            insider_cache = Path.home() / "quant_results" / "live" / "research" / "insider_signals.json"
+            insider_cache = paths.live_research / "insider_signals.json"
             if insider_cache.exists():
                 import json
                 with open(insider_cache) as f:
@@ -667,7 +669,7 @@ class SignalAggregator:
             from pathlib import Path
 
             # Check for pre-computed sentiment in research folder
-            sentiment_file = Path.home() / "quant_results" / "live" / "research" / "sentiment.json"
+            sentiment_file = paths.live_research / "sentiment.json"
 
             if sentiment_file.exists():
                 with open(sentiment_file) as f:
@@ -679,7 +681,7 @@ class SignalAggregator:
                     return (score - 0.5) * 2
 
             # Fallback: Use Fear & Greed as proxy (market-wide sentiment)
-            state_file = Path.home() / "quant_results" / "live" / "state.json"
+            state_file = paths.live_state
             if state_file.exists():
                 with open(state_file) as f:
                     state = json.load(f)

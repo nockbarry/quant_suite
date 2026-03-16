@@ -63,6 +63,8 @@ logs/
 
 # Credentials (NEVER commit)
 config/credentials.yaml
+config/credentials_*.yaml
+!config/credentials_template.yaml
 .env
 *.key
 *.pem

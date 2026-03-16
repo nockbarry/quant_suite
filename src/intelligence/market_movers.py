@@ -21,9 +21,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
-RESULTS_DIR = Path.home() / "quant_results"
+RESULTS_DIR = paths.base
 
 
 @dataclass

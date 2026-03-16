@@ -20,7 +20,7 @@ Investment theses provide the "why" behind trades:
 ### List Active Theses
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.thesis import ThesisTracker
 from src.core.paths import paths
 
@@ -41,7 +41,7 @@ EOF
 ### Create New Thesis
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.thesis import ThesisTracker, Signpost
 from src.core.paths import paths
 
@@ -82,7 +82,7 @@ EOF
 ### Update Conviction
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.thesis import ThesisTracker
 from src.core.paths import paths
 
@@ -106,7 +106,7 @@ EOF
 ### Trigger Signpost
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.thesis import ThesisTracker
 from src.core.paths import paths
 
@@ -131,7 +131,7 @@ EOF
 ### Add Position to Thesis
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.thesis import ThesisTracker
 from src.core.paths import paths
 
@@ -149,7 +149,7 @@ EOF
 ### Review Theses Due
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.thesis import ThesisTracker
 from src.core.paths import paths
 
@@ -177,7 +177,7 @@ EOF
 ### Invalidate Thesis
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.thesis import ThesisTracker
 from src.core.paths import paths
 
@@ -198,7 +198,7 @@ EOF
 Before creating or reviewing any thesis, read the accumulated trading wisdom:
 
 ```bash
-cat /home/nock/projects/quant_suite/docs/TRADING_PATTERNS.md
+cat docs/TRADING_PATTERNS.md
 ```
 
 Key patterns to apply:

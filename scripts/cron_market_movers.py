@@ -23,6 +23,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [market_movers] %(message)s",
@@ -30,7 +32,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-RESULTS_DIR = Path.home() / "quant_results"
+from src.core.paths import paths
+
+RESULTS_DIR = paths.base
 MOVERS_LATEST = RESULTS_DIR / "live" / "market_movers_latest.json"
 MOVERS_HISTORY = RESULTS_DIR / "logs" / "market_movers_history.json"
 

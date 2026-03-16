@@ -34,13 +34,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).parent.parent
-RESULTS_DIR = Path.home() / "quant_results"
+sys.path.insert(0, str(PROJECT_DIR))
+
+from src.core.paths import paths
+
+RESULTS_DIR = paths.base
 SCHEDULER_DIR = RESULTS_DIR / "scheduler"
 LOG_DIR = RESULTS_DIR / "logs"
-STATE_FILE = RESULTS_DIR / "live" / "state.json"
+STATE_FILE = paths.live_state
 DB_FILE = RESULTS_DIR / "athena.db"
-
-sys.path.insert(0, str(PROJECT_DIR))
 
 
 class Check:

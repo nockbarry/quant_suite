@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Optional, Callable, Any
 from enum import Enum
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -112,7 +114,7 @@ DEFAULT_RULES = [
         priority=10,
     ),
 
-    # VIX mean reversion - QUEUE (needs confirmation)
+    # VIX mean reversion - AUTO (fully autonomous)
     ExecutionRule(
         rule_id="vix_mean_reversion",
         name="VIX Mean Reversion Entry",
@@ -122,11 +124,11 @@ DEFAULT_RULES = [
         symbol_source="SPY",
         size_type="percent",
         size_value=5.0,
-        approval=ApprovalType.QUEUE,
+        approval=ApprovalType.AUTO,
         priority=8,
     ),
 
-    # Thesis add on oversold - QUEUE
+    # Thesis add on oversold - AUTO (fully autonomous)
     ExecutionRule(
         rule_id="thesis_oversold_add",
         name="Add to Thesis on Oversold",
@@ -136,7 +138,7 @@ DEFAULT_RULES = [
         symbol_source="trigger",
         size_type="percent",
         size_value=2.0,
-        approval=ApprovalType.QUEUE,
+        approval=ApprovalType.AUTO,
         priority=6,
     ),
 
@@ -168,7 +170,7 @@ DEFAULT_RULES = [
         priority=10,
     ),
 
-    # Drawdown protection - NOTIFY
+    # Drawdown protection - AUTO (fully autonomous)
     ExecutionRule(
         rule_id="drawdown_protection",
         name="Portfolio Drawdown Protection",
@@ -178,11 +180,25 @@ DEFAULT_RULES = [
         symbol_source="largest_position",
         size_type="percent",
         size_value=10.0,
-        approval=ApprovalType.NOTIFY,
+        approval=ApprovalType.AUTO,
         priority=9,
     ),
 
-    # Gold breakout - QUEUE
+    # Thesis invalidation auto-close - AUTO (fully autonomous)
+    ExecutionRule(
+        rule_id="thesis_invalidation_close",
+        name="Close on Thesis Invalidation",
+        description="Close position when thesis conviction drops below 40%",
+        trigger_condition="thesis.conviction < 40",
+        action=TradeAction.CLOSE,
+        symbol_source="trigger",
+        size_type="full",
+        size_value=100,
+        approval=ApprovalType.AUTO,
+        priority=9,
+    ),
+
+    # Gold breakout - AUTO (fully autonomous)
     ExecutionRule(
         rule_id="gold_breakout",
         name="Gold Thesis Confirmation",
@@ -192,7 +208,7 @@ DEFAULT_RULES = [
         symbol_source="GDX",
         size_type="percent",
         size_value=2.0,
-        approval=ApprovalType.QUEUE,
+        approval=ApprovalType.AUTO,
         priority=6,
     ),
 ]
@@ -202,7 +218,7 @@ class RulesEngine:
     """Execute trades based on predefined rules."""
 
     def __init__(self, rules_dir: Optional[Path] = None):
-        self.rules_dir = rules_dir or Path.home() / "quant_results" / "rules"
+        self.rules_dir = rules_dir or paths.base / "rules"
         self.rules_dir.mkdir(parents=True, exist_ok=True)
 
         self.rules: list[ExecutionRule] = []

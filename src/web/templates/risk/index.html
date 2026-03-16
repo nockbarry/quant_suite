@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% set active_page = "risk" %}
+{% block title %}Risk{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Risk Dashboard</h1>
+            <p class="text-xs text-gray-500 mt-1">Stress tests, VaR, concentration analysis</p>
+        </div>
+        <div class="flex items-center gap-3">
+            {% if report.get('_fresh') %}
+            <div class="flex items-center gap-2 bg-emerald-900/30 border border-emerald-800 rounded-lg px-3 py-1.5">
+                <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                <span class="text-xs text-emerald-400 mono">{{ report._age_display }} ago</span>
+            </div>
+            {% elif not report.get('missing') %}
+            <div class="flex items-center gap-2 bg-yellow-900/30 border border-yellow-800 rounded-lg px-3 py-1.5">
+                <div class="w-2 h-2 rounded-full bg-yellow-500"></div>
+                <span class="text-xs text-yellow-400 mono">{{ report._age_display }} ago</span>
+            </div>
+            {% else %}
+            <div class="flex items-center gap-2 bg-red-900/30 border border-red-800 rounded-lg px-3 py-1.5">
+                <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                <span class="text-xs text-red-400 mono">No data</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if report.get('missing') %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-8 text-center">
+        <p class="text-gray-400">{{ report.get('message', 'No stress test reports found.') }}</p>
+        <p class="text-xs text-gray-500 mt-2 mono">PYTHONPATH=. python scripts/run_stress_test.py</p>
+    </div>
+    {% else %}
+
+    <!-- Risk Metrics Row -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Equity</p>
+            <p class="mono text-lg font-bold text-gray-200">${{ "{:,.0f}".format(report.portfolio_equity or 0) }}</p>
+            <p class="text-[10px] text-gray-500">{{ report.position_count or 0 }} positions</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">95% VaR (1d)</p>
+            <p class="mono text-lg font-bold {% if (report.var_95_pct or 0) > 4 %}text-red-400{% elif (report.var_95_pct or 0) > 2.5 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                {{ "%.2f"|format(report.var_95_pct or 0) }}%
+            </p>
+            <p class="text-[10px] text-gray-500">${{ "{:,.0f}".format((report.var_95_pct or 0) / 100 * (report.portfolio_equity or 0)) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">99% VaR (1d)</p>
+            <p class="mono text-lg font-bold {% if (report.var_99_pct or 0) > 6 %}text-red-400{% elif (report.var_99_pct or 0) > 4 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                {{ "%.2f"|format(report.var_99_pct or 0) }}%
+            </p>
+            <p class="text-[10px] text-gray-500">${{ "{:,.0f}".format((report.var_99_pct or 0) / 100 * (report.portfolio_equity or 0)) }}</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Expected Shortfall</p>
+            <p class="mono text-lg font-bold {% if (report.expected_shortfall_pct or 0) > 5 %}text-red-400{% elif (report.expected_shortfall_pct or 0) > 3 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                {{ "%.2f"|format(report.expected_shortfall_pct or 0) }}%
+            </p>
+            <p class="text-[10px] text-gray-500">avg beyond 95% tail</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Concentration</p>
+            <p class="mono text-lg font-bold {% if (report.concentration_risk_score or 0) > 0.35 %}text-red-400{% elif (report.concentration_risk_score or 0) > 0.2 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                {{ "%.3f"|format(report.concentration_risk_score or 0) }}
+            </p>
+            <p class="text-[10px] text-gray-500">HHI (0-1)</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Max Sector</p>
+            <p class="mono text-lg font-bold {% if (report.max_single_sector_exposure_pct or 0) > 40 %}text-red-400{% elif (report.max_single_sector_exposure_pct or 0) > 30 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                {{ "%.1f"|format(report.max_single_sector_exposure_pct or 0) }}%
+            </p>
+            <p class="text-[10px] text-gray-500">limit: 40%</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Risk Level</p>
+            <p class="mono text-lg font-bold {% if report._risk_level == 'high' %}text-red-400{% elif report._risk_level == 'moderate' %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                {{ (report._risk_level or 'unknown') | upper }}
+            </p>
+            <p class="text-[10px] text-gray-500">overall</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Scenarios + Recommendations -->
+        <div class="lg:col-span-2 space-y-4">
+
+            <!-- Scenario Results -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Scenario Analysis</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-800">
+                                <th class="text-left py-2 px-2 text-[10px] text-gray-500 uppercase">Scenario</th>
+                                <th class="text-right py-2 px-2 text-[10px] text-gray-500 uppercase">Impact %</th>
+                                <th class="text-right py-2 px-2 text-[10px] text-gray-500 uppercase">Impact $</th>
+                                <th class="text-left py-2 px-2 text-[10px] text-gray-500 uppercase">Worst</th>
+                                <th class="text-left py-2 px-2 text-[10px] text-gray-500 uppercase">Best</th>
+                                <th class="text-right py-2 px-2 text-[10px] text-gray-500 uppercase">Affected</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sr in report.scenario_results or [] %}
+                            <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                <td class="py-2 px-2 text-gray-300 text-xs">{{ sr.scenario_name }}</td>
+                                <td class="py-2 px-2 text-right mono text-xs {% if sr.portfolio_impact_pct < -10 %}text-red-400 font-bold{% elif sr.portfolio_impact_pct < 0 %}text-red-400{% elif sr.portfolio_impact_pct > 0 %}text-emerald-400{% else %}text-gray-400{% endif %}">
+                                    {{ "%+.1f"|format(sr.portfolio_impact_pct) }}%
+                                </td>
+                                <td class="py-2 px-2 text-right mono text-xs {% if sr.portfolio_impact_usd < 0 %}text-red-400{% elif sr.portfolio_impact_usd > 0 %}text-emerald-400{% else %}text-gray-400{% endif %}">
+                                    ${{ "{:+,.0f}".format(sr.portfolio_impact_usd) }}
+                                </td>
+                                <td class="py-2 px-2 text-xs">
+                                    {% if sr.worst_position %}
+                                    <span class="mono text-red-400">{{ sr.worst_position }}</span>
+                                    <span class="text-[10px] text-gray-500">${{ "{:+,.0f}".format(sr.worst_position_loss_usd) }}</span>
+                                    {% else %}
+                                    <span class="text-gray-600">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-2 px-2 text-xs">
+                                    {% if sr.best_position %}
+                                    <span class="mono text-emerald-400">{{ sr.best_position }}</span>
+                                    <span class="text-[10px] text-gray-500">${{ "{:+,.0f}".format(sr.best_position_gain_usd) }}</span>
+                                    {% else %}
+                                    <span class="text-gray-600">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-2 px-2 text-right mono text-xs text-gray-400">{{ sr.positions_affected }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Recommendations -->
+            {% if report.recommendations %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Recommendations</h2>
+                <div class="space-y-2">
+                    {% for rec in report.recommendations %}
+                    <div class="flex items-start gap-2 px-3 py-2 bg-gray-800/50 rounded">
+                        {% if 'CRITICAL' in rec or 'HIGH' in rec %}
+                        <span class="text-red-400 text-xs mt-0.5">&#9888;</span>
+                        {% elif 'Moderate' in rec or 'elevated' in rec %}
+                        <span class="text-yellow-400 text-xs mt-0.5">&#9888;</span>
+                        {% else %}
+                        <span class="text-gray-500 text-xs mt-0.5">&#8226;</span>
+                        {% endif %}
+                        <p class="text-xs text-gray-300">{{ rec }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Report History -->
+            {% if history %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Report History</h2>
+                <div class="space-y-1">
+                    {% for h in history %}
+                    <div class="flex items-center justify-between px-3 py-1.5 bg-gray-800/50 rounded text-xs">
+                        <span class="mono text-gray-400">{{ (h.timestamp or '')[:16] }}</span>
+                        <span class="mono {% if (h.var_95_pct or 0) > 4 %}text-red-400{% elif (h.var_95_pct or 0) > 2.5 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                            VaR95: {{ "%.2f"|format(h.var_95_pct or 0) }}%
+                        </span>
+                        <span class="mono text-gray-500">HHI: {{ "%.3f"|format(h.concentration_risk_score or 0) }}</span>
+                        <span class="text-gray-500">{{ h.position_count or 0 }} pos</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right: Sector Weights -->
+        <div class="space-y-4">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Sector Exposure</h2>
+                {% if report.sector_weights %}
+                <div class="space-y-2">
+                    {% for sector, pct in (report.sector_weights or {}).items() %}
+                    <div>
+                        <div class="flex items-center justify-between mb-0.5">
+                            <span class="text-xs text-gray-300">{{ sector }}</span>
+                            <span class="mono text-xs {% if pct > 40 %}text-red-400 font-bold{% elif pct > 25 %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ "%.1f"|format(pct) }}%</span>
+                        </div>
+                        <div class="w-full bg-gray-800 rounded-full h-1.5">
+                            <div class="h-1.5 rounded-full {% if pct > 40 %}bg-red-500{% elif pct > 25 %}bg-yellow-500{% elif pct > 10 %}bg-emerald-500{% else %}bg-gray-600{% endif %}"
+                                 style="width: {{ [pct, 100] | min }}%"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No sector weight data</p>
+                {% endif %}
+            </div>
+
+            <!-- VaR Gauge -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Value at Risk</h2>
+                <div class="space-y-3">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs text-gray-400">95% VaR</span>
+                            <span class="mono text-sm font-bold {% if (report.var_95_pct or 0) > 4 %}text-red-400{% elif (report.var_95_pct or 0) > 2.5 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                                {{ "%.2f"|format(report.var_95_pct or 0) }}%
+                            </span>
+                        </div>
+                        <div class="w-full bg-gray-800 rounded-full h-2">
+                            <div class="h-2 rounded-full {% if (report.var_95_pct or 0) > 4 %}bg-red-500{% elif (report.var_95_pct or 0) > 2.5 %}bg-yellow-500{% else %}bg-emerald-500{% endif %}"
+                                 style="width: {{ [(report.var_95_pct or 0) * 10, 100] | min }}%"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs text-gray-400">99% VaR</span>
+                            <span class="mono text-sm font-bold {% if (report.var_99_pct or 0) > 6 %}text-red-400{% elif (report.var_99_pct or 0) > 4 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                                {{ "%.2f"|format(report.var_99_pct or 0) }}%
+                            </span>
+                        </div>
+                        <div class="w-full bg-gray-800 rounded-full h-2">
+                            <div class="h-2 rounded-full {% if (report.var_99_pct or 0) > 6 %}bg-red-500{% elif (report.var_99_pct or 0) > 4 %}bg-yellow-500{% else %}bg-emerald-500{% endif %}"
+                                 style="width: {{ [(report.var_99_pct or 0) * 10, 100] | min }}%"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs text-gray-400">Expected Shortfall</span>
+                            <span class="mono text-sm font-bold {% if (report.expected_shortfall_pct or 0) > 5 %}text-red-400{% elif (report.expected_shortfall_pct or 0) > 3 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                                {{ "%.2f"|format(report.expected_shortfall_pct or 0) }}%
+                            </span>
+                        </div>
+                        <div class="w-full bg-gray-800 rounded-full h-2">
+                            <div class="h-2 rounded-full {% if (report.expected_shortfall_pct or 0) > 5 %}bg-red-500{% elif (report.expected_shortfall_pct or 0) > 3 %}bg-yellow-500{% else %}bg-emerald-500{% endif %}"
+                                 style="width: {{ [(report.expected_shortfall_pct or 0) * 10, 100] | min }}%"></div>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-[10px] text-gray-600 mt-3">Monte Carlo 10K simulations, crisis-regime volatilities</p>
+            </div>
+
+            <!-- Worst/Best Scenario -->
+            {% if report._worst_scenario %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Scenario Extremes</h2>
+                <div class="space-y-3">
+                    <div class="bg-red-900/20 border border-red-900/30 rounded p-3">
+                        <p class="text-[10px] text-red-400 uppercase font-semibold">Worst Case</p>
+                        <p class="text-sm text-gray-200 mt-1">{{ report._worst_scenario.scenario_name }}</p>
+                        <p class="mono text-lg font-bold text-red-400">
+                            {{ "%+.1f"|format(report._worst_scenario.portfolio_impact_pct) }}%
+                            <span class="text-sm">({{ "${:+,.0f}".format(report._worst_scenario.portfolio_impact_usd) }})</span>
+                        </p>
+                    </div>
+                    {% if report._best_scenario %}
+                    <div class="bg-emerald-900/20 border border-emerald-900/30 rounded p-3">
+                        <p class="text-[10px] text-emerald-400 uppercase font-semibold">Best Case</p>
+                        <p class="text-sm text-gray-200 mt-1">{{ report._best_scenario.scenario_name }}</p>
+                        <p class="mono text-lg font-bold text-emerald-400">
+                            {{ "%+.1f"|format(report._best_scenario.portfolio_impact_pct) }}%
+                            <span class="text-sm">({{ "${:+,.0f}".format(report._best_scenario.portfolio_impact_usd) }})</span>
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}

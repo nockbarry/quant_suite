@@ -19,15 +19,18 @@ Usage:
 """
 
 import json
+import os
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
+RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
+
 
 def log_to_dashboard(event_type: str, data: dict):
     """Log activity to the central agent activity log."""
-    log_path = Path.home() / "quant_results" / "logs" / "agent_activity.jsonl"
+    log_path = RESULTS_DIR / "logs" / "agent_activity.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     record = {
@@ -42,8 +45,8 @@ def log_to_dashboard(event_type: str, data: dict):
 
 def market_check(check_num: int, baseline: dict | None = None):
     """Perform a single market check."""
-    state_file = Path.home() / "quant_results" / "live" / "state.json"
-    log_file = Path.home() / "quant_results" / "logs" / "market_watch.log"
+    state_file = RESULTS_DIR / "live" / "state.json"
+    log_file = RESULTS_DIR / "logs" / "market_watch.log"
 
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -164,7 +167,7 @@ Interval: {interval_seconds}s | Duration: {duration_minutes}m | Checks: {checks}
     print(header)
 
     # Write header to log
-    log_file = Path.home() / "quant_results" / "logs" / "market_watch.log"
+    log_file = RESULTS_DIR / "logs" / "market_watch.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
     with open(log_file, "a") as f:
         f.write(header)

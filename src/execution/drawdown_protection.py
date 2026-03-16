@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,7 +76,7 @@ class DrawdownProtection:
     """Monitor and protect against portfolio drawdowns."""
 
     def __init__(self, cache_dir: Optional[Path] = None):
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "risk"
+        self.cache_dir = cache_dir or paths.base / "risk"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.peak_value = 0.0

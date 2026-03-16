@@ -18,6 +18,8 @@ from typing import Optional
 from enum import Enum
 import uuid
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -191,7 +193,7 @@ class TradeJournal:
     """Automated trade journal for tracking and learning."""
 
     def __init__(self, journal_dir: Optional[Path] = None):
-        self.journal_dir = journal_dir or Path.home() / "quant_results" / "journal"
+        self.journal_dir = journal_dir or paths.base / "journal"
         self.journal_dir.mkdir(parents=True, exist_ok=True)
 
         self.journal_file = self.journal_dir / "trades.json"

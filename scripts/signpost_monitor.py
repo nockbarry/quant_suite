@@ -14,12 +14,15 @@ Created: 2026-01-20 for Greenland/Tariff/Fed crisis monitoring
 
 import argparse
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Optional
 import subprocess
 import sys
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 
 @dataclass
@@ -67,7 +70,7 @@ DEFAULT_SIGNPOSTS = [
 
 
 def get_signposts_file() -> Path:
-    return Path.home() / "quant_results" / "config" / "signposts.json"
+    return _RESULTS_DIR / "config" / "signposts.json"
 
 
 def load_signposts() -> list[PriceLevel]:
@@ -161,7 +164,7 @@ def check_signposts(signposts: list[PriceLevel], alerts_only: bool = False) -> l
 
 def save_alerts(triggered: list[dict]):
     """Save triggered alerts to file."""
-    alerts_dir = Path.home() / "quant_results" / "alerts"
+    alerts_dir = _RESULTS_DIR / "alerts"
     alerts_dir.mkdir(parents=True, exist_ok=True)
 
     alerts_file = alerts_dir / f"alerts_{datetime.now().strftime('%Y%m%d')}.json"

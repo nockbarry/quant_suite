@@ -25,6 +25,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import paths
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
@@ -73,7 +75,7 @@ class CLIDashboard:
     ):
         self.capital = capital
         self.refresh_seconds = refresh_seconds
-        self.results_dir = results_dir or Path.home() / "quant_results" / "daily_runs"
+        self.results_dir = results_dir or paths.daily_runs
 
         self.console = Console()
         self.monitor = PortfolioMonitor(initial_capital=capital)

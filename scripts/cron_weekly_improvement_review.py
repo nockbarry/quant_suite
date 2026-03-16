@@ -24,6 +24,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.core.paths import paths
 from src.monitoring.improvement_tracker import get_improvement_tracker
 from src.monitoring.signal_quality_tracker import get_signal_quality_tracker
 
@@ -123,7 +124,7 @@ def run_weekly_review(dry_run: bool = False) -> dict:
 
     # 4. Save results
     if not dry_run:
-        results_dir = Path.home() / "quant_results" / "improvements"
+        results_dir = paths.base / "improvements"
         results_dir.mkdir(parents=True, exist_ok=True)
 
         summary_file = results_dir / f"weekly_summary_{datetime.now().strftime('%Y-%m-%d')}.json"

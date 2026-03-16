@@ -82,7 +82,8 @@ PYTHONPATH=. python3 -c "
 import json
 from pathlib import Path
 
-state_file = Path.home() / 'quant_results' / 'live' / 'state.json'
+from src.core.paths import paths
+state_file = paths.live_state
 with open(state_file) as f:
     state = json.load(f)
 

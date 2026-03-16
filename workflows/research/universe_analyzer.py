@@ -14,10 +14,13 @@ warnings.filterwarnings('ignore')
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+import os
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Literal
 import json
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 import yfinance as yf
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
@@ -866,7 +869,7 @@ def run_universe_analysis(
 
     # Save results
     print("\n[6/6] Saving results...")
-    output_dir = Path.home() / "quant_results" / "universe_analysis"
+    output_dir = _RESULTS_DIR / "universe_analysis"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     results_df.to_csv(output_dir / "all_results.csv", index=False)

@@ -5,12 +5,15 @@ Provides automatic artifact storage, session indexing, and result persistence.
 All outputs are saved to ~/quant_results/ for easy viewing.
 """
 
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 import json
 import hashlib
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 import pandas as pd
 
@@ -26,7 +29,7 @@ class SessionConfig:
     tags: list[str] = field(default_factory=list)
 
     # Output settings
-    output_base: Path = field(default_factory=lambda: Path.home() / "quant_results")
+    output_base: Path = field(default_factory=lambda: _RESULTS_DIR)
     save_html: bool = True
     save_charts: bool = True
     save_data: bool = True
@@ -284,7 +287,7 @@ class SessionManager:
     """
 
     def __init__(self, output_base: Path | None = None):
-        self.output_base = output_base or Path.home() / "quant_results"
+        self.output_base = output_base or _RESULTS_DIR
         self._ensure_directories()
 
     def _ensure_directories(self) -> None:
@@ -432,4 +435,4 @@ def load_session(session_id: str) -> SessionResult | None:
 
 def get_results_dir() -> Path:
     """Get the path to the results directory."""
-    return Path.home() / "quant_results"
+    return _RESULTS_DIR

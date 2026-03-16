@@ -11,7 +11,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-RESULTS_DIR="$HOME/quant_results"
+RESULTS_DIR="${QUANT_RESULTS_DIR:-$HOME/quant_results}"
 LOG_DIR="$RESULTS_DIR/logs"
 
 # Colors for output

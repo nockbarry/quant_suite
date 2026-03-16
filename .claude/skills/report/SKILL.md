@@ -180,8 +180,8 @@ def generate_strategy_report(strategy_name, symbol, results):
 - **Data Points**: {results.get('n_datapoints', 'N/A')}
 
 ### Files
-- Research: `/home/nock/quant_results/comprehensive_research/{results.get('research_cycle', '')}.json`
-- Validation: `/home/nock/quant_results/validation_reports/`
+- Research: `~/quant_results/comprehensive_research/{results.get('research_cycle', '')}.json`
+- Validation: `~/quant_results/validation_reports/`
 - Config: `config/strategies/validated_strategies.yaml`
 """
     return report
@@ -194,7 +194,7 @@ def generate_research_report(cycle_id):
     """
     Generate summary of a research cycle.
     """
-    cycle_path = Path(f"/home/nock/quant_results/comprehensive_research/{cycle_id}.json")
+    cycle_path = Path(f"~/quant_results/comprehensive_research/{cycle_id}.json")
 
     with open(cycle_path) as f:
         cycle = json.load(f)
@@ -350,7 +350,7 @@ def generate_equity_curve(returns, title="Equity Curve"):
     ax.set_xlabel('Date')
     ax.set_ylabel('Cumulative Return')
 
-    output_path = Path("/home/nock/quant_results/figures")
+    output_path = Path("~/quant_results/figures")
     output_path.mkdir(exist_ok=True)
     fig.savefig(output_path / f"equity_curve_{datetime.now().strftime('%Y%m%d')}.png", dpi=150, bbox_inches='tight')
     plt.close(fig)
@@ -372,7 +372,7 @@ def generate_drawdown_chart(returns, title="Drawdown"):
     ax.set_xlabel('Date')
     ax.set_ylabel('Drawdown')
 
-    output_path = Path("/home/nock/quant_results/figures")
+    output_path = Path("~/quant_results/figures")
     output_path.mkdir(exist_ok=True)
     fig.savefig(output_path / f"drawdown_{datetime.now().strftime('%Y%m%d')}.png", dpi=150, bbox_inches='tight')
     plt.close(fig)
@@ -403,7 +403,7 @@ def generate_monthly_heatmap(returns, title="Monthly Returns"):
     plt.colorbar(im, label='Return (%)')
     ax.set_title(title)
 
-    output_path = Path("/home/nock/quant_results/figures")
+    output_path = Path("~/quant_results/figures")
     output_path.mkdir(exist_ok=True)
     fig.savefig(output_path / f"monthly_heatmap_{datetime.now().strftime('%Y%m%d')}.png", dpi=150, bbox_inches='tight')
     plt.close(fig)
@@ -419,13 +419,13 @@ def save_report(report_content, report_type, name):
     Save report to appropriate location.
     """
     output_dirs = {
-        'strategy': '/home/nock/quant_results/strategy_reports',
-        'research': '/home/nock/quant_results/research_reports',
-        'performance': '/home/nock/quant_results/performance_reports',
-        'validation': '/home/nock/quant_results/validation_reports',
+        'strategy': '~/quant_results/strategy_reports',
+        'research': '~/quant_results/research_reports',
+        'performance': '~/quant_results/performance_reports',
+        'validation': '~/quant_results/validation_reports',
     }
 
-    output_dir = Path(output_dirs.get(report_type, '/home/nock/quant_results/reports'))
+    output_dir = Path(output_dirs.get(report_type, '~/quant_results/reports'))
     output_dir.mkdir(parents=True, exist_ok=True)
 
     filename = f"{report_type}_{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
@@ -442,8 +442,8 @@ def save_report(report_content, report_type, name):
 
 | Report Type | Path |
 |-------------|------|
-| Strategy Reports | `/home/nock/quant_results/strategy_reports/` |
-| Research Reports | `/home/nock/quant_results/research_reports/` |
-| Performance Reports | `/home/nock/quant_results/performance_reports/` |
-| Validation Reports | `/home/nock/quant_results/validation_reports/` |
-| Figures | `/home/nock/quant_results/figures/` |
+| Strategy Reports | `~/quant_results/strategy_reports/` |
+| Research Reports | `~/quant_results/research_reports/` |
+| Performance Reports | `~/quant_results/performance_reports/` |
+| Validation Reports | `~/quant_results/validation_reports/` |
+| Figures | `~/quant_results/figures/` |

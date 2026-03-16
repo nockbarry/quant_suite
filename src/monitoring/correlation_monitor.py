@@ -21,6 +21,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import paths
 import numpy as np
 import pandas as pd
 
@@ -124,7 +125,7 @@ class CorrelationMonitor:
         lookback_days: int = 60,
         high_corr_threshold: float = 0.7,
     ):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.lookback_days = lookback_days
         self.high_corr_threshold = high_corr_threshold
 

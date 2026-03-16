@@ -24,6 +24,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from src.core.paths import paths
 from .unified_dashboard import UnifiedDashboard, UnifiedSystemStatus
 from .swarm_visualizer import SwarmVisualizer
 from .swarm_monitor import get_swarm_monitor
@@ -35,7 +36,7 @@ class MissionControl:
     """Combined mission control dashboard."""
 
     def __init__(self, results_dir: Path = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.unified = UnifiedDashboard(self.results_dir)
         self.swarm_viz = SwarmVisualizer()
         self._social_tracker = None

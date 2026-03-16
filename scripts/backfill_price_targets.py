@@ -21,7 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def get_current_prices() -> dict[str, float]:
     """Get current prices from state.json."""
-    state_file = Path.home() / "quant_results" / "live" / "state.json"
+    from src.core.paths import paths
+    state_file = paths.live_state
     if not state_file.exists():
         return {}
     try:

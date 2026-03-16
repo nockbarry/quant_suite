@@ -15,10 +15,12 @@ from typing import Any
 
 import yaml
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
-SCHEDULER_DIR = Path.home() / "quant_results" / "scheduler"
-RESULTS_DIR = Path.home() / "quant_results"
+SCHEDULER_DIR = paths.base / "scheduler"
+RESULTS_DIR = paths.base
 
 
 def is_autonomous() -> bool:

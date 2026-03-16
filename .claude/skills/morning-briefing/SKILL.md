@@ -25,7 +25,7 @@ This skill gathers and synthesizes:
 If the LiveDaemon is running, just read the state file:
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.synthesis.state import UnifiedState
 from src.core.paths import paths
 
@@ -41,7 +41,7 @@ EOF
 ### Option 2: Generate Fresh Briefing
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 import asyncio
 from datetime import datetime
 from src.decision.morning_briefing import MorningBriefingGenerator
@@ -59,7 +59,7 @@ EOF
 ### Option 3: Update Unified State Now
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 import asyncio
 from src.synthesis.daemon import LiveDaemon
 
@@ -77,7 +77,7 @@ EOF
 **CRITICAL: Start by reading what yesterday's EOD review and evening research discovered.**
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -157,7 +157,7 @@ EOF
 
 ```bash
 # Log which upstream artifacts were found (for flow health monitoring)
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.swarm.artifact_log import log_artifact_read
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -188,7 +188,7 @@ EOF
 Read yesterday's belief update report and calibration data to start the day informed:
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -274,7 +274,7 @@ cat ~/quant_results/live/research/screens.json
 Check active investment theses:
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.thesis import ThesisTracker
 from src.core.paths import paths
 
@@ -300,7 +300,7 @@ EOF
 Check decisions awaiting outcomes:
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.decision.decision_logger import DecisionLogger
 
 logger = DecisionLogger()
@@ -320,7 +320,7 @@ EOF
 Before generating briefing, review accumulated trading wisdom:
 
 ```bash
-cat /home/nock/projects/quant_suite/docs/TRADING_PATTERNS.md
+cat docs/TRADING_PATTERNS.md
 ```
 
 Key patterns to check every morning:
@@ -337,7 +337,7 @@ When this skill runs, Claude should:
 ### Step 0: Load Trading Patterns
 ```bash
 # Read the patterns file to ensure all checks are performed
-cat /home/nock/projects/quant_suite/docs/TRADING_PATTERNS.md | head -200
+cat docs/TRADING_PATTERNS.md | head -200
 ```
 
 ### Step 1: Check Unified State
@@ -399,7 +399,7 @@ if state.alternative_signals:
 
 Or generate fresh alternative signals:
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 -m src.synthesis.alternative_signals --all
+PYTHONPATH=. python3 -m src.synthesis.alternative_signals --all
 ```
 
 ### Step 1.6: Check Market Calendar (NEW - Added 2026-01-20)
@@ -432,10 +432,10 @@ for pred in calendar.get_predictions_due_for_review():
 Or use CLI:
 ```bash
 # View this week's events
-PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py events --week
+PYTHONPATH=. python scripts/calendar_cli.py events --week
 
 # View predictions due for review
-PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py predictions --due
+PYTHONPATH=. python scripts/calendar_cli.py predictions --due
 ```
 
 **Key Calendar Items to Check:**
@@ -670,7 +670,7 @@ Based on research:
 
 ## Output Format
 
-Save briefings to: `/home/nock/quant_results/briefings/briefing_YYYYMMDD.json`
+Save briefings to: `~/quant_results/briefings/briefing_YYYYMMDD.json`
 
 ```json
 {
@@ -848,21 +848,21 @@ When you discover something important during the briefing, add it to the calenda
 
 ```bash
 # Add a learning linked to an upcoming event
-PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py learn \
+PYTHONPATH=. python scripts/calendar_cli.py learn \
     "Fed more hawkish than expected, markets priced in 2 cuts but only 1 likely" \
     --source briefing \
     --event fomc_2026_01 \
     --tags fed,rates,hawkish
 
 # Add a learning about a prediction
-PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py learn \
+PYTHONPATH=. python scripts/calendar_cli.py learn \
     "Goldman's rate cut prediction looking less likely given strong jobs data" \
     --source briefing \
     --prediction pred_fed_cuts_2026_gs \
     --tags fed,prediction
 
 # Add a general market learning
-PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py learn \
+PYTHONPATH=. python scripts/calendar_cli.py learn \
     "Tech earnings beat but sold off - market rotating to value" \
     --source briefing \
     --symbol MSFT \
@@ -888,14 +888,14 @@ When a prediction's target date arrives, resolve it:
 
 ```bash
 # Mark a prediction as correct
-PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py resolve \
+PYTHONPATH=. python scripts/calendar_cli.py resolve \
     claude_midterm_pattern_2026 \
     --status correct \
     --outcome "SPY rallied 10% from October low to year-end as predicted" \
     --accuracy 0.85
 
 # Mark a prediction as incorrect
-PYTHONPATH=/home/nock/projects/quant_suite python scripts/calendar_cli.py resolve \
+PYTHONPATH=. python scripts/calendar_cli.py resolve \
     pred_fed_cuts_2026_gs \
     --status incorrect \
     --outcome "Fed only cut once, not twice as predicted" \

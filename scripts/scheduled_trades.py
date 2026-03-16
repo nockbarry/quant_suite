@@ -39,14 +39,14 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(Path.home() / "quant_results" / "logs" / "scheduled_trades.log"),
+        logging.FileHandler(paths.base / "logs" / "scheduled_trades.log"),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
 # Ensure log directory exists
-(Path.home() / "quant_results" / "logs").mkdir(parents=True, exist_ok=True)
+(paths.base / "logs").mkdir(parents=True, exist_ok=True)
 
 
 @dataclass
@@ -153,7 +153,7 @@ def save_trades_to_file(trades: list[ScheduledTrade], filename: str = None):
     if filename is None:
         filename = f"trades_{datetime.now().strftime('%Y%m%d')}.json"
 
-    path = Path.home() / "quant_results" / "scheduled_trades" / filename
+    path = paths.base / "scheduled_trades" / filename
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(path, 'w') as f:
@@ -165,7 +165,7 @@ def save_trades_to_file(trades: list[ScheduledTrade], filename: str = None):
 
 def load_trades_from_file(filename: str) -> list[ScheduledTrade]:
     """Load scheduled trades from JSON file."""
-    path = Path.home() / "quant_results" / "scheduled_trades" / filename
+    path = paths.base / "scheduled_trades" / filename
 
     with open(path, 'r') as f:
         data = json.load(f)
@@ -478,7 +478,7 @@ async def run_scheduled_trades(trades: list[ScheduledTrade], dry_run: bool = Tru
             logger.info(f"  {r['symbol']}: {r['reason']}")
 
     # Save results
-    results_path = Path.home() / "quant_results" / "scheduled_trades" / f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    results_path = paths.base / "scheduled_trades" / f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     results_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(results_path, 'w') as f:

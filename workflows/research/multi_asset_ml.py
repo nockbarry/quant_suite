@@ -14,10 +14,13 @@ warnings.filterwarnings('ignore')
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+import os
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
 import json
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 import hashlib
 
 # ML imports
@@ -934,7 +937,7 @@ def run_multi_asset_ml_research(
     results_df = results_df.sort_values('sharpe', ascending=False)
 
     # Save results
-    output_dir = Path.home() / "quant_results" / "ml_strategies"
+    output_dir = _RESULTS_DIR / "ml_strategies"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     results_df.to_csv(output_dir / "strategy_results.csv", index=False)

@@ -16,6 +16,8 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 # Sector ETFs
@@ -102,7 +104,7 @@ class SectorRotationDetector:
     """Detect sector rotation and leadership changes."""
 
     def __init__(self, cache_dir: Optional[Path] = None):
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "live" / "sectors"
+        self.cache_dir = cache_dir or paths.live / "sectors"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.sector_data: dict[str, SectorStrength] = {}

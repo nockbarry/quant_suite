@@ -8,10 +8,13 @@ produces actionable insights without human intervention.
 
 import asyncio
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 from .data_hub import DataHub
 from .experiment_runner import ExperimentResult, ExperimentRunner
@@ -113,7 +116,7 @@ class AutonomousResearcher:
         self.experiments_per_cycle = experiments_per_cycle
         self.validation_periods = validation_periods or [90, 180]
         self.n_permutations = n_permutations
-        self.output_dir = output_dir or Path.home() / "quant_results"
+        self.output_dir = output_dir or _RESULTS_DIR
 
         # Initialize components
         self.hub = DataHub()

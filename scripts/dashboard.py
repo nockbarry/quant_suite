@@ -12,6 +12,8 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.core.paths import paths
+
 import streamlit as st
 import pandas as pd
 
@@ -26,7 +28,7 @@ st.set_page_config(
 
 def load_state():
     """Load unified state."""
-    state_file = Path.home() / "quant_results" / "live" / "state.json"
+    state_file = paths.live_state
     if state_file.exists():
         with open(state_file) as f:
             return json.load(f)
@@ -36,7 +38,7 @@ def load_state():
 def load_alerts():
     """Load today's alerts."""
     today = datetime.now().strftime("%Y%m%d")
-    alerts_file = Path.home() / "quant_results" / "alerts" / f"alerts_{today}.json"
+    alerts_file = paths.base / "alerts" / f"alerts_{today}.json"
     if alerts_file.exists():
         with open(alerts_file) as f:
             return json.load(f)
@@ -45,7 +47,7 @@ def load_alerts():
 
 def load_signposts():
     """Load signposts configuration."""
-    signposts_file = Path.home() / "quant_results" / "config" / "signposts.json"
+    signposts_file = paths.base / "config" / "signposts.json"
     if signposts_file.exists():
         with open(signposts_file) as f:
             return json.load(f)
@@ -54,7 +56,7 @@ def load_signposts():
 
 def load_pending_trades():
     """Load pending trades from rules engine."""
-    queue_file = Path.home() / "quant_results" / "rules" / "trade_queue.json"
+    queue_file = paths.base / "rules" / "trade_queue.json"
     if queue_file.exists():
         with open(queue_file) as f:
             trades = json.load(f)
@@ -64,7 +66,7 @@ def load_pending_trades():
 
 def load_sector_data():
     """Load sector rotation data."""
-    sector_file = Path.home() / "quant_results" / "live" / "sectors" / "rotation_state.json"
+    sector_file = paths.live / "sectors" / "rotation_state.json"
     if sector_file.exists():
         with open(sector_file) as f:
             return json.load(f)
@@ -73,7 +75,7 @@ def load_sector_data():
 
 def load_drawdown_state():
     """Load drawdown protection state."""
-    dd_file = Path.home() / "quant_results" / "risk" / "drawdown_state.json"
+    dd_file = paths.base / "risk" / "drawdown_state.json"
     if dd_file.exists():
         with open(dd_file) as f:
             return json.load(f)

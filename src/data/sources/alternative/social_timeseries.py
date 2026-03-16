@@ -18,6 +18,8 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+
+from src.core.paths import paths
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,7 @@ class MentionTrend:
 class SocialTimeSeries:
     """Manage time-series data for social mentions across platforms."""
 
-    DB_PATH = Path.home() / "quant_results" / "social" / "social_timeseries.db"
+    DB_PATH = paths.base / "social" / "social_timeseries.db"
 
     def __init__(self):
         self._init_db()

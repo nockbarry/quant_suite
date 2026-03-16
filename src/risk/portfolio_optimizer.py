@@ -16,6 +16,8 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,7 +61,7 @@ class PortfolioOptimizer:
     """Optimize portfolio allocation using various methods."""
 
     def __init__(self, cache_dir: Optional[Path] = None):
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "optimization"
+        self.cache_dir = cache_dir or paths.base / "optimization"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Constraints

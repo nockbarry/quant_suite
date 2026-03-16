@@ -92,6 +92,7 @@ def ensure_columns():
         ("agent_runs", "heartbeat_at", "DATETIME", "NULL"),
         ("agent_runs", "pid", "INTEGER", "NULL"),
         ("theses", "price_targets", "TEXT", "'{}'"),
+        ("decisions", "ensemble_data", "TEXT", "NULL"),
     ]
     with engine.connect() as conn:
         for table, col, col_type, default in _new_columns:

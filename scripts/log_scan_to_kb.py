@@ -14,7 +14,8 @@ def main():
     kb = KnowledgeBase()
 
     # Load latest scan results
-    scan_dir = Path.home() / "quant_results" / "alpha_discovery"
+    from src.core.paths import paths
+    scan_dir = paths.alpha_discovery
     latest_scan = sorted(scan_dir.glob("monday_scan_*.json"))[-1]
 
     with open(latest_scan, 'r') as f:

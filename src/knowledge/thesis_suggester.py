@@ -87,9 +87,11 @@ class ThesisSuggestion:
 class ThesisSuggester:
     """Generate thesis suggestions from converging signals."""
 
-    SUGGESTIONS_PATH = Path.home() / "quant_results" / "suggestions" / "thesis_suggestions.json"
+    SUGGESTIONS_PATH = paths.base / "suggestions" / "thesis_suggestions.json"
     MIN_SIGNALS_FOR_SUGGESTION = 2
     MIN_CONFIDENCE = 0.5
+    AUTO_CREATE_THRESHOLD = 0.75  # Min confidence for auto-creation
+    MAX_AUTO_PER_WEEK = 2  # Prevent thesis sprawl
 
     # Source weights for confidence calculation
     SOURCE_WEIGHTS = {
@@ -374,6 +376,123 @@ class ThesisSuggester:
         if symbol in self.suggestions:
             self.suggestions[symbol].status = "watched"
             self._save_suggestions()
+
+    def auto_create_from_suggestions(self) -> list:
+        """Auto-create theses from high-confidence suggestions.
+
+        Gates:
+        - confidence_score >= AUTO_CREATE_THRESHOLD (0.75)
+        - Max 2 auto-created per week
+        - No similar thesis already exists (fuzzy name match)
+
+        Returns list of created Thesis objects.
+        """
+        recent_auto = self._count_recent_auto_created(days=7)
+        if recent_auto >= self.MAX_AUTO_PER_WEEK:
+            logger.info(
+                f"Auto-create skipped: {recent_auto} already created this week "
+                f"(max {self.MAX_AUTO_PER_WEEK})"
+            )
+            return []
+
+        suggestions = self.get_pending_suggestions()
+        created = []
+
+        for suggestion in sorted(
+            suggestions, key=lambda s: s.confidence_score, reverse=True
+        ):
+            if suggestion.confidence_score < self.AUTO_CREATE_THRESHOLD:
+                continue
+
+            if self._similar_thesis_exists(suggestion.suggested_name):
+                logger.info(
+                    f"Auto-create skipped for '{suggestion.suggested_name}': "
+                    f"similar thesis already exists"
+                )
+                continue
+
+            # Create the thesis
+            thesis = self.accept_suggestion(suggestion.symbol)
+            if thesis:
+                self._log_auto_creation(thesis, suggestion)
+                created.append(thesis)
+                logger.info(
+                    f"Auto-created thesis: {thesis.name} "
+                    f"(confidence={suggestion.confidence_score:.0%})"
+                )
+
+                if len(created) + recent_auto >= self.MAX_AUTO_PER_WEEK:
+                    break
+
+        return created
+
+    def _similar_thesis_exists(self, name: str) -> bool:
+        """Check if a thesis with similar name already exists using token overlap."""
+        if not name:
+            return False
+        name_tokens = set(name.lower().split())
+        # Remove common words
+        stop_words = {
+            "the", "a", "an", "in", "on", "at", "to", "for",
+            "of", "and", "or", "is", "are",
+        }
+        name_tokens -= stop_words
+
+        if not name_tokens:
+            return False
+
+        for thesis in self.thesis_tracker.get_active_theses():
+            thesis_tokens = set(thesis.name.lower().split()) - stop_words
+            if not thesis_tokens:
+                continue
+            # Jaccard similarity
+            overlap = len(name_tokens & thesis_tokens)
+            union = len(name_tokens | thesis_tokens)
+            if union > 0 and overlap / union > 0.5:
+                return True
+        return False
+
+    def _count_recent_auto_created(self, days: int = 7) -> int:
+        """Count auto-created theses in recent days by reading the auto-creation log."""
+        cutoff = datetime.now() - timedelta(days=days)
+        log_file = paths.base / "logs" / "auto_thesis_creation.jsonl"
+        if not log_file.exists():
+            return 0
+
+        count = 0
+        try:
+            with open(log_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        ts = datetime.fromisoformat(entry["timestamp"])
+                        if ts > cutoff:
+                            count += 1
+                    except (json.JSONDecodeError, KeyError, ValueError):
+                        continue
+        except Exception as e:
+            logger.warning(f"Could not read auto-creation log: {e}")
+        return count
+
+    def _log_auto_creation(self, thesis, suggestion):
+        """Log auto-creation as a process event."""
+        log_entry = {
+            "event": "thesis_auto_created",
+            "timestamp": datetime.now().isoformat(),
+            "thesis_id": thesis.id,
+            "thesis_name": thesis.name,
+            "suggestion_symbol": suggestion.symbol,
+            "suggestion_confidence": suggestion.confidence_score,
+            "sources": suggestion.signal_sources[:5] if suggestion.signal_sources else [],
+        }
+
+        log_file = paths.base / "logs" / "auto_thesis_creation.jsonl"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_file, "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
 
     def generate_report(self) -> str:
         """Generate ASCII report of thesis suggestions."""

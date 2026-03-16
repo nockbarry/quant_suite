@@ -30,7 +30,7 @@ Run `/morning-briefing` first or ensure unified state is fresh.
 calibration data, and relevant learnings for the symbol.
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.intelligence.context_builder import DecisionContextBuilder
 
 # Build context for the symbol you're considering
@@ -47,7 +47,7 @@ Review this context and factor it into your confidence level.
 **You MUST apply calibration adjustments to every confidence level you assign.**
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 import json
 from pathlib import Path
 
@@ -99,7 +99,7 @@ EOF
 ### Step 0b: Read Swarm Context (Today's Events + Multi-Day Patterns)
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 # Situation board — what happened today so far
 from src.swarm.situation_board import SituationBoard
 board = SituationBoard.load()
@@ -136,7 +136,7 @@ Use this context to understand what's already happened today and what multi-day 
 **CRITICAL: Consume upstream session outputs before making decisions.**
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.swarm.situation_board import SituationBoard
 from src.swarm.strategic_context import StrategicContext
 
@@ -213,7 +213,7 @@ EOF
 
 ```bash
 # Log artifact reads for flow health monitoring
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.swarm.artifact_log import log_artifact_read
 from pathlib import Path
 
@@ -232,7 +232,7 @@ EOF
 ### Step 1: Load Context
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.synthesis.state import UnifiedState
 from src.core.paths import paths
 import json
@@ -281,7 +281,7 @@ challenge your thesis before trading.
 ### Step 2: Review Knowledge Base
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.base import KnowledgeBase
 from src.core.paths import paths
 
@@ -303,7 +303,7 @@ EOF
 ### Step 3: Run Adversarial Analysis
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.decision.adversary import AdversarialAgent
 
 adversary = AdversarialAgent()
@@ -889,7 +889,31 @@ position limits damage."
 1. SLB HOLD - No new decision logged (maintaining position)
 2. HAL BUY - Decision ID: abc12345
 
-Run /execute-trades to execute the HAL decision.
+Decision will be auto-executed by cron_auto_execute.py after this session completes.
+```
+
+## Step 8: Auto-Execution (Autonomous Mode)
+
+**Decisions are automatically executed after this session completes.**
+
+The `session_wrapper.sh` calls `cron_auto_execute.py` after every `/trade-decision` session,
+which finds all PENDING decisions from the last 4 hours and executes them on paper account.
+
+**No `/execute-trades` skill invocation needed.** The pipeline is:
+1. `/trade-decision` creates decisions with status PENDING
+2. `session_wrapper.sh` calls `cron_auto_execute.py`
+3. `cron_auto_execute.py` validates risk limits and executes
+
+**Safety rails enforced by auto-execute:**
+- Max 10% single position
+- Paper account only (live requires explicit override)
+- Equity > $1,000
+- Valid price quote required
+
+If you want to execute immediately within this session instead of waiting:
+
+```bash
+PYTHONPATH=. python3 scripts/cron_auto_execute.py
 ```
 
 ## Register Output as Document

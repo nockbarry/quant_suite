@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Optional
 from collections import defaultdict
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,7 +74,7 @@ class SmartAlerter:
     """Context-aware alerting with convergence detection."""
 
     def __init__(self, cache_dir: Optional[Path] = None):
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "alerts"
+        self.cache_dir = cache_dir or paths.base / "alerts"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Signal buffer for convergence detection

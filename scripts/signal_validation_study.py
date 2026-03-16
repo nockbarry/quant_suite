@@ -32,6 +32,8 @@ from scipy import stats
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.core.paths import paths
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -114,7 +116,7 @@ class SignalValidator:
     """Validates signal sources against forward returns."""
 
     def __init__(self, results_dir: Path | None = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.price_cache: dict[str, pd.DataFrame] = {}
 
     def get_price_data(self, symbols: list[str], weeks: int) -> dict[str, pd.DataFrame]:
@@ -1174,7 +1176,7 @@ def main():
     if args.output:
         output_path = Path(args.output)
     else:
-        output_dir = Path.home() / "quant_results" / "validation_reports"
+        output_dir = paths.validation_reports
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"signal_validation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 

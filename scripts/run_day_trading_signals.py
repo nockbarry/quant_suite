@@ -47,6 +47,7 @@ from src.signals.live_signal_generator import (
     SignalDirection,
     get_signal_summary,
 )
+from src.core.paths import paths
 from src.data.intraday.candle_analysis import CandleInterpreter, CandlePatternRecognizer
 from src.data.intraday.feature_engine import IntradayFeatureEngine
 
@@ -81,7 +82,7 @@ class DayTradingScanner:
     """
 
     def __init__(self, results_dir: Path = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.signal_archive_dir = self.results_dir / "signal_archive" / "intraday"
         self.signal_archive_dir.mkdir(parents=True, exist_ok=True)
 

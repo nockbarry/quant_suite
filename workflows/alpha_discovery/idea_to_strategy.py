@@ -15,11 +15,14 @@ This is the core automation engine for alpha discovery.
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 import numpy as np
 import pandas as pd
@@ -211,7 +214,7 @@ class IdeaToStrategyPipeline:
         output_dir: Path | None = None,
         knowledge_base: "KnowledgeBase | None" = None,
     ):
-        self.output_dir = output_dir or Path.home() / "quant_results" / "idea_tests"
+        self.output_dir = output_dir or _RESULTS_DIR / "idea_tests"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.kb = knowledge_base

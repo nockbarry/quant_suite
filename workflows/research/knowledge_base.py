@@ -163,7 +163,8 @@ class KnowledgeBase:
     """
 
     def __init__(self, path: Path | None = None):
-        self.path = path or Path.home() / "quant_results" / "knowledge"
+        import os
+        self.path = path or Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results"))) / "knowledge"
         self.path.mkdir(parents=True, exist_ok=True)
 
         # Storage files

@@ -9,10 +9,13 @@ Comprehensive visualization for strategy validation:
 5. Regime-conditional performance
 """
 
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 import numpy as np
 import pandas as pd
@@ -67,7 +70,7 @@ class StrategyPlotter:
             raise ImportError("matplotlib required. Install with: pip install matplotlib")
 
         self.config = config or PlotConfig()
-        self.output_dir = output_dir or Path.home() / "quant_results" / "plots"
+        self.output_dir = output_dir or _RESULTS_DIR / "plots"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def plot_strategy_vs_random_vs_buyhold(

@@ -18,12 +18,15 @@ Criteria for promotion:
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 from workflows.research.knowledge_base import KnowledgeBase, StrategyResult
 
@@ -146,7 +149,7 @@ class StrategyPromoter:
         # Default paths
         project_root = Path(__file__).parent.parent.parent
         self.config_path = config_path or (project_root / "config" / "strategies" / "validated_strategies.yaml")
-        self.pending_path = pending_path or (Path.home() / "quant_results" / "promotions" / "pending.json")
+        self.pending_path = pending_path or (_RESULTS_DIR / "promotions" / "pending.json")
 
         # Ensure directories exist
         self.pending_path.parent.mkdir(parents=True, exist_ok=True)

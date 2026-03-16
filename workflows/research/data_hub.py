@@ -25,6 +25,7 @@ import pandas as pd
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from src.core.paths import paths
 from src.data.sources.yahoo import YahooFinanceSource
 from src.core import Timeframe
 
@@ -717,7 +718,7 @@ class DataHub:
                 cache_dir=self.cache_dir / "universal"
             )
             self.commodity_source = CommoditySource(
-                cache_dir=Path.home() / "quant_results" / "scraped_data" / "commodities"
+                cache_dir=paths.scraped_data / "commodities"
             )
 
         # Rate limiting

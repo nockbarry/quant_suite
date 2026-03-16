@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+from src.core.paths import paths
 from .agent_monitor import (
     AgentActivityMonitor,
     AgentType,
@@ -45,7 +46,7 @@ class MonitoredAgentRunner:
 
     def __init__(self):
         self.monitor = get_agent_monitor()
-        self.results_dir = Path.home() / "quant_results"
+        self.results_dir = paths.base
         self.logs_dir = self.results_dir / "logs"
         self.logs_dir.mkdir(parents=True, exist_ok=True)
 

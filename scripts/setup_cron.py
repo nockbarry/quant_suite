@@ -21,7 +21,9 @@ from pathlib import Path
 
 # Base paths
 PROJECT_DIR = Path(__file__).parent.parent.absolute()
-RESULTS_DIR = Path.home() / "quant_results"
+
+import os
+RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 LOGS_DIR = RESULTS_DIR / "logs"
 
 # Cron job definitions (all times in system timezone, adjust for ET if needed)

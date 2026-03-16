@@ -13,6 +13,8 @@ from typing import Any, Literal
 import json
 import yaml
 
+from src.core.paths import paths
+
 
 class StrategyCategory(str, Enum):
     """Strategy categories from taxonomy."""
@@ -304,7 +306,7 @@ class StrategyRegistry:
     """
 
     def __init__(self, path: Path | str | None = None):
-        self.path = Path(path) if path else Path.home() / "quant_results" / "strategies"
+        self.path = Path(path) if path else paths.base / "strategies"
         self.path.mkdir(parents=True, exist_ok=True)
         self._strategies: dict[str, StrategyDefinition] = {}
         self._load()

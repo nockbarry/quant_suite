@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -138,7 +140,7 @@ class ImprovementTracker:
     STATUSES = ["pending", "in_progress", "completed", "rejected", "deferred"]
 
     def __init__(self, results_dir: Path | None = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.improvements_dir = self.results_dir / "improvements"
         self.reviews_dir = self.improvements_dir / "reviews"
         self.suggestions_file = self.improvements_dir / "suggestions.json"

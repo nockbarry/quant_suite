@@ -24,6 +24,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 # Max detail size per event (bytes) to avoid bloating DB
@@ -282,7 +284,7 @@ class SessionContext:
     # Cross-process persistence
     # ------------------------------------------------------------------
 
-    _SHARED_CONTEXT_PATH = Path.home() / "quant_results" / "scheduler" / "shared_context.jsonl"
+    _SHARED_CONTEXT_PATH = paths.base / "scheduler" / "shared_context.jsonl"
 
     def flush_to_shared(self, session_type: str = "") -> int:
         """Append current events to shared JSONL file for cross-process access.

@@ -8,6 +8,7 @@ and audit trail. As specified in Section 3.6.2 of the Testing Suite documentatio
 import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
@@ -15,6 +16,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +190,7 @@ class ExperimentRegistry:
     """
 
     def __init__(self, path: Path | str | None = None):
-        self.path = Path(path) if path else Path.home() / "quant_results" / "experiments"
+        self.path = Path(path) if path else _RESULTS_DIR / "experiments"
         self.path.mkdir(parents=True, exist_ok=True)
         self._experiments: dict[str, ExperimentDefinition] = {}
         self._load()

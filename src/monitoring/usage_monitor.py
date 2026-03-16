@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 # Claude API pricing (per million tokens) — used to compute equivalent cost
@@ -147,7 +149,7 @@ def _get_project_dir() -> Path:
 
 def _get_cache_path() -> Path:
     """Cache path for parsed usage data."""
-    cache_dir = Path(os.environ.get("QUANT_RESULTS_DIR", Path.home() / "quant_results")) / "logs"
+    cache_dir = paths.base / "logs"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / "usage_cache.json"
 
@@ -488,9 +490,7 @@ def get_session_breakdown(days: int = 30) -> list[dict]:
     Cross-references completion records with model assignments and durations
     to estimate per-session-type API-equivalent cost.
     """
-    completions_dir = Path(os.environ.get(
-        "QUANT_RESULTS_DIR", Path.home() / "quant_results"
-    )) / "scheduler" / "completions"
+    completions_dir = paths.base / "scheduler" / "completions"
 
     if not completions_dir.exists():
         return []

@@ -20,9 +20,11 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
-BOARD_PATH = Path.home() / "quant_results" / "scheduler" / "situation_board.json"
+BOARD_PATH = paths.base / "scheduler" / "situation_board.json"
 
 # Dedup window: skip if same source+text within this many seconds
 DEDUP_WINDOW_SECONDS = 300

@@ -14,6 +14,8 @@ from typing import Optional
 
 import httpx
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 # Regions and their market impacts
@@ -126,7 +128,7 @@ class GeopoliticalMonitor:
     """Monitor geopolitical events affecting market theses."""
 
     def __init__(self, cache_dir: Optional[Path] = None):
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "live" / "geopolitical"
+        self.cache_dir = cache_dir or paths.live / "geopolitical"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.client = httpx.AsyncClient(timeout=30, follow_redirects=True)
 

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import paths
 import yaml
 import yfinance as yf
 
@@ -510,7 +511,7 @@ class AlertManager:
         triggered = []
 
         # Load unified state
-        state_path = Path.home() / "quant_results" / "live" / "state.json"
+        state_path = paths.live_state
         if not state_path.exists():
             logger.warning("Unified state not found for concentration check")
             return triggered

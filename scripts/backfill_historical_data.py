@@ -35,6 +35,8 @@ import requests
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.core.paths import paths
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -47,7 +49,7 @@ class HistoricalBackfiller:
     """Backfills historical alternative data for backtesting."""
 
     def __init__(self, results_dir: Path = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.backfill_dir = self.results_dir / "backfill"
         self.backfill_dir.mkdir(parents=True, exist_ok=True)
 

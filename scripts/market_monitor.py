@@ -202,7 +202,7 @@ def main():
     args = parser.parse_args()
 
     log_file = Path(args.log) if args.log else (
-        Path.home() / "quant_results" / "logs" / f"market_monitor_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        paths.base / "logs" / f"market_monitor_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     )
     log_file.parent.mkdir(parents=True, exist_ok=True)
 

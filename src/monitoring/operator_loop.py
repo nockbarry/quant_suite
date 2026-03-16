@@ -18,6 +18,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from src.core.paths import paths
+
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -171,7 +173,7 @@ class OperatorLoop:
     """
 
     def __init__(self, results_dir: Path | None = None):
-        self.results_dir = results_dir or Path.home() / "quant_results"
+        self.results_dir = results_dir or paths.base
         self.live_dir = self.results_dir / "live"
         self.logs_dir = self.results_dir / "logs"
         self.theses_dir = self.results_dir / "theses"
@@ -465,7 +467,7 @@ class OperatorLoop:
 
     def _check_convergences(self) -> list[dict]:
         """Check for signal convergences from pre-computed digest."""
-        digest_file = Path.home() / "quant_results" / "scheduler" / "signal_digest.json"
+        digest_file = paths.base / "scheduler" / "signal_digest.json"
         try:
             if digest_file.exists():
                 import os
@@ -563,7 +565,7 @@ class OperatorLoop:
     def _check_social_signals(self) -> list[dict]:
         """Read latest social signal scan results (from cron_signal_scan.py)."""
         try:
-            scan_file = Path.home() / "quant_results" / "social" / "latest_scan.json"
+            scan_file = paths.base / "social" / "latest_scan.json"
             if not scan_file.exists():
                 return []
 

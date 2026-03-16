@@ -129,7 +129,7 @@ class TaxLossHarvester:
     """Scan portfolio for tax-loss harvesting opportunities."""
 
     def __init__(self, config_dir: Optional[Path] = None):
-        self.config_dir = config_dir or Path.home() / "quant_results" / "tax"
+        self.config_dir = config_dir or paths.base / "tax"
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         self.wash_sale_file = self.config_dir / "wash_sales.json"

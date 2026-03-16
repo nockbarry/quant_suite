@@ -4,7 +4,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-SCHEDULER_DIR = Path.home() / "quant_results" / "scheduler"
+from src.core.paths import paths
+
+SCHEDULER_DIR = paths.base / "scheduler"
 
 
 def get_situation_board() -> dict:

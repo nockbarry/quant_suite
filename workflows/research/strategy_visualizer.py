@@ -16,10 +16,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from datetime import datetime, timedelta
+import os
 from pathlib import Path
 import yfinance as yf
 from scipy import stats
 import json
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 
 # =============================================================================
@@ -28,7 +31,7 @@ import json
 
 def load_analysis_results():
     """Load results from universe analysis."""
-    results_dir = Path.home() / "quant_results" / "universe_analysis"
+    results_dir = _RESULTS_DIR / "universe_analysis"
 
     results_df = pd.read_csv(results_dir / "all_results.csv")
 
@@ -757,7 +760,7 @@ def run_visualizations(n_permutations: int = 500, n_random: int = 200):
     print("="*70)
 
     # Setup
-    save_path = Path.home() / "quant_results" / "visualizations"
+    save_path = _RESULTS_DIR / "visualizations"
     save_path.mkdir(parents=True, exist_ok=True)
 
     # Load results

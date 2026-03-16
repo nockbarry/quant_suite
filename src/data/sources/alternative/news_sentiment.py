@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 # Sentiment keywords with weights
@@ -223,7 +225,7 @@ class NewsSentimentScorer:
 
 def score_recent_news():
     """Score recent news from cache."""
-    news_file = Path.home() / "quant_results" / "live" / "news" / "latest.json"
+    news_file = paths.live / "news" / "latest.json"
 
     if not news_file.exists():
         print("No news cache found. Run expanded_news collector first.")
@@ -257,7 +259,7 @@ def score_recent_news():
             print(f"  {emoji} [{score.score:+.2f}] {score.headline[:70]}...")
 
     # Save scores
-    output_file = Path.home() / "quant_results" / "live" / "news_sentiment.json"
+    output_file = paths.live / "news_sentiment.json"
     with open(output_file, "w") as f:
         json.dump({
             "timestamp": datetime.now().isoformat(),

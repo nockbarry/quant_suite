@@ -16,10 +16,13 @@ Usage:
 """
 
 import json
+import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 import numpy as np
 import pandas as pd
@@ -64,8 +67,8 @@ class ResearchDashboard:
         knowledge_path: Path | None = None,
         results_path: Path | None = None,
     ):
-        self.knowledge_path = knowledge_path or Path.home() / "quant_results" / "knowledge"
-        self.results_path = results_path or Path.home() / "quant_results"
+        self.knowledge_path = knowledge_path or _RESULTS_DIR / "knowledge"
+        self.results_path = results_path or _RESULTS_DIR
         self.kb = KnowledgeBase(self.knowledge_path)
 
     def get_status(self) -> dict[str, Any]:

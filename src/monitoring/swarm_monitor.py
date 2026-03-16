@@ -17,6 +17,8 @@ from typing import Optional
 from enum import Enum
 from collections import defaultdict
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -147,9 +149,9 @@ class SwarmCycle:
 class SwarmMonitor:
     """Monitor and manage swarm agent activity."""
 
-    STATE_FILE = Path.home() / "quant_results" / "live" / "swarm_state.json"
-    SIGNALS_DIR = Path.home() / "quant_results" / "live" / "signals"
-    HISTORY_DIR = Path.home() / "quant_results" / "swarm_history"
+    STATE_FILE = paths.live / "swarm_state.json"
+    SIGNALS_DIR = paths.live / "signals"
+    HISTORY_DIR = paths.base / "swarm_history"
 
     # Agent to swarm mapping
     AGENT_SWARMS = {

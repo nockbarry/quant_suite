@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from src.core.paths import paths
 import asyncio
 
 import pandas as pd
@@ -84,7 +85,7 @@ class EarningsPredictor:
     """Predict earnings surprises using multiple signals."""
 
     def __init__(self, cache_dir: Optional[Path] = None):
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "earnings"
+        self.cache_dir = cache_dir or paths.base / "earnings"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Signal weights (sum to 1)

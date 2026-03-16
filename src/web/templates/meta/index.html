@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% set active_page = "meta" %}
+{% block title %}Meta-Observer{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Meta-Observer</h1>
+            <p class="text-xs text-gray-500 mt-1">Cross-instance divergence analysis</p>
+        </div>
+        <div class="flex items-center gap-3">
+            {% if report.get('_fresh') %}
+            <div class="flex items-center gap-2 bg-emerald-900/30 border border-emerald-800 rounded-lg px-3 py-1.5">
+                <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                <span class="text-xs text-emerald-400 mono">{{ report._age_display }} ago</span>
+            </div>
+            {% elif not report.get('missing') %}
+            <div class="flex items-center gap-2 bg-yellow-900/30 border border-yellow-800 rounded-lg px-3 py-1.5">
+                <div class="w-2 h-2 rounded-full bg-yellow-500"></div>
+                <span class="text-xs text-yellow-400 mono">{{ report._age_display }} ago</span>
+            </div>
+            {% else %}
+            <div class="flex items-center gap-2 bg-red-900/30 border border-red-800 rounded-lg px-3 py-1.5">
+                <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                <span class="text-xs text-red-400 mono">No data</span>
+            </div>
+            {% endif %}
+            <a href="/meta/refresh" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded-lg border border-gray-700">
+                Refresh
+            </a>
+        </div>
+    </div>
+
+    {% if report.get('missing') %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-8 text-center">
+        <p class="text-gray-400">{{ report.get('message', 'No meta-observer data available.') }}</p>
+        <p class="text-xs text-gray-500 mt-2 mono">PYTHONPATH=. python scripts/run_meta_observer.py</p>
+    </div>
+    {% else %}
+
+    <!-- Top Stats Row -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Instances</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ report.num_instances or 0 }}</p>
+            <p class="text-[10px] text-gray-500">analyzed</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Thesis Overlap</p>
+            <p class="mono text-lg font-bold {% if (report.thesis_overlap_jaccard or 0) > 0.7 %}text-emerald-400{% elif (report.thesis_overlap_jaccard or 0) > 0.4 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                {{ "%.0f"|format((report.thesis_overlap_jaccard or 0) * 100) }}%
+            </p>
+            <p class="text-[10px] text-gray-500">Jaccard</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Position Overlap</p>
+            <p class="mono text-lg font-bold {% if (report.position_overlap_jaccard or 0) > 0.6 %}text-emerald-400{% elif (report.position_overlap_jaccard or 0) > 0.3 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                {{ "%.0f"|format((report.position_overlap_jaccard or 0) * 100) }}%
+            </p>
+            <p class="text-[10px] text-gray-500">Jaccard</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Agreement Rate</p>
+            <p class="mono text-lg font-bold {% if (report.position_agreement_rate or 0) > 0.6 %}text-emerald-400{% elif (report.position_agreement_rate or 0) > 0.3 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                {{ "%.0f"|format((report.position_agreement_rate or 0) * 100) }}%
+            </p>
+            <p class="text-[10px] text-gray-500">held by 2+</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Shared Theses</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ (report.shared_theses or []) | length }}</p>
+            <p class="text-[10px] text-gray-500">in all instances</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-3">
+            <p class="text-[10px] text-gray-500 uppercase">Consensus Pos.</p>
+            <p class="mono text-lg font-bold text-gray-200">{{ (report.consensus_positions or []) | length }}</p>
+            <p class="text-[10px] text-gray-500">symbols</p>
+        </div>
+    </div>
+
+    <!-- Instance Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for inst in instances %}
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-200 uppercase">{{ inst.name }}</h3>
+                {% if inst.prediction_accuracy > 0 %}
+                <span class="text-[10px] bg-gray-800 px-2 py-0.5 rounded {% if inst.prediction_accuracy > 50 %}text-emerald-400{% elif inst.prediction_accuracy > 30 %}text-yellow-400{% else %}text-red-400{% endif %}">
+                    {{ "%.0f"|format(inst.prediction_accuracy) }}% accuracy
+                </span>
+                {% endif %}
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <p class="text-[10px] text-gray-500">Equity</p>
+                    <p class="mono text-sm font-bold text-gray-200">${{ "{:,.0f}".format(inst.equity or 0) }}</p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-500">Cash</p>
+                    <p class="mono text-sm text-gray-400">${{ "{:,.0f}".format(inst.cash or 0) }}</p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-500">Positions</p>
+                    <p class="mono text-sm text-gray-200">{{ inst.positions }}</p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-gray-500">Theses</p>
+                    <p class="mono text-sm text-gray-200">{{ inst.theses }}</p>
+                </div>
+            </div>
+            {% if inst.decisions_today > 0 %}
+            <div class="mt-2 pt-2 border-t border-gray-800">
+                <span class="text-[10px] text-emerald-400">{{ inst.decisions_today }} decision(s) today</span>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Position Convergence + Conviction -->
+        <div class="lg:col-span-2 space-y-4">
+
+            <!-- Position Convergence Matrix -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    Position Convergence
+                    <span class="text-[10px] text-gray-500 ml-1">({{ position_matrix | length }} symbols)</span>
+                </h2>
+                {% if position_matrix %}
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="border-b border-gray-800">
+                                <th class="text-left py-1.5 px-2 text-gray-500">Symbol</th>
+                                {% for inst in instances %}
+                                <th class="text-center py-1.5 px-2 text-gray-500">{{ inst.name[:8] }}</th>
+                                {% endfor %}
+                                <th class="text-center py-1.5 px-2 text-gray-500">Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in position_matrix[:40] %}
+                            <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                <td class="py-1 px-2 mono text-gray-200 font-medium">{{ row.symbol }}</td>
+                                {% for holder in row.instances %}
+                                <td class="text-center py-1 px-2">
+                                    {% if holder.held %}
+                                    <span class="text-emerald-400">&#9679;</span>
+                                    {% else %}
+                                    <span class="text-gray-700">&#9675;</span>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                                <td class="text-center py-1 px-2 mono {% if row.count == (instances | length) %}text-emerald-400 font-bold{% elif row.count > 1 %}text-yellow-400{% else %}text-gray-500{% endif %}">
+                                    {{ row.count }}/{{ instances | length }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% if position_matrix | length > 40 %}
+                    <p class="text-[10px] text-gray-500 mt-2 px-2">Showing 40 of {{ position_matrix | length }} symbols</p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No position data available</p>
+                {% endif %}
+            </div>
+
+            <!-- Conviction Distributions -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    Conviction Distributions
+                    <span class="text-[10px] text-gray-500 ml-1">(shared theses, sorted by variance)</span>
+                </h2>
+                {% if conviction_dists %}
+                <div class="space-y-2">
+                    {% for dist in conviction_dists[:15] %}
+                    <div class="bg-gray-800/30 rounded px-3 py-2">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs text-gray-200 font-medium truncate max-w-[300px]" title="{{ dist.name }}">{{ dist.name }}</span>
+                            <span class="text-[10px] text-gray-500">{{ dist.n_instances }} instances</span>
+                        </div>
+                        <!-- Visual bar -->
+                        <div class="relative h-4 bg-gray-800 rounded overflow-hidden">
+                            {% set bar_left = [dist.min, 0] | max %}
+                            {% set bar_right = [dist.max, 100] | min %}
+                            <div class="absolute h-full bg-gray-700 rounded"
+                                 style="left: {{ bar_left }}%; width: {{ bar_right - bar_left }}%;"></div>
+                            <div class="absolute h-full w-0.5 bg-emerald-400"
+                                 style="left: {{ dist.mean }}%;"></div>
+                        </div>
+                        <div class="flex items-center justify-between mt-1">
+                            <span class="text-[10px] text-gray-500">{{ "%.0f"|format(dist.min) }}%</span>
+                            <span class="mono text-[10px] {% if dist.std > 15 %}text-red-400{% elif dist.std > 8 %}text-yellow-400{% else %}text-emerald-400{% endif %}">
+                                {{ "%.1f"|format(dist.mean) }}% +/- {{ "%.1f"|format(dist.std) }}%
+                            </span>
+                            <span class="text-[10px] text-gray-500">{{ "%.0f"|format(dist.max) }}%</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No shared theses to compare</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right sidebar -->
+        <div class="space-y-4">
+
+            <!-- Equity Comparison -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Equity Comparison</h2>
+                {% if report.equity_comparison %}
+                {% set max_equity = report.equity_comparison.values() | max %}
+                <div class="space-y-2">
+                    {% for name, equity in report.equity_comparison.items() %}
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs text-gray-300">{{ name }}</span>
+                            <span class="mono text-xs font-bold text-gray-200">${{ "{:,.0f}".format(equity) }}</span>
+                        </div>
+                        <div class="h-2 bg-gray-800 rounded overflow-hidden">
+                            <div class="h-full rounded {% if equity == max_equity %}bg-emerald-500{% else %}bg-gray-600{% endif %}"
+                                 style="width: {{ (equity / max_equity * 100) if max_equity > 0 else 0 }}%;"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No equity data</p>
+                {% endif %}
+            </div>
+
+            <!-- Shared Theses -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    Shared Theses
+                    <span class="text-[10px] text-gray-500 ml-1">({{ (report.shared_theses or []) | length }})</span>
+                </h2>
+                {% if report.shared_theses %}
+                <div class="space-y-1">
+                    {% for name in report.shared_theses %}
+                    <div class="flex items-center px-2 py-1 rounded hover:bg-gray-800/50">
+                        <span class="text-emerald-400 text-[10px] mr-2">&#9679;</span>
+                        <span class="text-xs text-gray-300">{{ name }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No theses shared across all instances</p>
+                {% endif %}
+            </div>
+
+            <!-- Unique Theses per Instance -->
+            {% if report.unique_theses %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Unique Theses</h2>
+                <div class="space-y-3">
+                    {% for inst_name, thesis_names in report.unique_theses.items() %}
+                    <div>
+                        <p class="text-[10px] text-gray-500 uppercase mb-1">{{ inst_name }}</p>
+                        {% for name in thesis_names[:5] %}
+                        <div class="flex items-center px-2 py-0.5">
+                            <span class="text-yellow-400 text-[10px] mr-2">&#9675;</span>
+                            <span class="text-xs text-gray-400">{{ name }}</span>
+                        </div>
+                        {% endfor %}
+                        {% if thesis_names | length > 5 %}
+                        <p class="text-[10px] text-gray-600 px-2">+{{ thesis_names | length - 5 }} more</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Recommendations -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Recommendations</h2>
+                {% if recommendations %}
+                <div class="space-y-2">
+                    {% for rec in recommendations %}
+                    <div class="bg-gray-800/30 rounded px-3 py-2">
+                        <p class="text-xs text-gray-300">{{ rec }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No recommendations</p>
+                {% endif %}
+            </div>
+
+            <!-- Report History -->
+            {% if history %}
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Report History</h2>
+                <div class="space-y-1">
+                    {% for h in history %}
+                    <div class="flex items-center justify-between px-2 py-1 text-[10px] hover:bg-gray-800/30 rounded">
+                        <span class="text-gray-400 mono">{{ (h.timestamp or '')[:16] }}</span>
+                        <span class="text-gray-500">{{ h.num_instances }} inst</span>
+                        <span class="text-gray-500">T:{{ "%.0f"|format((h.thesis_overlap or 0) * 100) }}%</span>
+                        <span class="text-gray-500">P:{{ "%.0f"|format((h.position_overlap or 0) * 100) }}%</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}

@@ -6,10 +6,11 @@ from pathlib import Path
 
 from sqlalchemy import func
 
+from src.core.paths import paths
 from src.db.database import get_db
 from src.db.models import ProcessEvent
 
-SCHEDULER_DIR = Path.home() / "quant_results" / "scheduler"
+SCHEDULER_DIR = paths.base / "scheduler"
 
 # Event types logged by the autonomous pipeline
 SESSION_EVENT_TYPES = {

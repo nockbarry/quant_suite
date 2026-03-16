@@ -59,8 +59,8 @@ class QueuedProposal:
 class OrderManagerConfig:
     """Configuration for order manager."""
 
-    require_approval: bool = True
-    auto_approve_threshold: float = 0.0  # Auto-approve if risk score below this
+    require_approval: bool = False  # Fully autonomous — no human approval needed
+    auto_approve_threshold: float = 1.0  # Auto-approve all trades within risk limits
     proposal_timeout_seconds: float = 300.0  # 5 minutes
     max_pending_proposals: int = 100
     allow_emergency_stop: bool = True

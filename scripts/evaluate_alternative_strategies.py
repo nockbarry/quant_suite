@@ -28,6 +28,7 @@ warnings.filterwarnings('ignore')
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.core.paths import paths
 from src.core import Direction, Signal, SignalType, Symbol, Timeframe
 from src.strategies.base import Strategy
 from src.evaluation.backtest.engine import VectorizedBacktest, BacktestConfig, BacktestResult
@@ -48,7 +49,7 @@ except ImportError:
     HMMLEARN_AVAILABLE = False
 
 # Output directory
-OUTPUT_DIR = Path.home() / "quant_results" / "strategy_evaluation"
+OUTPUT_DIR = paths.base / "strategy_evaluation"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 

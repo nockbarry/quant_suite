@@ -241,7 +241,7 @@ class SignalProvenanceTracker:
     """Track and manage signal provenance records."""
 
     def __init__(self, base_path: Path = None):
-        self.base_path = base_path or Path.home() / "quant_results" / "signal_provenance"
+        self.base_path = base_path or paths.base / "signal_provenance"
         self.base_path.mkdir(parents=True, exist_ok=True)
         self._cache: dict[str, SignalProvenance] = {}
         self._load_all()

@@ -22,9 +22,12 @@ Usage:
 """
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 from workflows.research.knowledge_base import KnowledgeBase
 from workflows.research.research_dashboard import ResearchDashboard
@@ -39,7 +42,7 @@ class SessionContext:
     """
 
     def __init__(self, path: Path | None = None):
-        self.path = path or Path.home() / "quant_results" / "sessions"
+        self.path = path or _RESULTS_DIR / "sessions"
         self.path.mkdir(parents=True, exist_ok=True)
 
         self._context_file = self.path / "claude_session_context.json"

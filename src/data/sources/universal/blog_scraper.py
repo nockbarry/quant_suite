@@ -28,6 +28,8 @@ from urllib.parse import urljoin, urlparse
 
 import pandas as pd
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 # Optional imports
@@ -205,7 +207,7 @@ class BlogScraper:
         cache_dir: Path | None = None,
         policy: ScrapingPolicy | None = None,
     ):
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "scraped_data" / "blogs"
+        self.cache_dir = cache_dir or paths.scraped_data / "blogs"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.policy = policy or ScrapingPolicy()

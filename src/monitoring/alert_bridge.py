@@ -34,10 +34,12 @@ from src.alerts.mobile_bot import (
     send_mobile_alert,
 )
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 # Track which actions have been alerted to avoid duplicates
-ALERTED_ACTIONS_FILE = Path.home() / "quant_results" / "live" / "alerted_actions.json"
+ALERTED_ACTIONS_FILE = paths.live / "alerted_actions.json"
 
 
 def load_alerted_actions() -> dict:

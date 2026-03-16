@@ -76,7 +76,7 @@ For each top hypothesis:
 
 ## Output
 
-Results saved to: `/home/nock/quant_results/alpha_hunt/`
+Results saved to: `~/quant_results/alpha_hunt/`
 
 ```
 alpha_hunt/

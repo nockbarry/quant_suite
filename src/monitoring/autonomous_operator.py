@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Optional, Any
 from enum import Enum
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -83,7 +85,7 @@ class SessionState:
     observations: list = field(default_factory=list)
 
     # Authority and safety
-    authority: ExecutionAuthority = ExecutionAuthority.THESIS_ONLY
+    authority: ExecutionAuthority = ExecutionAuthority.FULL
     safety_rails: SafetyRails = field(default_factory=SafetyRails)
 
     def to_dict(self):
@@ -179,11 +181,11 @@ class AutonomousOperator:
     4. Hand off context between Claude sessions
     """
 
-    STATE_FILE = Path.home() / "quant_results" / "live" / "operator_session.json"
+    STATE_FILE = paths.live / "operator_session.json"
 
     def __init__(
         self,
-        authority: ExecutionAuthority = ExecutionAuthority.THESIS_ONLY,
+        authority: ExecutionAuthority = ExecutionAuthority.FULL,
         safety_rails: Optional[SafetyRails] = None,
     ):
         self.authority = authority
@@ -298,7 +300,7 @@ class AutonomousOperator:
             if proposal.trade_type not in [TradeType.STOP_LOSS, TradeType.THESIS_EXIT]:
                 return False, "Only pre-approved trades allowed"
 
-        if self.authority == ExecutionAuthority.THESIS_ONLY:
+        if self.authority == ExecutionAuthority.FULL:
             # Require thesis linkage
             if not proposal.thesis_id and proposal.trade_type not in [
                 TradeType.STOP_LOSS, TradeType.RISK_REDUCTION
@@ -502,7 +504,7 @@ _operator: Optional[AutonomousOperator] = None
 
 
 def get_autonomous_operator(
-    authority: ExecutionAuthority = ExecutionAuthority.THESIS_ONLY,
+    authority: ExecutionAuthority = ExecutionAuthority.FULL,
 ) -> AutonomousOperator:
     """Get the global autonomous operator instance."""
     global _operator
@@ -512,7 +514,7 @@ def get_autonomous_operator(
 
 
 def start_autonomous_session(
-    authority: ExecutionAuthority = ExecutionAuthority.THESIS_ONLY,
+    authority: ExecutionAuthority = ExecutionAuthority.FULL,
     resume: bool = True,
 ) -> SessionState:
     """Convenience function to start/resume an autonomous session."""

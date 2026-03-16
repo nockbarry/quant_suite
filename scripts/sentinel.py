@@ -31,12 +31,12 @@ SCRIPTS_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPTS_DIR.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
-LOG_DIR = Path.home() / "quant_results" / "logs"
+RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
+LOG_DIR = RESULTS_DIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-SCHEDULER_DIR = Path.home() / "quant_results" / "scheduler"
-RESULTS_DIR = Path.home() / "quant_results"
-TMUX_SESSION = "athena-auto"
+SCHEDULER_DIR = RESULTS_DIR / "scheduler"
+TMUX_SESSION = f"athena-{os.environ.get('ATHENA_INSTANCE', 'auto')}"
 
 logging.basicConfig(
     level=logging.INFO,

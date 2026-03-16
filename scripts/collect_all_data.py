@@ -275,6 +275,76 @@ async def collect_congressional():
         return {"congressional": {"error": str(e)}}
 
 
+async def collect_fertilizer_prices():
+    """Collect fertilizer price proxies (CF, MOS, NTR, UNG)."""
+    try:
+        from src.data.sources.alternative.fertilizer_prices import FertilizerCollector
+        collector = FertilizerCollector()
+        snapshot = await collector.collect()
+        return {"fertilizer_prices": {
+            "cf_price": snapshot.cf_price,
+            "mos_price": snapshot.mos_price,
+            "ntr_price": snapshot.ntr_price,
+            "cf_change_5d": snapshot.cf_change_5d,
+            "data_quality": snapshot.data_quality,
+        }}
+    except Exception as e:
+        logger.error(f"Fertilizer price collection failed: {e}")
+        return {"fertilizer_prices": {"error": str(e)}}
+
+
+async def collect_shipping_rates():
+    """Collect shipping rate proxies (BDRY, FRO, DHT, BNO)."""
+    try:
+        from src.data.sources.alternative.shipping_rates import ShippingRateCollector
+        collector = ShippingRateCollector()
+        snapshot = await collector.collect()
+        return {"shipping_rates": {
+            "bdry_price": snapshot.bdry_price,
+            "fro_price": snapshot.fro_price,
+            "tanker_bdry_spread": snapshot.tanker_bdry_spread,
+            "data_quality": snapshot.data_quality,
+        }}
+    except Exception as e:
+        logger.error(f"Shipping rate collection failed: {e}")
+        return {"shipping_rates": {"error": str(e)}}
+
+
+async def collect_lng_prices():
+    """Collect LNG price proxies (UNG, LNG/Cheniere)."""
+    try:
+        from src.data.sources.alternative.lng_prices import LNGCollector
+        collector = LNGCollector()
+        snapshot = await collector.collect()
+        return {"lng_prices": {
+            "ung_price": snapshot.ung_price,
+            "lng_price": snapshot.lng_price,
+            "lng_ung_ratio": snapshot.lng_ung_ratio,
+            "data_quality": snapshot.data_quality,
+        }}
+    except Exception as e:
+        logger.error(f"LNG price collection failed: {e}")
+        return {"lng_prices": {"error": str(e)}}
+
+
+async def collect_hormuz_status():
+    """Collect Hormuz disruption estimate from proxy signals."""
+    try:
+        from src.data.sources.alternative.hormuz_tracker import HormuzTracker
+        tracker = HormuzTracker()
+        snapshot = await tracker.collect()
+        return {"hormuz_status": {
+            "disruption_level_pct": snapshot.disruption_level_pct,
+            "risk_label": snapshot.risk_label,
+            "brent_wti_spread_pct": snapshot.brent_wti_spread_pct,
+            "hormuz_mention_count": snapshot.hormuz_mention_count,
+            "confidence": snapshot.confidence,
+        }}
+    except Exception as e:
+        logger.error(f"Hormuz tracker collection failed: {e}")
+        return {"hormuz_status": {"error": str(e)}}
+
+
 async def collect_prediction_markets():
     """Collect prediction market data and persist to disk."""
     try:
@@ -444,6 +514,10 @@ async def collect_all(quick: bool = False):
         "congressional": collect_congressional(),
         "prediction_markets": collect_prediction_markets(),
         "insider": collect_insider(),
+        "fertilizer_prices": collect_fertilizer_prices(),
+        "shipping_rates": collect_shipping_rates(),
+        "lng_prices": collect_lng_prices(),
+        "hormuz_status": collect_hormuz_status(),
         "daemon": collect_from_daemon(),
     }
 
@@ -484,7 +558,8 @@ async def collect_all(quick: bool = False):
     logger.info(f"Results: {successes} succeeded, {failures} failed")
 
     # Save collection log
-    log_dir = Path.home() / "quant_results" / "logs"
+    from src.core.paths import paths
+    log_dir = paths.base / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     log_file = log_dir / "collection_log.json"

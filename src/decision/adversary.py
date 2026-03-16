@@ -15,6 +15,8 @@ from datetime import datetime
 from typing import Optional, Any
 import logging
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -221,7 +223,7 @@ class AdversarialAgent:
                 return self._state_cache
 
         try:
-            state_path = Path.home() / "quant_results" / "live" / "state.json"
+            state_path = paths.live_state
             if state_path.exists():
                 with open(state_path) as f:
                     self._state_cache = json.load(f)

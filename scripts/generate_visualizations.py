@@ -26,8 +26,11 @@ warnings.filterwarnings('ignore')
 plt.style.use('seaborn-v0_8-darkgrid')
 sns.set_palette("husl")
 
+import os
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
+
 # Output directory
-OUTPUT_DIR = Path.home() / "quant_results" / "visualizations"
+OUTPUT_DIR = _RESULTS_DIR / "visualizations"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -200,7 +203,7 @@ def create_sector_flow_chart():
     print("\n4. Creating sector flow chart...")
 
     # Load sector snapshot
-    snapshot_path = Path.home() / "quant_results" / "system_tests" / "sector_snapshot.json"
+    snapshot_path = _RESULTS_DIR / "system_tests" / "sector_snapshot.json"
 
     if not snapshot_path.exists():
         print("  No sector snapshot data available")
@@ -259,7 +262,7 @@ def create_options_dashboard():
     print("\n5. Creating options sentiment dashboard...")
 
     # Load options data
-    options_path = Path.home() / "quant_results" / "system_tests" / "options_full_results.json"
+    options_path = _RESULTS_DIR / "system_tests" / "options_full_results.json"
 
     if not options_path.exists():
         print("  No options data available")
@@ -348,7 +351,7 @@ def create_correlation_matrix():
     """Create cross-asset correlation heatmap."""
     print("\n6. Creating correlation matrix...")
 
-    corr_path = Path.home() / "quant_results" / "experiments" / "correlation_matrix.csv"
+    corr_path = _RESULTS_DIR / "experiments" / "correlation_matrix.csv"
 
     if not corr_path.exists():
         print("  No correlation data available")

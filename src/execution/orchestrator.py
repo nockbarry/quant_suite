@@ -23,6 +23,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
 
+from src.core.paths import paths
+
 import pandas as pd
 
 from ..core import Portfolio, Position, Symbol
@@ -94,7 +96,7 @@ class OrchestratorConfig:
     max_position_pct: float = 0.25  # 25% for budget accounts
 
     # Execution settings
-    require_approval: bool = True  # Require human approval for trades
+    require_approval: bool = False  # Fully autonomous — no human approval
     auto_approve_paper: bool = True  # Auto-approve in paper mode
     max_daily_trades: int = 10
 
@@ -104,7 +106,7 @@ class OrchestratorConfig:
     emergency_stop_enabled: bool = True
 
     # Reporting
-    results_dir: Path = field(default_factory=lambda: Path.home() / "quant_results")
+    results_dir: Path = field(default_factory=lambda: paths.base)
     save_signals: bool = True
     save_trades: bool = True
 

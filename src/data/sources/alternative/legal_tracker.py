@@ -15,6 +15,8 @@ from typing import Optional
 
 import httpx
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 # Key cases and their market impacts
@@ -122,7 +124,7 @@ class LegalTracker:
     """Track legal and regulatory events affecting markets."""
 
     def __init__(self, cache_dir: Optional[Path] = None):
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "live" / "legal"
+        self.cache_dir = cache_dir or paths.live / "legal"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.client = httpx.AsyncClient(timeout=30, follow_redirects=True)
 

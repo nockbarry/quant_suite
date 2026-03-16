@@ -27,7 +27,9 @@ import httpx
 import yaml
 
 
-CONFIG_PATH = Path.home() / "quant_results" / "config" / "mobile_alerts.yaml"
+import os
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
+CONFIG_PATH = _RESULTS_DIR / "config" / "mobile_alerts.yaml"
 
 
 async def get_chat_id(bot_token: str) -> str:

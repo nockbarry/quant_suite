@@ -112,7 +112,7 @@ class BeliefUpdater:
         return report
 
     def _auto_apply_suggestions(self, suggestions: list[ThesisSuggestion]):
-        """Auto-apply thesis conviction changes within ±5%. Larger changes are flagged only."""
+        """Auto-apply ALL thesis conviction changes. Fully autonomous — no human review needed."""
         if not suggestions:
             return
 
@@ -123,13 +123,6 @@ class BeliefUpdater:
             tracker = ThesisTracker(paths.theses)
 
             for s in suggestions:
-                if abs(s.suggested_change) > 5:
-                    logger.info(
-                        f"Belief updater: {s.thesis_name} needs {s.suggested_change:+}% "
-                        f"(too large for auto-apply, flagged for review)"
-                    )
-                    continue
-
                 thesis = tracker.get_thesis(s.thesis_id)
                 if not thesis or thesis.status != "active":
                     continue

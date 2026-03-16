@@ -294,8 +294,8 @@ Claude can execute trades directly during operator sessions with appropriate saf
 
 | Level | What Claude Can Do |
 |-------|-------------------|
-| `FULL` | Execute any trade within risk limits |
-| `THESIS_ONLY` | Only trades linked to active theses (default) |
+| `FULL` | Execute any trade within risk limits (default) |
+| `THESIS_ONLY` | Only trades linked to active theses |
 | `APPROVED` | Only stop-loss and signpost exits |
 | `NOTIFY` | Log and alert, but don't execute |
 | `DISABLED` | Monitoring only, no execution |
@@ -303,11 +303,11 @@ Claude can execute trades directly during operator sessions with appropriate saf
 ### Set Authority at Session Start
 
 ```bash
-# Start with thesis-only execution (default, safest for active trading)
-PYTHONPATH=. python scripts/claude_execute.py authority thesis
-
-# Full authority for active day
+# Full authority (default — fully autonomous)
 PYTHONPATH=. python scripts/claude_execute.py authority full
+
+# Thesis-only (more conservative)
+PYTHONPATH=. python scripts/claude_execute.py authority thesis
 
 # Monitoring only
 PYTHONPATH=. python scripts/claude_execute.py authority notify
@@ -376,7 +376,7 @@ from src.monitoring.autonomous_operator import (
 
 # Start/resume session
 session = start_autonomous_session(
-    authority=ExecutionAuthority.THESIS_ONLY,
+    authority=ExecutionAuthority.FULL,
     resume=True,
 )
 
@@ -467,11 +467,44 @@ If the operator crashes (context exhaustion, error):
 3. Restarts operator with handoff context via `--append-system-prompt`
 4. New operator reads handoff and continues monitoring
 
+## Autonomous Execution Protocol
+
+The operator runs with **FULL execution authority**. When conditions are met, execute immediately:
+
+### Auto-Close Triggers (Execute Immediately)
+1. **Stop loss hit**: Position down -15% from cost → CLOSE entire position
+2. **Thesis invalidated**: Conviction drops below 40% → CLOSE all thesis positions
+3. **Concentration breach**: Position exceeds 20% of portfolio → TRIM to 15%
+
+### Auto-Buy Triggers (Execute via cron_auto_execute.py)
+1. **Signal convergence**: 4+ bullish signals aligned → create BUY decision, auto-executed after session
+2. **Thesis oversold**: RSI<30 on thesis stock with conviction>60% → create ADD decision
+3. **VIX spike**: VIX>30 in backwardation → create SPY BUY decision
+
+### Execution Flow
+```python
+# For immediate closes (stop loss, thesis invalidation):
+PYTHONPATH=. python3 scripts/quick_trade.py sell SYMBOL --all
+
+# For new buys (create decision, auto-executed after session):
+from src.decision.decision_logger import create_decision, Action
+decision = create_decision(symbol=..., action=Action.BUY, ...)
+# cron_auto_execute.py picks up PENDING decisions automatically
+```
+
+### Safety Rails (Always Enforced)
+- Max 5% single trade size
+- Max 10 trades per day
+- Max 15% single position
+- Max 40% sector concentration
+- No buying if portfolio down 3%+ today
+- PDT compliance (<$25k accounts)
+
 ## Best Practices
 
-1. **Start with THESIS_ONLY authority** - safest for active trading
+1. **Execute within risk limits** - safety rails are the guardrails, not human approval
 2. **Review action items immediately** - especially HIGH priority
-3. **Execute thesis-aligned trades** - use the tools to check and execute
+3. **Close stop-loss positions immediately** - don't wait for trade-decision session
 4. **Record observations** - builds context for handoff
 5. **Set focus areas** - helps maintain attention on key items
 6. **Use handoff before context limit** - ensures continuity

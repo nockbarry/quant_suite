@@ -26,6 +26,8 @@ from pathlib import Path
 from typing import Optional
 from enum import Enum
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 # Try to import PRAW (Reddit API)
@@ -116,8 +118,8 @@ class WSBSignal:
 class WSBTracker:
     """Track WallStreetBets for early alpha signals."""
 
-    DB_PATH = Path.home() / "quant_results" / "social" / "wsb.db"
-    SIGNALS_PATH = Path.home() / "quant_results" / "social" / "wsb_signals.json"
+    DB_PATH = paths.base / "social" / "wsb.db"
+    SIGNALS_PATH = paths.base / "social" / "wsb_signals.json"
 
     # Common stock ticker pattern
     TICKER_PATTERN = re.compile(r'\$([A-Z]{1,5})\b|\b([A-Z]{2,5})\b')

@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Optional
 from collections import defaultdict
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,7 +72,7 @@ class PerformanceAttributor:
     """Attribute portfolio performance to various sources."""
 
     def __init__(self, data_dir: Optional[Path] = None):
-        self.data_dir = data_dir or Path.home() / "quant_results"
+        self.data_dir = data_dir or paths.base
         self.trades_dir = self.data_dir / "trades"
         self.theses_dir = self.data_dir / "theses"
         self.reports_dir = self.data_dir / "attribution"

@@ -271,6 +271,68 @@ class PathConfig:
         """Daily signal generation runs."""
         return self._ensure_dir(self.base / "daily_runs")
 
+    # === Scheduler & Operations ===
+
+    @property
+    def scheduler(self) -> Path:
+        """Scheduler coordination files."""
+        return self._ensure_dir(self.base / "scheduler")
+
+    @property
+    def logs(self) -> Path:
+        """Application logs."""
+        return self._ensure_dir(self.base / "logs")
+
+    @property
+    def intelligence(self) -> Path:
+        """Intelligence and calibration data."""
+        return self._ensure_dir(self.base / "intelligence")
+
+    @property
+    def suggestions(self) -> Path:
+        """Thesis suggestions."""
+        return self._ensure_dir(self.base / "suggestions")
+
+    @property
+    def social(self) -> Path:
+        """Social sentiment data (WSB, Stocktwits)."""
+        return self._ensure_dir(self.base / "social")
+
+    @property
+    def signal_provenance(self) -> Path:
+        """Signal provenance tracking."""
+        return self._ensure_dir(self.base / "signal_provenance")
+
+    @property
+    def signal_quality(self) -> Path:
+        """Signal quality metrics."""
+        return self._ensure_dir(self.base / "signal_quality")
+
+    @property
+    def full_research(self) -> Path:
+        """Full research cycle outputs."""
+        return self._ensure_dir(self.base / "full_research")
+
+    @property
+    def accounts(self) -> Path:
+        """Trading account data."""
+        return self._ensure_dir(self.base / "accounts")
+
+    @property
+    def war(self) -> Path:
+        """War/geopolitical dashboard data."""
+        return self._ensure_dir(self.base / "war")
+
+    @property
+    def parallel(self) -> Path:
+        """Multi-instance parallel data."""
+        return self._ensure_dir(self.base / "parallel")
+
+    @property
+    def risk_reports(self) -> Path:
+        """Risk and stress test reports."""
+        return self._ensure_dir(self.base / "risk_reports")
+
     # === Archive ===
 
     @property

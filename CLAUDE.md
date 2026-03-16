@@ -1,6 +1,8 @@
 # Project Athena - Claude Code Reference
 
-A hybrid intelligence trading system where Claude operates as a **persistent trader** with continuous state awareness, thesis tracking, and learning capability.
+A **fully autonomous** trading system where Claude operates as a **persistent trader** with continuous state awareness, thesis tracking, learning capability, and **autonomous execution authority**. No human in the loop — Claude researches, decides, and executes within quantitative safety rails.
+
+**Parallel Architecture**: Supports 3 identical instances running on separate Alpaca paper accounts with a meta-observer measuring divergence. Decision ensemble (3x evaluation consensus) provides error bars on every trade.
 
 ---
 
@@ -34,15 +36,16 @@ This single file contains: market regime, sentiment, portfolio positions, risk, 
 
 Runs automatically: 5:55 AM sentinel starts, 6:00 AM data collection, every 5 min state.json updates, 5:10 PM sentinel stops.
 
-### Your Workflow (Claude Sessions)
+### Fully Autonomous Workflow (All Cron-Driven)
 
 | Time (ET) | Command | What Happens |
 |-----------|---------|--------------|
 | 6:30 AM | `claude "/morning-briefing"` | Read state, search news, review theses |
-| 9:30 AM+ | `claude "/operator-session"` | Enter persistent monitoring mode |
-| When ready | `claude "/trade-decision"` | Adversarial analysis, make decisions |
-| When ready | `claude "/execute-trades"` | Execute with your approval |
+| 8:30 AM | `claude "/operator-session"` | Persistent monitoring + autonomous execution |
+| 10:00/13:00 | `claude "/trade-decision"` | Adversarial analysis → decisions → auto-executed |
 | 4:30 PM | `claude "/eod-review"` | Extract learnings, update conviction |
+
+**No human approval needed.** Trade decisions are auto-executed via `cron_auto_execute.py` after each `/trade-decision` session. The operator can also execute stop-losses and thesis invalidation closes directly.
 
 ---
 
@@ -155,6 +158,38 @@ All sessions injected with board + context summaries via `--append-system-prompt
 
 Validated signals: Bollinger Bounce (IC=0.31, 61.4%), RSI Extreme (IC=0.20, 53.8%), Volume Spike FADE (IC=0.69), Channel Breakout FADE (IC=0.37).
 
+### Conviction Velocity & Crisis Alpha Signals
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **ConvictionVelocityEngine** | `src/signals/conviction_velocity.py` | dConviction/dt as position sizing signal. ADD when velocity > +2pp/day, REDUCE when < -3pp/day |
+| **CrisisAlphaEngine** | `src/signals/crisis_alpha.py` | VIX>25 mean-reversion in semis. NVDA 93.8% hit rate, MU 78.6%, QCOM 76.9% |
+
+### Commodity Data Pipeline
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **FertilizerCollector** | `src/data/sources/alternative/fertilizer_prices.py` | CF/MOS/NTR/UNG as urea/potash proxies |
+| **ShippingRateCollector** | `src/data/sources/alternative/shipping_rates.py` | BDRY/FRO/DHT as VLCC/BDI proxies |
+| **LNGCollector** | `src/data/sources/alternative/lng_prices.py` | UNG/LNG as Henry Hub/TTF proxies |
+| **HormuzTracker** | `src/data/sources/alternative/hormuz_tracker.py` | BNO-USO spread + news sentiment for disruption estimate |
+
+### Portfolio Risk Layer
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **PortfolioStressTester** | `src/risk/stress_tester.py` | Monte Carlo VaR, scenario analysis, cross-thesis correlation |
+| **DecisionEnsemble** | `src/decision/ensemble.py` | 3x evaluation consensus before execution |
+
+### Parallel Instance Layer
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **InstanceConfig** | `src/core/instance.py` | Instance-aware credentials, paths, tmux sessions |
+| **MetaObserver** | `src/parallel/meta_observer.py` | Cross-instance divergence: thesis overlap, conviction distributions |
+| **instance_launcher.sh** | `scripts/instance_launcher.sh` | Create/start/stop/status for parallel instances |
+
+### Autonomous Thesis Creation
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **ThesisSuggester.auto_create** | `src/knowledge/thesis_suggester.py` | Auto-creates theses when confidence > 0.75, max 2/week |
+
 ### Knowledge Layer
 | Component | Location | Purpose |
 |-----------|----------|---------|
@@ -170,10 +205,10 @@ Validated signals: Bollinger Bounce (IC=0.31, 61.4%), RSI Extreme (IC=0.20, 53.8
 |-----------|----------|---------|
 | **DecisionContextBuilder** | `src/intelligence/context_builder.py` | Track record + calibration + price targets + learnings at decision time |
 | **SetupScorer** | `src/intelligence/setup_scorer.py` | Performance analytics by setup type |
-| **BeliefUpdater** | `src/intelligence/belief_updater.py` | Daily signal weight updates, calibration, auto-applies small conviction changes |
+| **BeliefUpdater** | `src/intelligence/belief_updater.py` | Daily signal weight updates, calibration, auto-applies ALL conviction changes |
 | **PredictionRecord** | `src/db/models.py` | Testable predictions linked to decisions |
 
-Feedback loop: decisions → predictions → scored → belief updater adjusts weights (auto-applies ±5% conviction) → context builder surfaces at decision time. Calibration enforcement caps confidence in `/trade-decision`. Web dashboard at `/intelligence`.
+Feedback loop: decisions → predictions → scored → belief updater adjusts weights (auto-applies ALL conviction changes) → context builder surfaces at decision time. Calibration enforcement caps confidence in `/trade-decision`. Web dashboard at `/intelligence`.
 
 ### Decision Layer
 | Component | Location | Purpose |
@@ -218,16 +253,19 @@ Pipeline: BACKTEST → MCPT_VALIDATION (p<0.05) → PAPER_TRADING (20+ days) →
 
 ---
 
-## Trade Decision Framework
+## Trade Decision Framework (Fully Autonomous)
 
 When making trading decisions, systematically consider:
 
 1. **Thesis Alignment** — Is symbol linked to an active thesis? Conviction level? Signpost triggers?
 2. **Statistical Signal Quality** — Confidence, historical performance, regime alignment
 3. **Knowledge Base Context** — Company/sector understanding from `src/knowledge/base.py`
-4. **Adversarial Challenge** — CRITICAL: Every trade gets challenged via `AdversarialAgent`
+4. **Adversarial Challenge** — Every trade gets challenged via `AdversarialAgent`
 5. **Pre-Mortem** — "It's 30 days later and I lost money. What happened?"
 6. **Decision Logging** — Use `create_decision()` with thesis_id, pre_mortem, adversarial_notes
+7. **Auto-Execution** — Decisions with status PENDING are auto-executed by `cron_auto_execute.py` after session
+
+**Execution authority: FULL.** No human approval needed. Safety rails (position sizing, daily loss limits, PDT) are enforced automatically.
 
 ---
 
@@ -247,7 +285,7 @@ Based on analysis of 82 trades from Jan 5-21, 2026:
 
 **Options averaged -14.25% return. Do not trade options.**
 
-Exceptions (require explicit user approval): Deep ITM calls (delta > 0.80), protective puts, covered calls for exit.
+No exceptions in autonomous mode.
 
 ### Rule 2: HOLD POSITIONS - Don't Exit Early
 
@@ -281,6 +319,30 @@ Exceptions (require explicit user approval): Deep ITM calls (delta > 0.80), prot
 - [ ] Concentration requires rebalancing?
 
 If NONE checked → **DO NOT SELL**
+
+### Autonomous Execution Rules
+
+**The system is fully autonomous. No human approval required.**
+
+| Trigger | Action | Executor |
+|---------|--------|----------|
+| Trade decision PENDING | Auto-execute on paper | `cron_auto_execute.py` (after trade-decision session) |
+| Position at -15% stop | Auto-close | Operator session or rules engine |
+| Thesis conviction < 40% | Auto-close all thesis positions | Belief updater → rules engine |
+| Position > 20% portfolio | Auto-trim to 15% | Rules engine (concentration_trim) |
+| Portfolio down 10%+ | Auto-reduce largest position | Rules engine (drawdown_protection) |
+| VIX > 30 in backwardation | Auto-buy SPY 5% | Rules engine (vix_mean_reversion) |
+| Thesis stock RSI < 30 | Auto-add 2% | Rules engine (thesis_oversold_add) |
+| Conviction change any size | Auto-applied | Belief updater (no cap) |
+
+**Safety rails (always enforced, cannot be overridden):**
+- Max 5% single trade size
+- Max 10 trades per day
+- Max 15% single position
+- Max 40% sector concentration
+- No buying if portfolio down 3%+ today
+- Trading hours 9 AM - 4 PM ET only
+- PDT compliance (<$25k accounts)
 
 ### PDT Compliance (<$25k)
 Max 3 day trades per 5 rolling business days. 2-day minimum hold. Use `PDTManager` from `src/execution/pdt_manager.py`.
@@ -334,9 +396,14 @@ Read `docs/TRADING_PATTERNS.md` for accumulated wisdom: vehicle enumeration, con
 | **Artifact Flow Log** | `~/quant_results/scheduler/artifact_reads.jsonl` |
 | **Calibration** | `~/quant_results/intelligence/calibration.json` |
 | **Research Queue** | `~/quant_results/scheduler/research_queue.json` |
-| **Credentials** | `config/credentials.yaml` |
+| **Credentials** | `config/credentials.yaml` (or `credentials_{instance}.yaml` for multi-instance) |
 | **Skills** | `.claude/skills/*/SKILL.md` (20 skills) |
 | **Agents** | `.claude/agents/*.md` (13 agents) |
+| **Commodity Data** | `~/quant_results/live/fertilizer_prices.json`, `shipping_rates.json`, `lng_prices.json`, `hormuz_status.json` |
+| **Risk Reports** | `~/quant_results/risk_reports/stress_test_*.json` |
+| **Ensemble Logs** | `~/quant_results/decisions/ensemble/ensemble_*.json` |
+| **Meta Reports** | `~/quant_results/parallel/meta_report_*.json` |
+| **War Dashboard** | `~/quant_results/war/` |
 
 ---
 
@@ -441,6 +508,25 @@ PYTHONPATH=. python scripts/collect_all_data.py --quick
 PYTHONPATH=. python scripts/cron_signal_digest.py  # Aggregate all signals + convergences
 PYTHONPATH=. python scripts/cron_market_movers.py           # After-close scan
 PYTHONPATH=. python scripts/cron_market_movers.py --intraday # Midday (tighter thresholds)
+
+# Conviction Velocity & Crisis Alpha Signals
+PYTHONPATH=. python -c "from src.signals.conviction_velocity import ConvictionVelocityEngine; e = ConvictionVelocityEngine(); [print(f'{s.thesis_name}: {s.signal_direction} v={s.velocity_3d:+.1f}pp/d') for s in e.scan_all_theses()]"
+PYTHONPATH=. python -c "from src.signals.crisis_alpha import CrisisAlphaEngine; e = CrisisAlphaEngine(); [print(s) for s in e.generate_signals()]"
+
+# Portfolio Risk
+PYTHONPATH=. python scripts/run_stress_test.py              # Full stress test report
+
+# Multi-Instance Management
+./scripts/instance_launcher.sh list                          # List all instances
+./scripts/instance_launcher.sh create alpha API_KEY SECRET   # Create new instance
+./scripts/instance_launcher.sh start alpha                   # Start instance
+./scripts/instance_launcher.sh status all                    # Status of all instances
+
+# Meta-Observer (cross-instance analysis)
+PYTHONPATH=. python scripts/run_meta_observer.py             # Cross-instance divergence report
+
+# Decision Ensemble
+PYTHONPATH=. python scripts/run_ensemble.py                  # Run ensemble on pending decisions
 ```
 
 ---

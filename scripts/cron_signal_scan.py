@@ -23,7 +23,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-RESULTS_DIR = Path.home() / "quant_results"
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.core.paths import paths
+
+RESULTS_DIR = paths.base
 SCAN_HISTORY = RESULTS_DIR / "logs" / "signal_scan_history.json"
 SCAN_LATEST = RESULTS_DIR / "social" / "latest_scan.json"
 

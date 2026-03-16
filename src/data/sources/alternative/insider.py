@@ -16,6 +16,8 @@ import pandas as pd
 
 from ....core import Symbol
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -987,7 +989,7 @@ async def get_recent_insider_buys(
     """
     from pathlib import Path
 
-    archive_path = Path.home() / "quant_results" / "insider_archive" / "all_transactions.parquet"
+    archive_path = paths.base / "insider_archive" / "all_transactions.parquet"
 
     if not archive_path.exists():
         logger.debug(f"Insider archive not found at {archive_path}")

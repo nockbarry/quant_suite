@@ -23,7 +23,7 @@ This skill:
 ### Step 1: Get Performance Summary
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from datetime import datetime
 from src.decision.decision_logger import DecisionLogger
 
@@ -41,7 +41,7 @@ EOF
 ### Step 2: Check Thesis Signposts
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.thesis import ThesisTracker
 from src.core.paths import paths
 
@@ -73,7 +73,7 @@ EOF
 ### Step 3: Extract Learnings
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.decision.decision_logger import DecisionLogger
 from src.knowledge.learnings import LearningLog
 from src.core.paths import paths
@@ -109,7 +109,7 @@ EOF
 from alpaca.trading.client import TradingClient
 import yaml
 
-with open("/home/nock/projects/quant_suite/config/credentials.yaml") as f:
+with open("config/credentials.yaml") as f:
     creds = yaml.safe_load(f)
 
 client = TradingClient(
@@ -132,7 +132,7 @@ print(f"Today's P&L: ${day_pnl:+,.2f} ({day_pnl_pct:+.2f}%)")
 **CRITICAL: Break down today's P&L by thesis to understand WHAT drove performance.**
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 import json
 from pathlib import Path
 
@@ -313,7 +313,7 @@ Learnings are stored in monthly JSON files:
 
 ## EOD Report Format
 
-Save to: `/home/nock/quant_results/eod_reviews/review_YYYYMMDD.json`
+Save to: `~/quant_results/eod_reviews/review_YYYYMMDD.json`
 
 ```json
 {
@@ -437,8 +437,8 @@ When insider_technical + thesis align, size 5% instead of 3%.
 
 ---
 
-Review saved to: /home/nock/quant_results/eod_reviews/review_20260106.json
-Learning saved to: /home/nock/quant_results/learnings/2026-01.json
+Review saved to: ~/quant_results/eod_reviews/review_20260106.json
+Learning saved to: ~/quant_results/learnings/2026-01.json
 ```
 
 ## Step 5b: Propagate Learnings to Strategic Context & Situation Board
@@ -448,7 +448,7 @@ Learning saved to: /home/nock/quant_results/learnings/2026-01.json
 After extracting learnings in Steps 3-5, propagate key findings:
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.swarm.strategic_context import StrategicContext
 from src.swarm.situation_board import SituationBoard
 
@@ -506,17 +506,17 @@ EOF
 
 ```bash
 # Score any predictions that have reached their resolve_by date
-PYTHONPATH=/home/nock/projects/quant_suite python3 scripts/cron_prediction_scorer.py
+PYTHONPATH=. python3 scripts/cron_prediction_scorer.py
 ```
 
 ```bash
 # Run belief update — updates signal weights, suggests thesis conviction changes
-PYTHONPATH=/home/nock/projects/quant_suite python3 scripts/cron_belief_update.py
+PYTHONPATH=. python3 scripts/cron_belief_update.py
 ```
 
 ```bash
 # Review the belief update report
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 import json
 from pathlib import Path
 from datetime import datetime
@@ -566,7 +566,7 @@ The EOD review feeds back into tomorrow's decisions:
 ## Retrieving Past Learnings
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.knowledge.learnings import LearningLog
 from src.core.paths import paths
 
@@ -625,7 +625,7 @@ log_signal_outcome(
 ### Review Signal Quality
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.monitoring.signal_quality_tracker import get_signal_quality_tracker
 
 tracker = get_signal_quality_tracker()
@@ -650,7 +650,7 @@ EOF
 ### Generate Improvement Suggestions
 
 ```bash
-PYTHONPATH=/home/nock/projects/quant_suite python3 << 'EOF'
+PYTHONPATH=. python3 << 'EOF'
 from src.monitoring.improvement_tracker import get_improvement_tracker
 
 tracker = get_improvement_tracker()

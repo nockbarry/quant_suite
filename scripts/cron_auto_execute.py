@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 from datetime import datetime, timedelta
@@ -49,6 +50,30 @@ async def auto_execute(dry_run: bool = False):
             return
 
         logger.info(f"Found {len(pending)} pending decision(s)")
+
+        # Filter out decisions rejected by ensemble
+        approved = []
+        for d in pending:
+            ensemble_json = getattr(d, "ensemble_data", None)
+            if ensemble_json:
+                try:
+                    edata = json.loads(ensemble_json)
+                    if edata.get("consensus") is False:
+                        logger.info(
+                            f"Skipping {d.symbol} {d.action} — ensemble rejected "
+                            f"({edata.get('consensus_count', 0)}/3 consensus)"
+                        )
+                        continue
+                except (json.JSONDecodeError, TypeError):
+                    pass  # Corrupt ensemble data — allow execution
+            approved.append(d)
+
+        if not approved:
+            logger.info("All pending decisions were rejected by ensemble")
+            return
+
+        pending = approved
+        logger.info(f"{len(pending)} decision(s) passed ensemble check")
 
         # Get broker and account info
         from scripts.quick_trade import get_broker
@@ -101,8 +126,24 @@ async def _execute_one(
     action = decision.action
     size_pct = decision.size_pct or 5.0
 
-    # Calculate quantity from size_pct
-    target_value = equity * (size_pct / 100.0)
+    # For CLOSE/SELL/TRIM: get actual position first to avoid creating short positions
+    if action in ("CLOSE", "SELL", "TRIM"):
+        try:
+            position = await broker.get_position(symbol)
+            held_qty = int(float(position.quantity))
+        except Exception:
+            logger.warning(f"No open position for {symbol}, skipping {action}")
+            decision.status = "skipped"
+            decision.outcome_notes = "No position found — already closed"
+            db_session.commit()
+            return False
+
+        if held_qty <= 0:
+            logger.warning(f"{symbol} position qty={held_qty}, skipping {action}")
+            decision.status = "skipped"
+            decision.outcome_notes = f"Position qty={held_qty}, nothing to sell"
+            db_session.commit()
+            return False
 
     # Get current price
     try:
@@ -116,17 +157,29 @@ async def _execute_one(
         logger.warning(f"Invalid price for {symbol}: {price}")
         return False
 
-    qty = int(target_value / price)
-    if qty < 1:
-        qty = 1
-
-    # Validate position size won't exceed 10%
-    position_value = qty * price
-    if position_value / equity > 0.10:
-        qty = int(equity * 0.10 / price)
+    if action in ("BUY", "ADD"):
+        # Calculate quantity from size_pct for buys
+        target_value = equity * (size_pct / 100.0)
+        qty = int(target_value / price)
         if qty < 1:
-            logger.warning(f"Position size for {symbol} would exceed 10% limit, skipping")
-            return False
+            qty = 1
+
+        # Validate position size won't exceed 10%
+        position_value = qty * price
+        if position_value / equity > 0.10:
+            qty = int(equity * 0.10 / price)
+            if qty < 1:
+                logger.warning(f"Position size for {symbol} would exceed 10% limit, skipping")
+                return False
+    elif action == "CLOSE":
+        # Close entire position
+        qty = held_qty
+    elif action in ("SELL", "TRIM"):
+        # Trim by size_pct, but never more than held
+        target_value = equity * (size_pct / 100.0)
+        qty = min(int(target_value / price), held_qty)
+        if qty < 1:
+            qty = 1
 
     logger.info(
         f"{'[DRY RUN] ' if dry_run else ''}"

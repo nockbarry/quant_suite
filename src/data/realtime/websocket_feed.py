@@ -16,6 +16,8 @@ from collections import defaultdict
 import websockets
 import yaml
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,7 +48,7 @@ class RealtimePriceFeed:
     """Real-time price feed with WebSocket support."""
 
     def __init__(self, config_path: Optional[Path] = None):
-        self.config_path = config_path or Path.home() / "quant_results" / "config" / "realtime.yaml"
+        self.config_path = config_path or paths.base / "config" / "realtime.yaml"
         self.config = self._load_config()
 
         # Subscribed symbols

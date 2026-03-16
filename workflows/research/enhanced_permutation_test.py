@@ -14,9 +14,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
+import os
 from pathlib import Path
 import yfinance as yf
 from scipy import stats
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 
 def fetch_data(symbol: str, years: int = 3) -> pd.DataFrame:
@@ -170,7 +173,7 @@ def run_comprehensive_permutation_tests():
     print("ENHANCED PERMUTATION TESTING")
     print("="*70)
 
-    save_path = Path.home() / "quant_results" / "visualizations"
+    save_path = _RESULTS_DIR / "visualizations"
     save_path.mkdir(parents=True, exist_ok=True)
 
     # Top strategy-symbol combinations from the analysis

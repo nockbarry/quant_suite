@@ -22,9 +22,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-TMUX_SESSION="athena-auto"
-SCHEDULER_DIR="$HOME/quant_results/scheduler"
-LOG_DIR="$HOME/quant_results/logs"
+QUANT_RESULTS_DIR="${QUANT_RESULTS_DIR:-$HOME/quant_results}"
+ATHENA_INSTANCE="${ATHENA_INSTANCE:-auto}"
+TMUX_SESSION="athena-${ATHENA_INSTANCE}"
+SCHEDULER_DIR="$QUANT_RESULTS_DIR/scheduler"
+LOG_DIR="$QUANT_RESULTS_DIR/logs"
 
 # Ensure directories exist
 mkdir -p "$SCHEDULER_DIR/locks" "$SCHEDULER_DIR/completions" "$LOG_DIR"
@@ -180,7 +182,7 @@ cmd_oneshot() {
                 continue
             fi
             echo "$wpid"
-        done | head -1)
+        done | head -1 || true)
         if [ -z "$running_wrapper" ]; then
             break
         fi
@@ -407,7 +409,7 @@ cmd_wsl_info() {
     echo "  1. Open taskschd.msc"
     echo "  2. Create Task: 'Athena WSL Wake'"
     echo "  3. Trigger: Daily 5:50 AM, weekdays only"
-    echo "  4. Action: wsl -d Ubuntu -e bash -c 'echo wake >> ~/quant_results/logs/wsl_wake.log'"
+    echo "  4. Action: wsl -d Ubuntu -e bash -c 'echo wake >> \${QUANT_RESULTS_DIR:-\$HOME/quant_results}/logs/wsl_wake.log'"
     echo "  5. Check 'Wake the computer to run this task'"
     echo "  6. Check 'Run whether user is logged on or not'"
     echo ""
@@ -421,6 +423,51 @@ cmd_wsl_info() {
     echo "  Cron: $(systemctl is-active cron 2>/dev/null || echo 'unknown')"
     echo "  tmux sessions: $(tmux list-sessions 2>/dev/null | wc -l)"
     echo "  Uptime: $(uptime -p 2>/dev/null || echo 'unknown')"
+}
+
+# --- Health Check (WSL persistence) ---
+
+cmd_health_check() {
+    # Called by cron every 5 minutes during market hours.
+    # Ensures tmux, sentinel, and operator are alive.
+    # Recovers from WSL suspends that kill background processes.
+
+    # 1. Check tmux session
+    if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+        log "HEALTH: tmux session missing, recreating..."
+        cmd_setup
+    fi
+
+    # 2. Check sentinel PID (only during market hours 6 AM - 5 PM ET)
+    local hour
+    hour=$(TZ="America/New_York" date +%H)
+    if [ "$hour" -ge 6 ] && [ "$hour" -lt 17 ]; then
+        local sentinel_pid=""
+        if [ -f "$SCHEDULER_DIR/locks/sentinel.lock" ]; then
+            sentinel_pid=$(cat "$SCHEDULER_DIR/locks/sentinel.lock" 2>/dev/null)
+        fi
+        if [ -n "$sentinel_pid" ] && ! kill -0 "$sentinel_pid" 2>/dev/null; then
+            log "HEALTH: sentinel dead (PID $sentinel_pid), restarting..."
+            rm -f "$SCHEDULER_DIR/locks/sentinel.lock"
+            cmd_sentinel_start
+        fi
+    fi
+
+    # 3. Check operator (only between 9 AM and 4 PM ET)
+    if [ "$hour" -ge 9 ] && [ "$hour" -lt 16 ]; then
+        local op_lock="$SCHEDULER_DIR/locks/operator.lock"
+        if [ -f "$op_lock" ]; then
+            local op_pid
+            op_pid=$(cat "$op_lock" 2>/dev/null)
+            if [ -n "$op_pid" ] && ! kill -0 "$op_pid" 2>/dev/null; then
+                log "HEALTH: operator dead (PID $op_pid), cleaning up..."
+                rm -f "$op_lock"
+                # Don't auto-restart operator — let the next cron fire handle it
+            fi
+        fi
+    fi
+
+    log "HEALTH: check complete"
 }
 
 # --- Main ---
@@ -459,6 +506,9 @@ case "${1:-}" in
     wsl-info)
         cmd_wsl_info
         ;;
+    health-check)
+        cmd_health_check
+        ;;
     *)
         echo "Athena Autonomous Scheduler"
         echo ""
@@ -476,6 +526,7 @@ case "${1:-}" in
         echo "  status          Show all active sessions"
         echo "  kill-all        Emergency stop everything"
         echo "  wsl-info        WSL setup instructions for autonomous trading"
+        echo "  health-check    Check and recover tmux, sentinel, operator (for cron)"
         exit 1
         ;;
 esac

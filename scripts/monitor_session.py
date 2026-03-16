@@ -13,6 +13,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.core.paths import paths
 from src.monitoring.operator_loop import get_operator_loop
 
 
@@ -113,7 +114,7 @@ async def manual_check(check_num: int) -> dict:
 
 async def check_signposts() -> list:
     """Check for signpost triggers."""
-    alerts_dir = Path.home() / 'quant_results/alerts'
+    alerts_dir = paths.base / 'alerts'
     today = datetime.now().strftime('%Y%m%d')
 
     alerts = []
@@ -187,7 +188,7 @@ async def run_monitoring_session(interval_minutes: int = 10, total_checks: int =
             'total_checks': total_checks,
         }
 
-        log_file = Path.home() / 'quant_results/logs/operator_log.jsonl'
+        log_file = paths.base / 'logs/operator_log.jsonl'
         log_file.parent.mkdir(parents=True, exist_ok=True)
         with open(log_file, 'a') as f:
             f.write(json.dumps(log_entry) + '\n')

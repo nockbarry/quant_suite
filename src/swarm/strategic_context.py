@@ -20,9 +20,11 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
-CONTEXT_PATH = Path.home() / "quant_results" / "scheduler" / "strategic_context.json"
+CONTEXT_PATH = paths.base / "scheduler" / "strategic_context.json"
 
 MOMENTUM_WINDOW = 7  # Days of conviction history to keep
 MAX_PATTERNS = 20

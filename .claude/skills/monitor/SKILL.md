@@ -174,7 +174,7 @@ def get_strategy_performance(strategy_name, days=30):
     """
     Calculate live performance metrics for a strategy.
     """
-    results_dir = Path("/home/nock/quant_results/daily_runs")
+    results_dir = Path("~/quant_results/daily_runs")
 
     trades = []
     for file in sorted(results_dir.glob("*.json"))[-days:]:
@@ -280,7 +280,7 @@ def generate_daily_summary():
     }
 
     # Save summary
-    output_path = Path(f"/home/nock/quant_results/daily_runs/summary_{summary['date']}.json")
+    output_path = Path(f"~/quant_results/daily_runs/summary_{summary['date']}.json")
     with open(output_path, 'w') as f:
         json.dump(summary, f, indent=2)
 
@@ -323,10 +323,10 @@ print(f'Can day trade: {account.daytrade_count < 3}')
 
 | Output | Path |
 |--------|------|
-| Daily summaries | `/home/nock/quant_results/daily_runs/summary_*.json` |
-| Trade logs | `/home/nock/quant_results/daily_runs/trades_*.json` |
-| Performance reports | `/home/nock/quant_results/performance/` |
-| Alerts | `/home/nock/quant_results/alerts/` |
+| Daily summaries | `~/quant_results/daily_runs/summary_*.json` |
+| Trade logs | `~/quant_results/daily_runs/trades_*.json` |
+| Performance reports | `~/quant_results/performance/` |
+| Alerts | `~/quant_results/alerts/` |
 
 ## New Monitoring Components
 

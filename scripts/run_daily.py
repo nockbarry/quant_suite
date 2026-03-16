@@ -46,6 +46,8 @@ from typing import Any
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.core.paths import paths
+
 import pandas as pd
 import numpy as np
 
@@ -466,7 +468,7 @@ class DailyRunner:
     ):
         self.mode = mode
         self.capital = capital
-        self.output_dir = output_dir or Path.home() / "quant_results" / "daily_runs"
+        self.output_dir = output_dir or paths.daily_runs
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Load strategy configuration

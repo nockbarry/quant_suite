@@ -288,7 +288,7 @@ def log_brainstorm_session(session_id, ideas, focus_area):
     )
 
     # Save full session
-    output_path = Path(f"/home/nock/quant_results/brainstorm_sessions/{session_id}.json")
+    output_path = Path(f"~/quant_results/brainstorm_sessions/{session_id}.json")
     output_path.parent.mkdir(exist_ok=True)
 
     with open(output_path, 'w') as f:
@@ -335,6 +335,6 @@ def log_brainstorm_session(session_id, ideas, focus_area):
 
 | Output | Path |
 |--------|------|
-| Brainstorm sessions | `/home/nock/quant_results/brainstorm_sessions/` |
-| Feature ideas | `/home/nock/quant_results/feature_ideas/` |
-| Discovery reports | `/home/nock/quant_results/discovery_reports/` |
+| Brainstorm sessions | `~/quant_results/brainstorm_sessions/` |
+| Feature ideas | `~/quant_results/feature_ideas/` |
+| Discovery reports | `~/quant_results/discovery_reports/` |

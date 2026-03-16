@@ -26,7 +26,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # Setup logging
-LOG_DIR = Path.home() / "quant_results" / "logs"
+RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
+LOG_DIR = RESULTS_DIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
@@ -39,11 +40,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-SCHEDULER_DIR = Path.home() / "quant_results" / "scheduler"
-RESULTS_DIR = Path.home() / "quant_results"
+SCHEDULER_DIR = RESULTS_DIR / "scheduler"
 SCRIPTS_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPTS_DIR.parent
-TMUX_SESSION = "athena-auto"
+TMUX_SESSION = f"athena-{os.environ.get('ATHENA_INSTANCE', 'auto')}"
 
 CHECK_INTERVAL = 60  # seconds
 STATE_STALE_THRESHOLD = 15 * 60  # 15 minutes

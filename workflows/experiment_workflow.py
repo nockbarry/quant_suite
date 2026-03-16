@@ -21,11 +21,14 @@ Usage:
 
 import json
 import logging
+import os
 import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Protocol
+
+_RESULTS_DIR = Path(os.environ.get("QUANT_RESULTS_DIR", str(Path.home() / "quant_results")))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -608,7 +611,7 @@ class ExperimentWorkflow:
         n_permutations: int = 200,
     ):
         self.experiment_name = experiment_name
-        self.output_dir = output_dir or Path.home() / "quant_results" / "experiments" / experiment_name
+        self.output_dir = output_dir or _RESULTS_DIR / "experiments" / experiment_name
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.leak_detector = LeakDetector()

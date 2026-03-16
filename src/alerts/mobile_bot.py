@@ -29,6 +29,8 @@ from enum import Enum
 import httpx
 import yaml
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 
@@ -113,7 +115,7 @@ class MobileAlertBot:
     """Send alerts to Telegram and Discord."""
 
     def __init__(self, config_path: Optional[Path] = None):
-        self.config_path = config_path or Path.home() / "quant_results" / "config" / "mobile_alerts.yaml"
+        self.config_path = config_path or paths.base / "config" / "mobile_alerts.yaml"
         self.config = self._load_config()
         self.client = httpx.AsyncClient(timeout=30)
 

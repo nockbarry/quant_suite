@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from src.core.paths import paths
+
 import requests
 
 from .social_timeseries import get_social_timeseries
@@ -107,7 +109,7 @@ class StocktwitsClient:
     """Client for Stocktwits API."""
 
     BASE_URL = "https://api.stocktwits.com/api/2"
-    CACHE_PATH = Path.home() / "quant_results" / "social" / "stocktwits_cache.json"
+    CACHE_PATH = paths.base / "social" / "stocktwits_cache.json"
 
     # Rate limiting
     REQUESTS_PER_HOUR = 200

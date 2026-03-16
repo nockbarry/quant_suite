@@ -32,6 +32,8 @@ from pathlib import Path
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.core.instance import instance_config
+from src.core.paths import paths
 from src.execution.accounts import AccountManager, TradingAccount, get_account_manager
 
 
@@ -40,7 +42,7 @@ def get_broker(paper: bool = True):
     import yaml
     from src.execution.broker.alpaca import AlpacaBroker
 
-    creds_path = Path(__file__).parent.parent / "config" / "credentials.yaml"
+    creds_path = instance_config.credentials_path()
     with open(creds_path, 'r') as f:
         creds = yaml.safe_load(f)
 
@@ -208,7 +210,7 @@ async def cmd_positions(args):
         # Filter by thesis if specified
         if args.thesis:
             from src.knowledge.thesis import ThesisTracker
-            tracker = ThesisTracker(Path.home() / "quant_results" / "theses")
+            tracker = ThesisTracker(paths.theses)
             thesis_symbols = set()
             for t in tracker.get_active_theses():
                 if args.thesis.lower() in t.name.lower():

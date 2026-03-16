@@ -16,6 +16,8 @@ from xml.etree import ElementTree
 
 import httpx
 
+from src.core.paths import paths
+
 logger = logging.getLogger(__name__)
 
 # Comprehensive RSS feed collection
@@ -107,7 +109,7 @@ class ExpandedNewsCollector:
     """Collect news from 15+ RSS sources with categorization."""
 
     def __init__(self, cache_dir: Optional[Path] = None):
-        self.cache_dir = cache_dir or Path.home() / "quant_results" / "live" / "news"
+        self.cache_dir = cache_dir or paths.live / "news"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.client = httpx.AsyncClient(timeout=30, follow_redirects=True)
 

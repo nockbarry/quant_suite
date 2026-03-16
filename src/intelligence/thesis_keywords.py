@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from src.core.paths import paths
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,7 @@ def build_keyword_index(
     global _cached_index, _cached_mtime
 
     if theses_dir is None:
-        theses_dir = Path.home() / "quant_results" / "theses"
+        theses_dir = paths.theses
 
     if not theses_dir.exists():
         return {}

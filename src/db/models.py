@@ -505,6 +505,9 @@ class DecisionRecord(Base):
     # Strategy tracking
     setup_type = Column(String(50), default="thesis_driven")
 
+    # Ensemble consensus
+    ensemble_data = Column(Text, nullable=True)  # JSON: {consensus, members, confidence}
+
     # NEW: Provenance linkage fields
     signal_ids = Column(Text, default="[]")  # JSON list of signal IDs
     convergence_id = Column(String(100), nullable=True)
