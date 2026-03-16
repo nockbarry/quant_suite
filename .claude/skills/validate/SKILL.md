@@ -345,7 +345,7 @@ def save_validation_report(result: ValidationResult):
     """
     Save validation report to disk.
     """
-    output_dir = Path("~/quant_results/validation_reports")
+    output_dir = paths.base / "validation_reports"
     output_dir.mkdir(exist_ok=True)
 
     filename = f"validation_{result.strategy}_{result.symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"

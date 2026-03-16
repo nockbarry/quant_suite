@@ -136,7 +136,7 @@ PYTHONPATH=. python3 << 'EOF'
 import json
 from pathlib import Path
 
-state_path = Path.home() / "quant_results" / "live" / "state.json"
+state_path = paths.base / "live" / "state.json"
 with open(state_path) as f:
     state = json.load(f)
 
@@ -523,7 +523,7 @@ from datetime import datetime
 
 # Read today's belief update
 date_str = datetime.now().strftime("%Y%m%d")
-report_path = Path.home() / "quant_results" / "intelligence" / f"daily_update_{date_str}.json"
+report_path = paths.base / "intelligence" / f"daily_update_{date_str}.json"
 
 if report_path.exists():
     report = json.loads(report_path.read_text())

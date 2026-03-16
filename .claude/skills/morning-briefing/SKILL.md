@@ -82,8 +82,8 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 
-reviews_dir = Path.home() / "quant_results" / "reviews"
-eod_dir = Path.home() / "quant_results" / "eod_reviews"
+reviews_dir = paths.base / "reviews"
+eod_dir = paths.base / "eod_reviews"
 yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
 
 # 1. Yesterday's EOD review — learnings, thesis updates, tomorrow's focus
@@ -163,8 +163,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
-eod_dir = Path.home() / "quant_results" / "eod_reviews"
-reviews_dir = Path.home() / "quant_results" / "reviews"
+eod_dir = paths.base / "eod_reviews"
+reviews_dir = paths.base / "reviews"
 
 log_artifact_read("morning-briefing", "eod_review",
     str(eod_dir / f"review_{yesterday}.json"),
@@ -193,7 +193,7 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 
-results = Path.home() / "quant_results" / "intelligence"
+results = paths.base / "intelligence"
 
 # Find most recent belief update
 yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")

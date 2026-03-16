@@ -288,7 +288,7 @@ def log_brainstorm_session(session_id, ideas, focus_area):
     )
 
     # Save full session
-    output_path = Path(f"~/quant_results/brainstorm_sessions/{session_id}.json")
+    output_path = paths.base / f"brainstorm_sessions/{session_id}.json"
     output_path.parent.mkdir(exist_ok=True)
 
     with open(output_path, 'w') as f:

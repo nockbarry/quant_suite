@@ -194,7 +194,7 @@ def generate_research_report(cycle_id):
     """
     Generate summary of a research cycle.
     """
-    cycle_path = Path(f"~/quant_results/comprehensive_research/{cycle_id}.json")
+    cycle_path = paths.base / f"comprehensive_research/{cycle_id}.json"
 
     with open(cycle_path) as f:
         cycle = json.load(f)
@@ -350,7 +350,7 @@ def generate_equity_curve(returns, title="Equity Curve"):
     ax.set_xlabel('Date')
     ax.set_ylabel('Cumulative Return')
 
-    output_path = Path("~/quant_results/figures")
+    output_path = paths.base / "figures"
     output_path.mkdir(exist_ok=True)
     fig.savefig(output_path / f"equity_curve_{datetime.now().strftime('%Y%m%d')}.png", dpi=150, bbox_inches='tight')
     plt.close(fig)
@@ -372,7 +372,7 @@ def generate_drawdown_chart(returns, title="Drawdown"):
     ax.set_xlabel('Date')
     ax.set_ylabel('Drawdown')
 
-    output_path = Path("~/quant_results/figures")
+    output_path = paths.base / "figures"
     output_path.mkdir(exist_ok=True)
     fig.savefig(output_path / f"drawdown_{datetime.now().strftime('%Y%m%d')}.png", dpi=150, bbox_inches='tight')
     plt.close(fig)
@@ -403,7 +403,7 @@ def generate_monthly_heatmap(returns, title="Monthly Returns"):
     plt.colorbar(im, label='Return (%)')
     ax.set_title(title)
 
-    output_path = Path("~/quant_results/figures")
+    output_path = paths.base / "figures"
     output_path.mkdir(exist_ok=True)
     fig.savefig(output_path / f"monthly_heatmap_{datetime.now().strftime('%Y%m%d')}.png", dpi=150, bbox_inches='tight')
     plt.close(fig)
@@ -425,7 +425,7 @@ def save_report(report_content, report_type, name):
         'validation': '~/quant_results/validation_reports',
     }
 
-    output_dir = Path(output_dirs.get(report_type, '~/quant_results/reports'))
+    output_dir = paths.base / 'reports'
     output_dir.mkdir(parents=True, exist_ok=True)
 
     filename = f"{report_type}_{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"

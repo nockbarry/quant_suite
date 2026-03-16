@@ -42,7 +42,7 @@ print(ctx.get_summary())
 # Today's session completions
 print('\n=== TODAY SESSION COMPLETIONS ===')
 today = datetime.now().strftime('%Y%m%d')
-comp_dir = Path.home() / 'quant_results' / 'scheduler' / 'completions'
+comp_dir = paths.base / 'scheduler' / 'completions'
 for f in sorted(comp_dir.glob(f'*_{today}*.json')):
     with open(f) as fh:
         c = json.load(fh)
@@ -135,7 +135,7 @@ from pathlib import Path
 import json
 
 # Check what news we already captured via RSS
-news_cache = Path.home() / 'quant_results' / 'live' / 'news_cache.json'
+news_cache = paths.base / 'live' / 'news_cache.json'
 if news_cache.exists():
     with open(news_cache) as f:
         cache = json.load(f)
@@ -154,7 +154,7 @@ else:
     print('No news cache found')
 
 # Check market movers
-movers = Path.home() / 'quant_results' / 'live' / 'market_movers_latest.json'
+movers = paths.base / 'live' / 'market_movers_latest.json'
 if movers.exists():
     with open(movers) as f:
         data = json.load(f)
@@ -245,7 +245,7 @@ report = {
     ],
 }
 
-reviews_dir = Path.home() / 'quant_results' / 'reviews'
+reviews_dir = paths.base / 'reviews'
 reviews_dir.mkdir(parents=True, exist_ok=True)
 filename = f'evening_research_{datetime.now().strftime(\"%Y%m%d\")}.json'
 with open(reviews_dir / filename, 'w') as f:

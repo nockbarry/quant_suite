@@ -206,12 +206,16 @@ class MetaObserver:
             try:
                 with open(df) as f:
                     data = json.load(f)
-                decisions.append({
-                    "action": data.get("action", ""),
-                    "symbol": data.get("symbol", ""),
-                    "confidence": data.get("confidence", 0),
-                    "status": data.get("status", ""),
-                })
+                # Handle both list and dict formats
+                items = data if isinstance(data, list) else [data]
+                for item in items:
+                    if item and isinstance(item, dict):
+                        decisions.append({
+                            "action": item.get("action", ""),
+                            "symbol": item.get("symbol", ""),
+                            "confidence": item.get("confidence", 0),
+                            "status": item.get("status", ""),
+                        })
             except (json.JSONDecodeError, OSError):
                 continue
 

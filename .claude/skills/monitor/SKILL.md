@@ -174,7 +174,7 @@ def get_strategy_performance(strategy_name, days=30):
     """
     Calculate live performance metrics for a strategy.
     """
-    results_dir = Path("~/quant_results/daily_runs")
+    results_dir = paths.base / "daily_runs"
 
     trades = []
     for file in sorted(results_dir.glob("*.json"))[-days:]:
@@ -280,7 +280,7 @@ def generate_daily_summary():
     }
 
     # Save summary
-    output_path = Path(f"~/quant_results/daily_runs/summary_{summary['date']}.json")
+    output_path = paths.base / f"daily_runs/summary_{summary['date']}.json"
     with open(output_path, 'w') as f:
         json.dump(summary, f, indent=2)
 

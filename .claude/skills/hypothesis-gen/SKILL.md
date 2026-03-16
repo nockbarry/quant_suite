@@ -28,7 +28,7 @@ print('=== PORTFOLIO STATE ===')
 print(state.get_summary())
 
 # Signal digest
-digest_file = Path.home() / 'quant_results' / 'live' / 'signal_digest.json'
+digest_file = paths.base / 'live' / 'signal_digest.json'
 if digest_file.exists():
     with open(digest_file) as f:
         digest = json.load(f)
@@ -39,7 +39,7 @@ if digest_file.exists():
 
 # Recent predictions and their outcomes
 print('\n=== PREDICTION OUTCOMES (last 30 days) ===')
-conn = sqlite3.connect(str(Path.home() / 'quant_results' / 'athena.db'))
+conn = sqlite3.connect(str(paths.base / 'athena.db'))
 scored = conn.execute('''
     SELECT symbol, prediction_type, direction, status, accuracy_score, resolution_notes
     FROM predictions
@@ -59,7 +59,7 @@ for name, m in sorted(momentum.items(), key=lambda x: x[1].get('trend', ''))[:15
     print(f'  {name[:35]:35s} trend={m.get(\"trend\", \"?\"):12s} conv={latest}')
 
 # Market movers
-movers_file = Path.home() / 'quant_results' / 'live' / 'market_movers_latest.json'
+movers_file = paths.base / 'live' / 'market_movers_latest.json'
 if movers_file.exists():
     with open(movers_file) as f:
         movers = json.load(f)
@@ -103,7 +103,7 @@ if blind_spots:
 
 # 3. Internal review action items (investigate-type items become hypotheses)
 print(f'\n=== INTERNAL REVIEW ACTION ITEMS ===')
-reviews_dir = Path.home() / 'quant_results' / 'reviews'
+reviews_dir = paths.base / 'reviews'
 review_files = sorted(reviews_dir.glob('internal_review_*.json'), key=lambda p: p.name, reverse=True)
 if review_files:
     with open(review_files[0]) as f:
@@ -117,7 +117,7 @@ if review_files:
 
 # 4. Research queue — what's already queued
 print(f'\n=== EXISTING RESEARCH QUEUE ===')
-queue_file = Path.home() / 'quant_results' / 'scheduler' / 'research_queue.json'
+queue_file = paths.base / 'scheduler' / 'research_queue.json'
 if queue_file.exists():
     with open(queue_file) as f:
         queue = json.load(f)
@@ -129,7 +129,7 @@ else:
     print('  (no queue file)')
 
 # 5. Check what research has been done
-research_dir = Path.home() / 'quant_results' / 'live' / 'research'
+research_dir = paths.base / 'live' / 'research'
 print(f'\n=== RECENT RESEARCH FILES ===')
 for f in sorted(research_dir.glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True)[:5]:
     print(f'  {f.name} ({f.stat().st_size/1024:.0f}KB)')
@@ -200,7 +200,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Write research queue for the research-agent to pick up
-queue_file = Path.home() / 'quant_results' / 'scheduler' / 'research_queue.json'
+queue_file = paths.base / 'scheduler' / 'research_queue.json'
 queue = []
 if queue_file.exists():
     with open(queue_file) as f:

@@ -136,7 +136,7 @@ import json
 from pathlib import Path
 
 def get_latest_research_results():
-    results_dir = Path("~/quant_results/comprehensive_research")
+    results_dir = paths.base / "comprehensive_research"
     latest = sorted(results_dir.glob("cycle_*.json"))[-1]
 
     with open(latest) as f:
@@ -182,7 +182,7 @@ promotion_record = {
 }
 
 # Save promotion record
-output_path = Path("~/quant_results/promotions")
+output_path = paths.base / "promotions"
 output_path.mkdir(exist_ok=True)
 with open(output_path / f"promo_{promotion_record['strategy']}_{promotion_record['symbol']}.json", 'w') as f:
     json.dump(promotion_record, f, indent=2)

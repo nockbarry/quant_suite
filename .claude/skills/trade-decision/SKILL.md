@@ -51,7 +51,7 @@ PYTHONPATH=. python3 << 'EOF'
 import json
 from pathlib import Path
 
-cal_path = Path.home() / "quant_results" / "intelligence" / "calibration.json"
+cal_path = paths.base / "intelligence" / "calibration.json"
 if cal_path.exists():
     cal = json.loads(cal_path.read_text())
     print("=== CALIBRATION ENFORCEMENT ===")
@@ -181,7 +181,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import json
 
-reviews_dir = Path.home() / "quant_results" / "reviews"
+reviews_dir = paths.base / "reviews"
 yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
 today = datetime.now().strftime("%Y%m%d")
 
@@ -219,7 +219,7 @@ from pathlib import Path
 
 log_artifact_read("trade-decision", "analyst_assessment", detail="checked situation board")
 log_artifact_read("trade-decision", "theorist_blind_spots", detail="checked strategic context")
-cal_path = Path.home() / "quant_results" / "intelligence" / "calibration.json"
+cal_path = paths.base / "intelligence" / "calibration.json"
 log_artifact_read("trade-decision", "calibration", str(cal_path), found=cal_path.exists())
 EOF
 ```

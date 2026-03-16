@@ -120,7 +120,7 @@ PYTHONPATH=. python3 -c "
 from pathlib import Path
 import json
 from datetime import datetime
-learnings_dir = Path.home() / 'quant_results' / 'learnings'
+learnings_dir = paths.base / 'learnings'
 if learnings_dir.exists():
     files = sorted(learnings_dir.glob('*.json'), reverse=True)[:2]
     for f in files:
@@ -331,7 +331,7 @@ report = {
     ],
 }
 
-reviews_dir = Path.home() / 'quant_results' / 'reviews'
+reviews_dir = paths.base / 'reviews'
 reviews_dir.mkdir(parents=True, exist_ok=True)
 filename = f'theorist_{datetime.now().strftime(\"%Y%m%d\")}.json'
 with open(reviews_dir / filename, 'w') as f:

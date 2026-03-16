@@ -150,7 +150,7 @@ if not actions_taken:
 ls -la ~/quant_results/live/state.json 2>/dev/null
 python3 -c "
 from pathlib import Path; from datetime import datetime
-f = Path.home() / 'quant_results/live/state.json'
+f = paths.live_state
 age_min = (datetime.now().timestamp() - f.stat().st_mtime) / 60 if f.exists() else -1
 print(f'state.json age: {age_min:.0f} min' + (' STALE' if age_min > 10 else ' OK'))
 "
@@ -236,7 +236,7 @@ report = {
     "board_alerts_pushed": <number of alerts pushed to situation board>,
 }
 
-reviews_dir = Path.home() / "quant_results" / "reviews"
+reviews_dir = paths.base / "reviews"
 reviews_dir.mkdir(parents=True, exist_ok=True)
 filename = f"internal_review_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
 with open(reviews_dir / filename, "w") as f:
@@ -253,7 +253,7 @@ from pathlib import Path
 import json
 from datetime import datetime
 
-reviews_dir = Path.home() / 'quant_results' / 'reviews'
+reviews_dir = paths.base / 'reviews'
 review_files = sorted(reviews_dir.glob('internal_review_*.json'), key=lambda p: p.name, reverse=True)
 
 if len(review_files) >= 1:
@@ -350,7 +350,7 @@ for t in tracker.get_all_theses():
 # (Fill in hit_rate from signal quality data if available)
 import json
 from pathlib import Path
-sq_path = Path.home() / 'quant_results' / 'signal_quality' / 'signal_outcomes.json'
+sq_path = paths.base / 'signal_quality' / 'signal_outcomes.json'
 if sq_path.exists():
     with open(sq_path) as f:
         outcomes = json.load(f)

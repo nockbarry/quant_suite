@@ -268,6 +268,8 @@ Log errors and continue with remaining steps.
 Execution authority: FULL (execute any trade within risk limits, no human approval needed).
 Max runtime: ${TIMEOUT} minutes. Be efficient with tokens.
 If you encounter errors reading files or connecting to services, log the error and continue.
+INSTANCE: ${ATHENA_INSTANCE} | RESULTS_DIR: ${QUANT_RESULTS_DIR}
+IMPORTANT: Always use 'from src.core.paths import paths' for file paths. The paths module respects QUANT_RESULTS_DIR=${QUANT_RESULTS_DIR} which is set in your environment. Do NOT use Path.home() / "quant_results" directly.
 BASEPROMPT
 )
 

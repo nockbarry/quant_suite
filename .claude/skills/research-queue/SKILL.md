@@ -19,7 +19,7 @@ from pathlib import Path
 from src.swarm.strategic_context import StrategicContext
 
 # 1. Read research queue (explicit backtest tasks)
-queue_path = Path.home() / 'quant_results' / 'scheduler' / 'research_queue.json'
+queue_path = paths.base / 'scheduler' / 'research_queue.json'
 queue = []
 if queue_path.exists():
     with open(queue_path) as f:
@@ -140,7 +140,7 @@ for h in ctx.data.get('research_hypotheses', []):
 ctx.save()
 
 # 2. Update research queue task status
-queue_path = Path.home() / 'quant_results' / 'scheduler' / 'research_queue.json'
+queue_path = paths.base / 'scheduler' / 'research_queue.json'
 if queue_path.exists():
     with open(queue_path) as f:
         queue = json.load(f)
@@ -165,7 +165,7 @@ report = {
     'conclusion': '<confirmed|rejected|inconclusive>',
     'next_steps': ['<what to do with this finding>'],
 }
-research_dir = Path.home() / 'quant_results' / 'live' / 'research'
+research_dir = paths.base / 'live' / 'research'
 research_dir.mkdir(parents=True, exist_ok=True)
 filename = f'queue_result_{datetime.now().strftime(\"%Y%m%d_%H%M\")}.json'
 with open(research_dir / filename, 'w') as f:
