@@ -60,8 +60,9 @@ cmd_setup() {
     tmux new-window -t "$TMUX_SESSION" -n "monitor"
 
     # Set environment in all windows (unset CLAUDECODE for nested session safety)
+    # Propagate QUANT_RESULTS_DIR and ATHENA_INSTANCE for multi-instance support
     for win in 0 1 2; do
-        tmux send-keys -t "$TMUX_SESSION:$win" "cd $PROJECT_DIR && export PYTHONPATH=$PROJECT_DIR && unset CLAUDECODE" C-m
+        tmux send-keys -t "$TMUX_SESSION:$win" "cd $PROJECT_DIR && export PYTHONPATH=$PROJECT_DIR QUANT_RESULTS_DIR=$QUANT_RESULTS_DIR ATHENA_INSTANCE=$ATHENA_INSTANCE && unset CLAUDECODE" C-m
     done
 
     log "tmux session $TMUX_SESSION created with 3 windows"
