@@ -352,7 +352,7 @@ get_model() {
         evening-research)  echo "opus" ;;
         hypothesis-gen)    echo "opus" ;;
         research-queue)    echo "sonnet" ;;
-        operator)          echo "opus" ;;
+        operator)          echo "sonnet" ;;
         *)                 echo "sonnet" ;;
     esac
 }

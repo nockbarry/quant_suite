@@ -103,7 +103,7 @@ install_auto() {
     echo ""
 
     # Get existing crontab (without our auto entries and orphaned standalone entries)
-    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "readiness_check.py")
+    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "readiness_check.py" | grep -v "@reboot.*athena_scheduler")
 
     # Create new crontab — consolidated from 13 entries to 11
     {
@@ -191,6 +191,10 @@ install_auto() {
         echo "# Full research cycle + backtesting on Saturdays at 2 PM ET"
         echo "0 14 * * 6 $SCRIPT_DIR/athena_scheduler.sh oneshot research >> $LOG_DIR/scheduler.log 2>&1"
         echo ""
+        echo "$CRON_AUTO_MARKER - Boot Recovery"
+        echo "# On WSL/system reboot, wait 30s then initialize all Athena instances"
+        echo "@reboot sleep 30 && $SCRIPT_DIR/athena_scheduler.sh boot >> $LOG_DIR/boot.log 2>&1"
+        echo ""
         echo "$CRON_AUTO_MARKER - Readiness Checks (Pre-Market + Intraday)"
         echo "# Pre-market readiness with auto-fix at 5:30 AM ET"
         echo "30 5 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 $SCRIPT_DIR/readiness_check.py --fix --quick >> $LOG_DIR/readiness.log 2>&1"
@@ -209,7 +213,7 @@ install_auto() {
 remove_auto() {
     echo "Removing autonomous Claude session cron jobs..."
 
-    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "readiness_check.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | crontab -
+    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "readiness_check.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "@reboot.*athena_scheduler" | crontab -
 
     echo "Autonomous cron jobs removed."
 }

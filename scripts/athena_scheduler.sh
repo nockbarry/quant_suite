@@ -426,6 +426,45 @@ cmd_wsl_info() {
     echo "  Uptime: $(uptime -p 2>/dev/null || echo 'unknown')"
 }
 
+# --- Boot Recovery ---
+
+cmd_boot() {
+    # Called on WSL boot (@reboot cron) to set up all instances.
+    # Sets up tmux sessions and starts sentinels for all detected instances.
+
+    local BOOT_LOG="$LOG_DIR/boot.log"
+    log "BOOT: System boot detected, initializing Athena instances"
+
+    # 1. Set up default instance
+    log "BOOT: Setting up default instance ($TMUX_SESSION)"
+    cmd_setup
+
+    # 2. Start sentinel for default instance (only if during market hours)
+    local hour
+    hour=$(TZ="America/New_York" date +%H)
+    if [ "$hour" -ge 5 ] && [ "$hour" -lt 18 ]; then
+        log "BOOT: Starting sentinel for default instance"
+        cmd_sentinel_start
+    else
+        log "BOOT: Outside market hours ($hour ET), skipping sentinel"
+    fi
+
+    # 3. Set up secondary instances (beta, gamma, etc.)
+    for instance_dir in "$HOME"/quant_results_*; do
+        if [ ! -d "$instance_dir" ]; then
+            continue
+        fi
+        local inst_name
+        inst_name=$(basename "$instance_dir" | sed 's/quant_results_//')
+        log "BOOT: Setting up instance '$inst_name' ($instance_dir)"
+
+        QUANT_RESULTS_DIR="$instance_dir" ATHENA_INSTANCE="$inst_name" \
+            "$SCRIPT_DIR/athena_scheduler.sh" setup >> "$BOOT_LOG" 2>&1 || true
+    done
+
+    log "BOOT: All instances initialized"
+}
+
 # --- Health Check (WSL persistence) ---
 
 cmd_health_check() {
@@ -510,6 +549,9 @@ case "${1:-}" in
     health-check)
         cmd_health_check
         ;;
+    boot)
+        cmd_boot
+        ;;
     *)
         echo "Athena Autonomous Scheduler"
         echo ""
@@ -528,6 +570,7 @@ case "${1:-}" in
         echo "  kill-all        Emergency stop everything"
         echo "  wsl-info        WSL setup instructions for autonomous trading"
         echo "  health-check    Check and recover tmux, sentinel, operator (for cron)"
+        echo "  boot            Initialize all instances on system boot (@reboot)"
         exit 1
         ;;
 esac

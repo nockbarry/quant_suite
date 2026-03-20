@@ -130,7 +130,10 @@ async def _execute_one(
     if action in ("CLOSE", "SELL", "TRIM"):
         try:
             position = await broker.get_position(symbol)
-            held_qty = int(float(position.quantity))
+            raw_qty = float(position.quantity)
+            held_qty = int(raw_qty)
+            # Keep fractional qty for CLOSE — allows cleaning up remnant positions
+            held_qty_fractional = raw_qty
         except Exception:
             logger.warning(f"No open position for {symbol}, skipping {action}")
             decision.status = "skipped"
@@ -138,10 +141,10 @@ async def _execute_one(
             db_session.commit()
             return False
 
-        if held_qty <= 0:
-            logger.warning(f"{symbol} position qty={held_qty}, skipping {action}")
+        if raw_qty <= 0:
+            logger.warning(f"{symbol} position qty={raw_qty}, skipping {action}")
             decision.status = "skipped"
-            decision.outcome_notes = f"Position qty={held_qty}, nothing to sell"
+            decision.outcome_notes = f"Position qty={raw_qty}, nothing to sell"
             db_session.commit()
             return False
 
@@ -172,8 +175,11 @@ async def _execute_one(
                 logger.warning(f"Position size for {symbol} would exceed 10% limit, skipping")
                 return False
     elif action == "CLOSE":
-        # Close entire position
-        qty = held_qty
+        # Close entire position — use fractional qty for remnant cleanup
+        if held_qty >= 1:
+            qty = held_qty
+        else:
+            qty = held_qty_fractional  # Fractional shares (remnants)
     elif action in ("SELL", "TRIM"):
         # Trim by size_pct, but never more than held
         target_value = equity * (size_pct / 100.0)

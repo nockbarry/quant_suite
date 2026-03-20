@@ -211,7 +211,67 @@ DEFAULT_RULES = [
         approval=ApprovalType.AUTO,
         priority=6,
     ),
+
+    # Gold concentration cap - AUTO (fully autonomous)
+    ExecutionRule(
+        rule_id="gold_concentration_cap",
+        name="Gold + Miners Concentration Cap",
+        description="Cap gold + gold miners at 15% of portfolio. Trim largest gold position by 2%.",
+        trigger_condition="gold_total_exposure_pct > 15",
+        action=TradeAction.SELL,
+        symbol_source="largest_gold_position",
+        size_type="percent",
+        size_value=2.0,
+        approval=ApprovalType.AUTO,
+        priority=7,
+    ),
 ]
+
+
+# ─── Gold Concentration Check ──────────────────────────────────────
+
+GOLD_SYMBOLS = {"GLD", "GDX", "GOLD", "NEM", "UGL", "NUGT", "IAU"}
+
+
+def compute_gold_exposure(positions: list[dict], equity: float) -> dict:
+    """Compute total gold + gold miners exposure as percent of portfolio.
+
+    Args:
+        positions: List of position dicts with 'symbol' and 'market_value'.
+        equity: Total portfolio equity.
+
+    Returns:
+        Dict with gold_total_exposure_pct, largest_gold_position, and breakdown.
+    """
+    if equity <= 0:
+        return {
+            "gold_total_exposure_pct": 0.0,
+            "largest_gold_position": None,
+            "largest_gold_position_value": 0.0,
+            "gold_positions": {},
+        }
+
+    gold_positions = {}
+    largest_symbol = None
+    largest_value = 0.0
+
+    for pos in positions:
+        symbol = pos.get("symbol", "")
+        if symbol in GOLD_SYMBOLS:
+            mv = abs(float(pos.get("market_value", 0)))
+            gold_positions[symbol] = round(mv / equity * 100, 2)
+            if mv > largest_value:
+                largest_value = mv
+                largest_symbol = symbol
+
+    total_gold_pct = sum(gold_positions.values())
+
+    return {
+        "gold_total_exposure_pct": round(total_gold_pct, 2),
+        "largest_gold_position": largest_symbol,
+        "largest_gold_position_value": round(largest_value, 2),
+        "gold_positions": gold_positions,
+    }
 
 
 class RulesEngine:

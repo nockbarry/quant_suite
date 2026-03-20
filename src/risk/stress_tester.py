@@ -4,9 +4,11 @@ Monte Carlo simulation engine with predefined crisis scenarios.
 Computes portfolio VaR, expected shortfall, and cross-thesis correlation.
 
 Scenarios:
-- Ceasefire Flash Crash: energy -15%, gold -5%, tankers -20%, tech +10%
+- Ceasefire Flash Crash: energy -15%, gold -12%, tankers -20%, tech +10%
 - Kharg Oil Terminal Strike: energy +20%, gold +8%, VIX +40%
 - FOMC Dovish Surprise: gold -3%, financials +5%, tech +8%
+- FOMC Hawkish + Oil Spike: gold -10%, energy +8%, tech -5%
+- Gold Liquidation Crisis: gold -15%, miners -20%, energy +3%
 - India-Iran Deal: energy -8%, tankers -12%, EM +5%
 
 Usage:
@@ -83,7 +85,7 @@ SCENARIOS = [
                     "Oil drops $15, tanker rates collapse, gold gives back war premium, "
                     "tech rotates in on lower rates expectation.",
         shocks={
-            "energy": -0.15, "gold": -0.05, "tankers": -0.20,
+            "energy": -0.15, "gold": -0.12, "tankers": -0.20,
             "fertilizer": -0.10, "tech": 0.10, "defense": -0.03,
             "volatility": -0.25, "em": 0.04, "em_debt": 0.03,
         },
@@ -111,6 +113,33 @@ SCENARIOS = [
             "gold": -0.03, "financials": 0.05, "tech": 0.08,
             "energy": -0.02, "reits": 0.06, "consumer": 0.04,
             "em": 0.05, "em_debt": 0.04, "volatility": -0.15,
+        },
+        probability="low",
+    ),
+    ScenarioDefinition(
+        name="FOMC Hawkish + Oil Spike",
+        description="Fed holds rates or signals hikes while oil spikes on supply disruption. "
+                    "Stagflation setup: gold liquidated on real-rate fears despite inflation, "
+                    "energy surges, tech sells off on higher-for-longer. "
+                    "Based on March 2026 actual: gold -10.3%, oil +8%.",
+        shocks={
+            "gold": -0.10, "energy": 0.08, "tech": -0.05,
+            "financials": -0.03, "tankers": 0.05, "fertilizer": 0.06,
+            "defense": 0.02, "volatility": 0.20, "consumer": -0.04,
+            "em": -0.04, "em_debt": -0.03, "utilities": -0.02,
+        },
+        probability="medium",
+    ),
+    ScenarioDefinition(
+        name="Gold Liquidation Crisis",
+        description="2011-style gold crash: margin calls, ETF liquidation, momentum unwind. "
+                    "Gold miners drop 1.3-1.5x of gold move. Energy benefits from rotation "
+                    "into hard commodities with supply constraints. "
+                    "Based on March 2026 FOMC + ceasefire combo.",
+        shocks={
+            "gold": -0.15, "energy": 0.03, "tech": 0.02,
+            "financials": 0.01, "tankers": 0.02, "defense": 0.01,
+            "volatility": 0.15, "materials": -0.05, "consumer": 0.01,
         },
         probability="low",
     ),
@@ -166,7 +195,7 @@ SYMBOL_SECTOR_MAP = {
     "BNO": "energy", "USO": "energy",
     # Gold
     "GLD": "gold", "GDX": "gold", "GOLD": "gold", "NEM": "gold",
-    "UGL": "gold", "NUGT": "gold",
+    "UGL": "gold", "NUGT": "gold", "IAU": "gold",
     # Tankers
     "FRO": "tankers", "DHT": "tankers", "INSW": "tankers", "STNG": "tankers",
     # Defense
