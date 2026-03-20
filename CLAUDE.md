@@ -190,6 +190,17 @@ Validated signals: Bollinger Bounce (IC=0.31, 61.4%), RSI Extreme (IC=0.20, 53.8
 |-----------|----------|---------|
 | **ThesisSuggester.auto_create** | `src/knowledge/thesis_suggester.py` | Auto-creates theses when confidence > 0.75, max 2/week |
 
+### Strategic Analysis Layer
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **SECInsiderMonitor** | `src/data/sources/alternative/sec_insider_monitor.py` | SEC EDGAR Form 4 insider transactions for portfolio symbols |
+| **TreasuryMonitor** | `src/data/sources/alternative/treasury_monitor.py` | OFAC/Treasury press releases for sanctions changes |
+| **MarketReactionScorer** | `src/intelligence/market_reaction.py` | Detects when market rejects news signal (failed interventions) |
+| **CrossReferenceEngine** | `src/intelligence/cross_reference.py` | Cross-references data sources to generate red flags (insider divergence, failed interventions, regulatory ceiling) |
+| **run_cross_reference.py** | `scripts/run_cross_reference.py` | Cron wrapper — runs every 30 min, pushes alerts to situation board |
+
+Evening research skill restructured with 5-step investigative checklist: insider check, regulatory check, market reaction analysis, strategic analysis search, cross-reference review. Web dashboard at `/alerts`.
+
 ### Knowledge Layer
 | Component | Location | Purpose |
 |-----------|----------|---------|

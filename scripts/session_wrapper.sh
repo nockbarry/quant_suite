@@ -328,7 +328,7 @@ get_timeout() {
         internal-review)   echo 10 ;;
         analyst)           echo 5 ;;
         theorist)          echo 15 ;;
-        evening-research)  echo 15 ;;
+        evening-research)  echo 20 ;;
         hypothesis-gen)    echo 15 ;;
         research-queue)    echo 30 ;;
         operator)          echo 480 ;;  # 8 hours

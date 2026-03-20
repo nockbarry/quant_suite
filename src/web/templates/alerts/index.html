@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% set active_page = "alerts" %}
+{% block title %}Strategic Alerts{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Strategic Alerts -- Cross-Reference Intelligence</h1>
+            <p class="text-xs text-gray-500 mt-1">Insider transactions, regulatory actions, market reactions, cross-reference flags</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-500">Last scan: {{ last_scan[:16] if last_scan else 'N/A' }}</span>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Red Flags -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center">
+                    <span class="text-red-400 text-lg">&#9888;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-red-400">{{ red_flag_count }}</p>
+                    <p class="text-xs text-gray-500">Red Flags</p>
+                </div>
+            </div>
+        </div>
+        <!-- Warnings -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-yellow-900/40 flex items-center justify-center">
+                    <span class="text-yellow-400 text-lg">&#9650;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-yellow-400">{{ warning_count }}</p>
+                    <p class="text-xs text-gray-500">Warnings</p>
+                </div>
+            </div>
+        </div>
+        <!-- Info -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-blue-900/40 flex items-center justify-center">
+                    <span class="text-blue-400 text-lg">&#9432;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-blue-400">{{ info_count }}</p>
+                    <p class="text-xs text-gray-500">Informational</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Alerts Table (2 cols) -->
+        <div class="lg:col-span-2 space-y-4">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    Cross-Reference Alerts
+                    <span class="text-[10px] text-gray-500 ml-1">({{ alerts | length }} total)</span>
+                </h2>
+                {% if alerts %}
+                <div class="space-y-2 max-h-[600px] overflow-y-auto">
+                    {% for alert in alerts %}
+                    <details class="group bg-gray-800/50 rounded">
+                        <summary class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-800/80">
+                            <!-- Severity icon -->
+                            {% if alert.severity == 'red_flag' %}
+                            <span class="w-6 h-6 rounded-full bg-red-900/50 flex items-center justify-center flex-shrink-0">
+                                <span class="text-red-400 text-xs">&#9888;</span>
+                            </span>
+                            {% elif alert.severity == 'warning' %}
+                            <span class="w-6 h-6 rounded-full bg-yellow-900/50 flex items-center justify-center flex-shrink-0">
+                                <span class="text-yellow-400 text-xs">&#9650;</span>
+                            </span>
+                            {% else %}
+                            <span class="w-6 h-6 rounded-full bg-blue-900/50 flex items-center justify-center flex-shrink-0">
+                                <span class="text-blue-400 text-xs">&#9432;</span>
+                            </span>
+                            {% endif %}
+
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-medium {% if alert.severity == 'red_flag' %}text-red-300{% elif alert.severity == 'warning' %}text-yellow-300{% else %}text-blue-300{% endif %}">
+                                        {{ alert.title | default('Untitled Alert') }}
+                                    </span>
+                                    {% if alert.type %}
+                                    <span class="text-[10px] bg-gray-700 px-1.5 py-0.5 rounded text-gray-400">{{ alert.type }}</span>
+                                    {% endif %}
+                                </div>
+                                {% if alert.symbols %}
+                                <div class="flex flex-wrap gap-1 mt-0.5">
+                                    {% for sym in alert.symbols %}
+                                    <span class="mono text-[10px] text-gray-400">{{ sym }}</span>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <span class="text-[10px] text-gray-500 whitespace-nowrap flex-shrink-0">{{ alert.timestamp[:16] if alert.timestamp else '' }}</span>
+                        </summary>
+                        <div class="px-3 pb-3 pt-1 border-t border-gray-700/50 ml-9">
+                            {% if alert.description %}
+                            <p class="text-xs text-gray-400 mb-2">{{ alert.description }}</p>
+                            {% endif %}
+                            {% if alert.recommended_action %}
+                            <div class="flex items-start gap-1.5 mt-1">
+                                <span class="text-[10px] text-gray-500 font-medium uppercase whitespace-nowrap">Action:</span>
+                                <span class="text-xs text-emerald-400">{{ alert.recommended_action }}</span>
+                            </div>
+                            {% endif %}
+                            {% if alert.evidence %}
+                            <div class="flex items-start gap-1.5 mt-1">
+                                <span class="text-[10px] text-gray-500 font-medium uppercase whitespace-nowrap">Evidence:</span>
+                                <span class="text-xs text-gray-400">{{ alert.evidence }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </details>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8">
+                    <p class="text-gray-500 text-sm">No cross-reference alerts</p>
+                    <p class="text-[10px] text-gray-600 mt-1">Alerts are generated by the cross-reference engine into ~/quant_results/live/cross_reference_alerts.json</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Market Reactions Panel -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    Market Reactions
+                    <span class="text-[10px] text-gray-500 ml-1">(rejected signals highlighted)</span>
+                </h2>
+                {% if market_reactions and market_reactions.reactions %}
+                <div class="space-y-2 max-h-80 overflow-y-auto">
+                    {% for reaction in market_reactions.reactions %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2 {% if reaction.status == 'rejected' %}border border-red-900/30{% endif %}">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex-1">
+                                {% if reaction.status == 'rejected' %}
+                                <span class="text-[10px] bg-red-900/50 text-red-400 px-1.5 py-0.5 rounded mr-1">REJECTED</span>
+                                {% elif reaction.status == 'confirmed' %}
+                                <span class="text-[10px] bg-emerald-900/50 text-emerald-400 px-1.5 py-0.5 rounded mr-1">CONFIRMED</span>
+                                {% else %}
+                                <span class="text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded mr-1">{{ reaction.status | upper | default('PENDING') }}</span>
+                                {% endif %}
+                                <span class="text-xs text-gray-200">{{ reaction.headline | default('No headline') }}</span>
+                            </div>
+                            {% if reaction.symbol %}
+                            <span class="mono text-[10px] text-gray-400 whitespace-nowrap">{{ reaction.symbol }}</span>
+                            {% endif %}
+                        </div>
+                        {% if reaction.explanation %}
+                        <p class="text-[10px] text-gray-500 mt-1">{{ reaction.explanation }}</p>
+                        {% endif %}
+                        <p class="text-[10px] text-gray-600 mt-0.5">{{ reaction.timestamp[:16] if reaction.timestamp else '' }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No market reaction data available</p>
+                <p class="text-[10px] text-gray-600 mt-1">File: ~/quant_results/live/market_reactions.json</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right: Side Panels (1 col) -->
+        <div class="space-y-4">
+            <!-- SEC Insider Activity -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">SEC Insider Activity</h2>
+                {% if sec_insider and sec_insider.alerts %}
+                <div class="space-y-2 max-h-72 overflow-y-auto">
+                    {% for item in sec_insider.alerts %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center justify-between">
+                            <span class="mono text-xs text-gray-200">{{ item.symbol | default('??') }}</span>
+                            <span class="text-[10px] {% if item.transaction_type == 'sale' or item.transaction_type == 'S' %}text-red-400{% else %}text-emerald-400{% endif %}">
+                                {{ item.transaction_type | default('') | upper }}
+                            </span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-0.5">{{ item.insider_name | default('Unknown') }} -- {{ item.title | default('') }}</p>
+                        {% if item.value %}
+                        <p class="mono text-[10px] {% if item.transaction_type == 'sale' or item.transaction_type == 'S' %}text-red-500{% else %}text-emerald-500{% endif %} mt-0.5">
+                            ${{ "{:,.0f}".format(item.value) if item.value is number else item.value }}
+                        </p>
+                        {% endif %}
+                        <p class="text-[10px] text-gray-600">{{ item.date | default('') }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% elif sec_insider and sec_insider.transactions %}
+                <div class="space-y-2 max-h-72 overflow-y-auto">
+                    {% for item in sec_insider.transactions %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center justify-between">
+                            <span class="mono text-xs text-gray-200">{{ item.symbol | default('??') }}</span>
+                            <span class="text-[10px] {% if item.type == 'sale' or item.type == 'S' %}text-red-400{% else %}text-emerald-400{% endif %}">
+                                {{ item.type | default('') | upper }}
+                            </span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-0.5">{{ item.name | default('Unknown') }}</p>
+                        <p class="text-[10px] text-gray-600">{{ item.date | default('') }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No SEC insider data</p>
+                <p class="text-[10px] text-gray-600 mt-1">File: ~/quant_results/live/sec_insider_alerts.json</p>
+                {% endif %}
+            </div>
+
+            <!-- Treasury / OFAC Alerts -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Treasury / OFAC</h2>
+                {% if treasury_alerts and treasury_alerts.alerts %}
+                <div class="space-y-2 max-h-72 overflow-y-auto">
+                    {% for item in treasury_alerts.alerts %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-start gap-2">
+                            {% if item.severity == 'high' or item.severity == 'critical' %}
+                            <span class="text-red-400 text-xs mt-0.5">&#9888;</span>
+                            {% elif item.severity == 'medium' %}
+                            <span class="text-yellow-400 text-xs mt-0.5">&#9650;</span>
+                            {% else %}
+                            <span class="text-blue-400 text-xs mt-0.5">&#9432;</span>
+                            {% endif %}
+                            <div class="flex-1">
+                                <p class="text-xs text-gray-200">{{ item.title | default(item.description | default('No description')) }}</p>
+                                {% if item.affected_symbols %}
+                                <div class="flex flex-wrap gap-1 mt-1">
+                                    {% for sym in item.affected_symbols %}
+                                    <span class="mono text-[10px] bg-gray-700 px-1 rounded text-gray-400">{{ sym }}</span>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                <p class="text-[10px] text-gray-600 mt-0.5">{{ item.date | default(item.timestamp | default('')) }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% elif treasury_alerts and treasury_alerts.actions %}
+                <div class="space-y-2 max-h-72 overflow-y-auto">
+                    {% for item in treasury_alerts.actions %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <p class="text-xs text-gray-200">{{ item.title | default(item.description | default('No description')) }}</p>
+                        <p class="text-[10px] text-gray-600 mt-0.5">{{ item.date | default('') }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No Treasury/OFAC alerts</p>
+                <p class="text-[10px] text-gray-600 mt-1">File: ~/quant_results/live/treasury_alerts.json</p>
+                {% endif %}
+            </div>
+
+            <!-- Data Source Files -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Data Sources</h2>
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-[10px]">
+                        <span class="text-gray-500">cross_reference_alerts.json</span>
+                        <span class="{% if alerts %}text-emerald-400{% else %}text-gray-600{% endif %}">
+                            {% if alerts %}{{ alerts | length }} alerts{% else %}No data{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px]">
+                        <span class="text-gray-500">sec_insider_alerts.json</span>
+                        <span class="{% if sec_insider %}text-emerald-400{% else %}text-gray-600{% endif %}">
+                            {% if sec_insider %}Available{% else %}No data{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px]">
+                        <span class="text-gray-500">treasury_alerts.json</span>
+                        <span class="{% if treasury_alerts %}text-emerald-400{% else %}text-gray-600{% endif %}">
+                            {% if treasury_alerts %}Available{% else %}No data{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px]">
+                        <span class="text-gray-500">market_reactions.json</span>
+                        <span class="{% if market_reactions %}text-emerald-400{% else %}text-gray-600{% endif %}">
+                            {% if market_reactions %}Available{% else %}No data{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

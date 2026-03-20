@@ -345,6 +345,48 @@ async def collect_hormuz_status():
         return {"hormuz_status": {"error": str(e)}}
 
 
+async def collect_sec_insider():
+    """Collect SEC EDGAR Form 4 insider transactions for portfolio symbols."""
+    try:
+        from src.data.sources.alternative.sec_insider_monitor import SECInsiderMonitor
+        monitor = SECInsiderMonitor()
+        # Scan key portfolio symbols
+        symbols = [
+            "SLB", "HAL", "NVDA", "MSFT", "AAPL", "GOOGL", "META",
+            "AMD", "XOM", "CVX", "GLD", "MU", "RTX", "LMT",
+        ]
+        result = await monitor.scan_portfolio_symbols(symbols)
+        await monitor.close()
+        return {"sec_insider": {
+            "symbols_scanned": result.symbols_scanned,
+            "transactions_found": result.transactions_found,
+            "red_flags": len(result.red_flags),
+            "data_quality": result.data_quality,
+        }}
+    except Exception as e:
+        logger.error(f"SEC insider collection failed: {e}")
+        return {"sec_insider": {"error": str(e)}}
+
+
+async def collect_treasury():
+    """Collect OFAC/Treasury sanctions and press release alerts."""
+    try:
+        from src.data.sources.alternative.treasury_monitor import TreasuryMonitor
+        monitor = TreasuryMonitor()
+        alerts = await monitor.collect()
+        await monitor.close()
+        matched = [a for a in alerts if a.matched_countries]
+        return {"treasury": {
+            "total_alerts": len(alerts),
+            "portfolio_relevant": len(matched),
+            "critical": len([a for a in alerts if a.importance == "critical"]),
+            "high": len([a for a in alerts if a.importance == "high"]),
+        }}
+    except Exception as e:
+        logger.error(f"Treasury collection failed: {e}")
+        return {"treasury": {"error": str(e)}}
+
+
 async def collect_prediction_markets():
     """Collect prediction market data and persist to disk."""
     try:
@@ -518,6 +560,8 @@ async def collect_all(quick: bool = False):
         "shipping_rates": collect_shipping_rates(),
         "lng_prices": collect_lng_prices(),
         "hormuz_status": collect_hormuz_status(),
+        "sec_insider": collect_sec_insider(),
+        "treasury": collect_treasury(),
         "daemon": collect_from_daemon(),
     }
 
