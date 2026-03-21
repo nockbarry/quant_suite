@@ -143,6 +143,104 @@ if not actions_taken:
 - **Stale thesis (no update in 14+ days)** → Log warning, add note to thesis asking for review
 - All actions are logged to ProcessEvent for audit trail
 
+### Step 3c: Cross-Reference Alerts and Auto-Corrections
+
+Read cross-reference alerts and recent auto-corrections. Push any unacted RED FLAG alerts to the situation board.
+
+```bash
+PYTHONPATH=. python3 -c "
+from src.core.paths import paths
+from src.swarm.situation_board import SituationBoard
+from datetime import datetime, timedelta
+import json
+
+board = SituationBoard.load_or_create()
+alerts_pushed = 0
+
+# 1. Read cross-reference alerts
+alerts_file = paths.live / 'cross_reference_alerts.json'
+if alerts_file.exists():
+    with open(alerts_file) as f:
+        data = json.load(f)
+    red_flags = [a for a in data.get('alerts', []) if a.get('severity') == 'red_flag']
+    warnings = [a for a in data.get('alerts', []) if a.get('severity') == 'warning']
+    print(f'Cross-reference alerts: {data.get(\"total_alerts\",0)} total, {len(red_flags)} red flags, {len(warnings)} warnings')
+
+    # Push unacted red flags to situation board
+    for alert in red_flags:
+        # Check if alert is recent (last 6 hours)
+        try:
+            alert_time = datetime.fromisoformat(alert.get('timestamp', ''))
+            if datetime.now() - alert_time > timedelta(hours=6):
+                continue
+        except (ValueError, TypeError):
+            continue
+
+        board.add_observation(
+            source='internal-review',
+            obs_type='alert',
+            text=f'[RED FLAG] {alert.get(\"title\", \"\")}: {alert.get(\"recommended_action\", \"\")}',
+            symbols=alert.get('symbols', []),
+        )
+        alerts_pushed += 1
+        print(f'  PUSHED TO BOARD: {alert.get(\"title\", \"\")}')
+else:
+    print('No cross-reference alerts file found')
+
+# 2. Read auto-corrections applied since last review
+corrections_log = paths.logs / 'auto_corrections.jsonl'
+if corrections_log.exists():
+    cutoff = datetime.now() - timedelta(hours=12)  # Since last review
+    recent_corrections = []
+    for line in open(corrections_log):
+        try:
+            entry = json.loads(line.strip())
+            ts = datetime.fromisoformat(entry.get('timestamp', ''))
+            if ts >= cutoff and entry.get('applied', False):
+                recent_corrections.append(entry)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    print(f'\\nAuto-corrections since last review: {len(recent_corrections)}')
+    for c in recent_corrections:
+        action = c.get('action_type', '?')
+        thesis = c.get('thesis_name', '?')
+        reason = c.get('reason', '?')[:60]
+        print(f'  [{action}] {thesis}: {reason}')
+        if action == 'thesis_invalidate':
+            board.add_observation(
+                source='internal-review',
+                obs_type='alert',
+                text=f'Auto-invalidated thesis: {thesis} ({reason})',
+                symbols=[c.get('symbol', '')] if c.get('symbol') else [],
+            )
+            alerts_pushed += 1
+else:
+    print('No auto-corrections log found')
+
+# 3. Check trim queue
+trim_queue = paths.scheduler / 'trim_queue.json'
+if trim_queue.exists():
+    with open(trim_queue) as f:
+        trims = json.load(f)
+    if trims:
+        print(f'\\nPending trims in queue: {len(trims)}')
+        for t in trims:
+            print(f'  {t.get(\"symbol\", \"?\")}: {t.get(\"reason\", \"?\")[:60]}')
+        board.add_observation(
+            source='internal-review',
+            obs_type='assessment',
+            text=f'{len(trims)} pending trim(s) from auto-corrections — trade-decision should action',
+            symbols=[t.get('symbol', '') for t in trims if t.get('symbol')],
+        )
+        alerts_pushed += 1
+
+board.save()
+print(f'\\nTotal alerts pushed to situation board: {alerts_pushed}')
+"
+```
+
+Include the cross-reference and auto-correction findings in the review report (Step 5).
+
 ### Step 4: System Diagnostics
 
 ```bash

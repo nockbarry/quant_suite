@@ -78,9 +78,13 @@ $((TRADE2_MIN + 10)) 13 * * 1-5 cd ${PROJECT_DIR} && ${ENV} PYTHONPATH=. python3
 $((TRADE1_MIN + 5)) 10 * * 1-5 cd ${PROJECT_DIR} && ${ENV} PYTHONPATH=. python3 scripts/run_ensemble.py >> ${LOG_DIR}/ensemble.log 2>&1
 $((TRADE2_MIN + 5)) 13 * * 1-5 cd ${PROJECT_DIR} && ${ENV} PYTHONPATH=. python3 scripts/run_ensemble.py >> ${LOG_DIR}/ensemble.log 2>&1
 
-# Sunday: thesis + hypothesis-gen (staggered)
+# Sunday: system-review + hypothesis-gen + thesis (staggered)
+$((30 + OFFSET)) 16 * * 0 ${ENV} ${SCRIPT_DIR}/athena_scheduler.sh oneshot system-review >> ${LOG_DIR}/scheduler.log 2>&1
 $((0 + OFFSET)) 17 * * 0 ${ENV} ${SCRIPT_DIR}/athena_scheduler.sh oneshot hypothesis-gen >> ${LOG_DIR}/scheduler.log 2>&1
 $((0 + OFFSET)) 18 * * 0 ${ENV} ${SCRIPT_DIR}/athena_scheduler.sh oneshot thesis >> ${LOG_DIR}/scheduler.log 2>&1
+
+# Auto-corrections every 30 min during market hours
+25,55 9-16 * * 1-5 cd ${PROJECT_DIR} && ${ENV} PYTHONPATH=. python3 scripts/auto_corrections.py >> ${LOG_DIR}/auto_corrections.log 2>&1
 
 # Saturday: research cycle (staggered)
 $((0 + OFFSET)) 14 * * 6 ${ENV} ${SCRIPT_DIR}/athena_scheduler.sh oneshot research >> ${LOG_DIR}/scheduler.log 2>&1

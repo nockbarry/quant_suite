@@ -103,9 +103,9 @@ install_auto() {
     echo ""
 
     # Get existing crontab (without our auto entries and orphaned standalone entries)
-    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "readiness_check.py" | grep -v "@reboot.*athena_scheduler")
+    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "readiness_check.py" | grep -v "auto_corrections.py" | grep -v "@reboot.*athena_scheduler")
 
-    # Create new crontab — consolidated from 13 entries to 11
+    # Create new crontab
     {
         echo "$EXISTING"
         echo ""
@@ -149,6 +149,10 @@ install_auto() {
         echo "# Midday market mover scan at 12:30 PM ET (Mon-Fri)"
         echo "30 12 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_market_movers.py --intraday >> $LOG_DIR/market_movers.log 2>&1"
         echo ""
+        echo "$CRON_AUTO_MARKER - Auto Corrections"
+        echo "# Apply mechanical corrections from cross-reference alerts and stress tests every 30 min"
+        echo "25,55 9-16 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/auto_corrections.py >> $LOG_DIR/auto_corrections.log 2>&1"
+        echo ""
         echo "$CRON_AUTO_MARKER - Signal Scan (Python + Prediction Markets)"
         echo "# Scan WSB, Stocktwits, prediction markets, thesis suggestions every 2 hours"
         echo "0 6,8,10,12,14,16 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_signal_scan.py >> $LOG_DIR/signal_scan.log 2>&1"
@@ -183,6 +187,10 @@ install_auto() {
         echo "0 19 * * 0 $SCRIPT_DIR/athena_scheduler.sh oneshot brainstorm >> $LOG_DIR/scheduler.log 2>&1"
         echo "0 20 * * 0 $SCRIPT_DIR/athena_scheduler.sh oneshot theorist >> $LOG_DIR/scheduler.log 2>&1"
         echo ""
+        echo "$CRON_AUTO_MARKER - Weekly System Review"
+        echo "# Self-evaluation: performance, thesis health, parameter review on Sundays at 4:30 PM ET"
+        echo "30 16 * * 0 $SCRIPT_DIR/athena_scheduler.sh oneshot system-review >> $LOG_DIR/scheduler.log 2>&1"
+        echo ""
         echo "$CRON_AUTO_MARKER - Weekly Hypothesis Generation"
         echo "# Generate testable hypotheses from accumulated data on Sundays at 5 PM ET"
         echo "0 17 * * 0 $SCRIPT_DIR/athena_scheduler.sh oneshot hypothesis-gen >> $LOG_DIR/scheduler.log 2>&1"
@@ -213,7 +221,7 @@ install_auto() {
 remove_auto() {
     echo "Removing autonomous Claude session cron jobs..."
 
-    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "readiness_check.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "@reboot.*athena_scheduler" | crontab -
+    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "readiness_check.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "auto_corrections.py" | grep -v "@reboot.*athena_scheduler" | crontab -
 
     echo "Autonomous cron jobs removed."
 }

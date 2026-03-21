@@ -333,6 +333,11 @@ class PathConfig:
         """Risk and stress test reports."""
         return self._ensure_dir(self.base / "risk_reports")
 
+    @property
+    def system_reviews(self) -> Path:
+        """Weekly system review reports."""
+        return self._ensure_dir(self.base / "system_reviews")
+
     # === Archive ===
 
     @property
