@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% set active_page = "upgrades" %}
+{% block title %}Autonomous Upgrades{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Autonomous Upgrades</h1>
+            <p class="text-xs text-gray-500 mt-1">Self-modification history: branch, test, merge or rollback</p>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Applied -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-emerald-900/40 flex items-center justify-center">
+                    <span class="text-emerald-400 text-lg">&#10003;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-emerald-400">{{ total_applied }}</p>
+                    <p class="text-xs text-gray-500">Merged</p>
+                </div>
+            </div>
+        </div>
+        <!-- Rolled Back -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center">
+                    <span class="text-red-400 text-lg">&#8634;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-red-400">{{ total_rolled_back }}</p>
+                    <p class="text-xs text-gray-500">Rolled Back</p>
+                </div>
+            </div>
+        </div>
+        <!-- Pending Proposals -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-yellow-900/40 flex items-center justify-center">
+                    <span class="text-yellow-400 text-lg">&#9888;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-yellow-400">{{ proposals | length }}</p>
+                    <p class="text-xs text-gray-500">Pending Review</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Upgrade History (2 cols) -->
+        <div class="lg:col-span-2 space-y-4">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    Upgrade History
+                    <span class="text-[10px] text-gray-500 ml-1">({{ upgrades | length }} recent)</span>
+                </h2>
+                {% if upgrades %}
+                <div class="space-y-2 max-h-[600px] overflow-y-auto">
+                    {% for upgrade in upgrades %}
+                    <details class="group bg-gray-800/50 rounded">
+                        <summary class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-800/80">
+                            <!-- Status icon -->
+                            {% if upgrade.merged %}
+                            <span class="w-6 h-6 rounded-full bg-emerald-900/50 flex items-center justify-center flex-shrink-0">
+                                <span class="text-emerald-400 text-xs">&#10003;</span>
+                            </span>
+                            {% elif upgrade.rollback %}
+                            <span class="w-6 h-6 rounded-full bg-red-900/50 flex items-center justify-center flex-shrink-0">
+                                <span class="text-red-400 text-xs">&#8634;</span>
+                            </span>
+                            {% else %}
+                            <span class="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                <span class="text-gray-400 text-xs">&#9679;</span>
+                            </span>
+                            {% endif %}
+
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-medium {% if upgrade.merged %}text-emerald-300{% elif upgrade.rollback %}text-red-300{% else %}text-gray-300{% endif %}">
+                                        {{ upgrade.branch_name | default(upgrade.proposal_id) }}
+                                    </span>
+                                    {% if upgrade.tests_passed %}
+                                    <span class="text-[10px] bg-emerald-900/50 text-emerald-400 px-1.5 py-0.5 rounded">TESTS OK</span>
+                                    {% elif upgrade.error %}
+                                    <span class="text-[10px] bg-red-900/50 text-red-400 px-1.5 py-0.5 rounded">FAILED</span>
+                                    {% endif %}
+                                </div>
+                                <div class="flex items-center gap-2 mt-0.5">
+                                    <span class="mono text-[10px] text-gray-500">{{ upgrade.files_changed }} files</span>
+                                    {% if upgrade.merged %}
+                                    <span class="text-[10px] text-emerald-500">merged</span>
+                                    {% elif upgrade.rollback %}
+                                    <span class="text-[10px] text-red-500">rolled back</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <span class="text-[10px] text-gray-500 whitespace-nowrap flex-shrink-0">{{ upgrade.timestamp[:16] if upgrade.timestamp else '' }}</span>
+                        </summary>
+                        <div class="px-3 pb-3 pt-1 border-t border-gray-700/50 ml-9">
+                            {% if upgrade.error %}
+                            <div class="flex items-start gap-1.5 mt-1">
+                                <span class="text-[10px] text-gray-500 font-medium uppercase whitespace-nowrap">Error:</span>
+                                <pre class="text-xs text-red-400 whitespace-pre-wrap break-all">{{ upgrade.error[:500] }}</pre>
+                            </div>
+                            {% endif %}
+                            {% if upgrade.validation_output %}
+                            <div class="flex items-start gap-1.5 mt-1">
+                                <span class="text-[10px] text-gray-500 font-medium uppercase whitespace-nowrap">Validation:</span>
+                                <pre class="text-xs text-gray-400 whitespace-pre-wrap break-all">{{ upgrade.validation_output[:500] }}</pre>
+                            </div>
+                            {% endif %}
+                            <div class="flex items-center gap-3 mt-2 text-[10px] text-gray-600">
+                                <span>ID: {{ upgrade.proposal_id }}</span>
+                            </div>
+                        </div>
+                    </details>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8">
+                    <p class="text-gray-500 text-sm">No upgrades yet</p>
+                    <p class="text-[10px] text-gray-600 mt-1">Autonomous upgrades are triggered by the weekly system-review skill</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right: Pending Proposals (1 col) -->
+        <div class="space-y-4">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    Pending Proposals
+                    <span class="text-[10px] text-gray-500 ml-1">(Tier 3 / needs review)</span>
+                </h2>
+                {% if proposals %}
+                <div class="space-y-2 max-h-[400px] overflow-y-auto">
+                    {% for proposal in proposals %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-yellow-300 font-medium">{{ proposal.description | default('Unnamed') | truncate(60) }}</span>
+                            <span class="text-[10px] bg-gray-700 px-1.5 py-0.5 rounded text-gray-400">Tier {{ proposal.tier }}</span>
+                        </div>
+                        <p class="text-[10px] text-gray-500 mt-1">{{ proposal.category | default('') | upper }}</p>
+                        {% if proposal.rationale %}
+                        <p class="text-[10px] text-gray-400 mt-1">{{ proposal.rationale | truncate(120) }}</p>
+                        {% endif %}
+                        {% if proposal.evidence %}
+                        <div class="flex items-start gap-1.5 mt-1">
+                            <span class="text-[10px] text-gray-500 font-medium uppercase whitespace-nowrap">Evidence:</span>
+                            <span class="text-[10px] text-gray-400">{{ proposal.evidence | truncate(100) }}</span>
+                        </div>
+                        {% endif %}
+                        {% if proposal.risk_level %}
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-[10px] font-medium
+                                {% if proposal.risk_level == 'high' %}text-red-400
+                                {% elif proposal.risk_level == 'medium' %}text-yellow-400
+                                {% else %}text-emerald-400{% endif %}">
+                                Risk: {{ proposal.risk_level }}
+                            </span>
+                        </div>
+                        {% endif %}
+                        {% if proposal.error %}
+                        <p class="text-[10px] text-red-400 mt-1">{{ proposal.error | truncate(80) }}</p>
+                        {% endif %}
+                        <p class="text-[10px] text-gray-600 mt-1">{{ proposal.timestamp[:16] if proposal.timestamp else '' }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-6">
+                    <p class="text-gray-500 text-sm">No pending proposals</p>
+                    <p class="text-[10px] text-gray-600 mt-1">Tier 3 proposals appear here for human review</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Safety Info -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Safety Tiers</h2>
+                <div class="space-y-2">
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] bg-emerald-900/50 text-emerald-400 px-1.5 py-0.5 rounded">Tier 1</span>
+                            <span class="text-xs text-gray-400">Auto-apply</span>
+                        </div>
+                        <p class="text-[10px] text-gray-500 mt-1">Thresholds, weights, scenario params, docs</p>
+                    </div>
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] bg-yellow-900/50 text-yellow-400 px-1.5 py-0.5 rounded">Tier 2</span>
+                            <span class="text-xs text-gray-400">Branch + Test</span>
+                        </div>
+                        <p class="text-[10px] text-gray-500 mt-1">New modules, rule changes, skill updates</p>
+                    </div>
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] bg-red-900/50 text-red-400 px-1.5 py-0.5 rounded">Tier 3</span>
+                            <span class="text-xs text-gray-400">Propose Only</span>
+                        </div>
+                        <p class="text-[10px] text-gray-500 mt-1">Architecture, dependencies, security</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

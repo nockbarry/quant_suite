@@ -279,6 +279,92 @@ Evaluate these parameters:
 
 Log parameter change recommendations (do NOT change code -- log to strategic context).
 
+## Step 4b: Autonomous Code Upgrades
+
+Based on findings from Steps 1-4, determine if any code changes would improve the system.
+
+**What you CAN change (Tier 1 -- direct modification):**
+- Stress test scenario parameters (shock values, probability labels)
+- Signal thresholds (conviction velocity pp/day, crisis alpha VIX threshold, RSI thresholds)
+- Rules engine limits (concentration caps, stop loss percentages)
+- CLAUDE.md documentation updates
+- RSS feed URLs in expanded_news.py
+
+**What you CAN create (Tier 2 -- new files in standard locations):**
+- New data source modules in `src/data/sources/alternative/`
+- New signal generators in `src/signals/`
+- New intelligence modules in `src/intelligence/`
+- Skill instruction updates in `.claude/skills/`
+
+**What you CANNOT change (Forbidden):**
+- `src/upgrades/` (the upgrade system itself)
+- `config/credentials*.yaml` (security)
+- `scripts/auto_corrections.py` (core safety loop)
+- `src/execution/order_manager.py` (trade execution safety)
+- `src/core/instance.py` and `src/core/paths.py` (infrastructure)
+
+**Workflow:**
+```python
+from src.upgrades.auto_upgrader import AutoUpgrader, UpgradeProposal
+from datetime import datetime
+
+upgrader = AutoUpgrader()
+
+# 1. Create proposal
+proposal = UpgradeProposal(
+    id=f"upgrade_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+    timestamp=datetime.now().isoformat(),
+    tier=1,  # or 2
+    category="threshold",  # or "data_source", "signal", "rule", "skill", "evaluation"
+    description="Recalibrate gold shock in ceasefire scenario from -12% to -15%",
+    files_to_modify=["src/risk/stress_tester.py"],
+    files_to_create=[],
+    rationale="Actual gold drop this week was -10.3%, scenario predicted -12%. Widening to -15% for safety margin.",
+    evidence="GLD weekly return: -10.3%. Stress test predicted: -12%. Error: 1.7pp.",
+    estimated_impact="More accurate risk estimates, earlier alerts on gold concentration",
+    risk_level="low",
+)
+
+# 2. Validate
+is_valid, reason = upgrader.validate_proposal(proposal)
+if not is_valid:
+    print(f"Proposal rejected: {reason}")
+    # Log as Tier 3 for human review
+else:
+    # 3. Create branch
+    result = upgrader.apply_upgrade(proposal)
+
+    # 4. Make the actual code changes HERE
+    # (edit files using normal Claude Code tools)
+
+    # 5. Finalize (test + merge or rollback)
+    result = upgrader.finalize_upgrade(result)
+    print(f"Upgrade {'merged' if result.merged else 'rolled back'}: {result.validation_output}")
+```
+
+**Rules for upgrades:**
+- Maximum 2 upgrades per system-review session
+- Always explain the evidence (data, not intuition)
+- Tier 1 changes should be small (< 20 lines changed)
+- Tier 2 new files should follow existing patterns exactly
+- If unsure, log as Tier 3 proposal instead of implementing
+- NEVER modify evaluation criteria without also updating the evidence threshold that triggers evaluation changes
+
+**Evaluation criteria you CAN adjust (with evidence):**
+- Prediction accuracy thresholds (e.g., changing "< 25% accuracy = invalidate" to "< 20%")
+- Calibration targets (e.g., adjusting overconfidence threshold from 40% to 35%)
+- Signal quality weights in belief_updater.py
+- Convergence thresholds in signal_digest.py
+- Meta-observer recommendation thresholds (Jaccard overlap, equity spread)
+
+**Evaluation criteria you CANNOT adjust:**
+- The requirement that predictions ARE tracked
+- The requirement that all instances are compared
+- The requirement that the ensemble exists
+- The concept of thesis-based investing
+- The exit checklist rules
+- PDT compliance
+
 ## Step 5: New Thesis Opportunities
 
 Review signals that were not acted on:

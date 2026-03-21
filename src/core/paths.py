@@ -338,6 +338,11 @@ class PathConfig:
         """Weekly system review reports."""
         return self._ensure_dir(self.base / "system_reviews")
 
+    @property
+    def upgrades(self) -> Path:
+        """Autonomous upgrade proposals and history."""
+        return self._ensure_dir(self.base / "upgrades")
+
     # === Archive ===
 
     @property
