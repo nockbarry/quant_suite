@@ -130,6 +130,34 @@ Answer these questions in your analysis:
 - What was the alpha vs SPY for each instance?
 - Were there any decisions that all 3 instances made differently? What happened?
 
+## Step 2b: Bug Triage
+
+Read the bug monitor report:
+```python
+PYTHONPATH=. python3 -c "
+from src.intelligence.bug_monitor import BugMonitor
+monitor = BugMonitor()
+bugs = monitor.scan_all()
+summary = monitor.get_summary()
+print(f'Total bugs: {summary[\"total\"]}')
+print(f'Crashes: {summary[\"crashes\"]}, Errors: {summary[\"errors\"]}')
+print(f'Auto-fixable: {summary[\"auto_fixable\"]}')
+print(f'Recurring (3+): {summary[\"recurring\"]}')
+for error_type, msg, count in summary.get('top_errors', []):
+    print(f'  [{count}x] {error_type}: {msg}')
+"
+```
+
+For each auto-fixable bug with 3+ occurrences:
+1. Read the affected source file
+2. Find the exact line causing the error
+3. Apply the fix using the auto-upgrader (Tier 1 if it's a threshold/null-check, Tier 2 if new code)
+4. Verify the fix doesn't break imports
+
+For non-auto-fixable bugs:
+1. Log as Tier 3 upgrade proposal for investigation
+2. If it's a recurring crash (5+ occurrences), add a workaround (try/except) as Tier 1
+
 ## Step 3: Thesis Health Review
 
 For EACH active thesis, evaluate:

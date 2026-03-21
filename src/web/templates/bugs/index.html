@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% set active_page = "bugs" %}
+{% block title %}Bug Monitor{% endblock %}
+
+{% block content %}
+<div class="p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-100">Bug Monitor</h1>
+            <p class="text-xs text-gray-500 mt-1">Automated error detection across logs, sessions, and process events</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-500">Last scan: {{ last_scan[:16] if last_scan else 'Never' }}</span>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <!-- Crashes -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center">
+                    <span class="text-red-400 text-lg">&#9888;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-red-400">{{ summary.crashes }}</p>
+                    <p class="text-xs text-gray-500">Crashes</p>
+                </div>
+            </div>
+        </div>
+        <!-- Errors -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-orange-900/40 flex items-center justify-center">
+                    <span class="text-orange-400 text-lg">&#9650;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-orange-400">{{ summary.errors }}</p>
+                    <p class="text-xs text-gray-500">Errors</p>
+                </div>
+            </div>
+        </div>
+        <!-- Warnings -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-yellow-900/40 flex items-center justify-center">
+                    <span class="text-yellow-400 text-lg">&#9679;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-yellow-400">{{ summary.warnings }}</p>
+                    <p class="text-xs text-gray-500">Warnings</p>
+                </div>
+            </div>
+        </div>
+        <!-- Silent Failures -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-purple-900/40 flex items-center justify-center">
+                    <span class="text-purple-400 text-lg">&#9670;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-purple-400">{{ summary.silent_failures }}</p>
+                    <p class="text-xs text-gray-500">Silent Fails</p>
+                </div>
+            </div>
+        </div>
+        <!-- Auto-fixable -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-emerald-900/40 flex items-center justify-center">
+                    <span class="text-emerald-400 text-lg">&#9881;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-emerald-400">{{ summary.auto_fixable }}</p>
+                    <p class="text-xs text-gray-500">Auto-fixable</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Bug Table (2 cols) -->
+        <div class="lg:col-span-2 space-y-4">
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+                    All Bugs
+                    <span class="text-[10px] text-gray-500 ml-1">({{ bugs | length }} total)</span>
+                </h2>
+                {% if bugs %}
+                <div class="space-y-2 max-h-[700px] overflow-y-auto">
+                    {% for bug in bugs %}
+                    <details class="group bg-gray-800/50 rounded">
+                        <summary class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-800/80">
+                            <!-- Severity icon -->
+                            {% if bug.severity == 'crash' %}
+                            <span class="w-6 h-6 rounded-full bg-red-900/50 flex items-center justify-center flex-shrink-0">
+                                <span class="text-red-400 text-xs">&#9888;</span>
+                            </span>
+                            {% elif bug.severity == 'error' %}
+                            <span class="w-6 h-6 rounded-full bg-orange-900/50 flex items-center justify-center flex-shrink-0">
+                                <span class="text-orange-400 text-xs">&#9650;</span>
+                            </span>
+                            {% elif bug.severity == 'warning' %}
+                            <span class="w-6 h-6 rounded-full bg-yellow-900/50 flex items-center justify-center flex-shrink-0">
+                                <span class="text-yellow-400 text-xs">&#9679;</span>
+                            </span>
+                            {% else %}
+                            <span class="w-6 h-6 rounded-full bg-purple-900/50 flex items-center justify-center flex-shrink-0">
+                                <span class="text-purple-400 text-xs">&#9670;</span>
+                            </span>
+                            {% endif %}
+
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="mono text-xs font-medium {% if bug.severity == 'crash' %}text-red-300{% elif bug.severity == 'error' %}text-orange-300{% elif bug.severity == 'warning' %}text-yellow-300{% else %}text-purple-300{% endif %}">
+                                        {{ bug.error_type }}
+                                    </span>
+                                    <span class="text-[10px] bg-gray-700 px-1.5 py-0.5 rounded text-gray-400">{{ bug.category }}</span>
+                                    {% if bug.auto_fixable and not bug.fix_applied %}
+                                    <span class="text-[10px] bg-emerald-900/50 px-1.5 py-0.5 rounded text-emerald-400">AUTO-FIX</span>
+                                    {% endif %}
+                                    {% if bug.fix_applied %}
+                                    <span class="text-[10px] bg-blue-900/50 px-1.5 py-0.5 rounded text-blue-400">FIXED</span>
+                                    {% endif %}
+                                </div>
+                                <p class="text-xs text-gray-400 truncate mt-0.5">{{ bug.error_message }}</p>
+                            </div>
+
+                            <div class="flex items-center gap-3 flex-shrink-0">
+                                <span class="mono text-xs {% if bug.occurrence_count >= 5 %}text-red-400{% elif bug.occurrence_count >= 3 %}text-yellow-400{% else %}text-gray-500{% endif %}">
+                                    {{ bug.occurrence_count }}x
+                                </span>
+                            </div>
+                        </summary>
+                        <div class="px-3 pb-3 pt-1 border-t border-gray-700/50 ml-9 space-y-2">
+                            <!-- Module & Line -->
+                            {% if bug.affected_module %}
+                            <div class="flex items-start gap-1.5">
+                                <span class="text-[10px] text-gray-500 font-medium uppercase whitespace-nowrap">Module:</span>
+                                <span class="mono text-xs text-gray-300">{{ bug.affected_module }}{% if bug.affected_line %}:{{ bug.affected_line }}{% endif %}</span>
+                            </div>
+                            {% endif %}
+
+                            <!-- Fix description -->
+                            <div class="flex items-start gap-1.5">
+                                <span class="text-[10px] text-gray-500 font-medium uppercase whitespace-nowrap">Fix:</span>
+                                <span class="text-xs text-emerald-400">{{ bug.fix_description }}</span>
+                            </div>
+
+                            <!-- Source file -->
+                            <div class="flex items-start gap-1.5">
+                                <span class="text-[10px] text-gray-500 font-medium uppercase whitespace-nowrap">Source:</span>
+                                <span class="text-xs text-gray-400">{{ bug.source_file }}</span>
+                            </div>
+
+                            <!-- Time range -->
+                            <div class="flex items-start gap-1.5">
+                                <span class="text-[10px] text-gray-500 font-medium uppercase whitespace-nowrap">Seen:</span>
+                                <span class="text-xs text-gray-400">{{ bug.first_seen[:16] if bug.first_seen else '?' }} to {{ bug.last_seen[:16] if bug.last_seen else '?' }}</span>
+                            </div>
+
+                            <!-- Upgrade proposal link -->
+                            {% if bug.fix_proposal_id %}
+                            <div class="flex items-start gap-1.5">
+                                <span class="text-[10px] text-gray-500 font-medium uppercase whitespace-nowrap">Proposal:</span>
+                                <a href="/upgrades" class="text-xs text-blue-400 hover:underline">{{ bug.fix_proposal_id }}</a>
+                            </div>
+                            {% endif %}
+
+                            <!-- Traceback -->
+                            {% if bug.traceback %}
+                            <details class="mt-2">
+                                <summary class="text-[10px] text-gray-500 cursor-pointer hover:text-gray-400">Show traceback</summary>
+                                <pre class="mono text-[10px] text-gray-400 bg-gray-900 p-2 rounded mt-1 overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap">{{ bug.traceback }}</pre>
+                            </details>
+                            {% endif %}
+                        </div>
+                    </details>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8">
+                    <p class="text-gray-500 text-sm">No bugs detected</p>
+                    <p class="text-[10px] text-gray-600 mt-1">Run: PYTHONPATH=. python3 scripts/run_bug_monitor.py</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right: Side Panels (1 col) -->
+        <div class="space-y-4">
+            <!-- Top Recurring Errors -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Top Recurring Errors</h2>
+                {% if recurring %}
+                <div class="space-y-2 max-h-72 overflow-y-auto">
+                    {% for bug in recurring %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2">
+                        <div class="flex items-center justify-between">
+                            <span class="mono text-xs {% if bug.severity == 'crash' %}text-red-300{% elif bug.severity == 'error' %}text-orange-300{% else %}text-yellow-300{% endif %}">
+                                {{ bug.error_type }}
+                            </span>
+                            <span class="mono text-xs font-bold {% if bug.occurrence_count >= 10 %}text-red-400{% elif bug.occurrence_count >= 5 %}text-yellow-400{% else %}text-gray-400{% endif %}">
+                                {{ bug.occurrence_count }}x
+                            </span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-0.5 truncate">{{ bug.error_message }}</p>
+                        {% if bug.affected_module %}
+                        <p class="mono text-[10px] text-gray-600 mt-0.5 truncate">{{ bug.affected_module }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No recurring errors (3+ occurrences)</p>
+                {% endif %}
+            </div>
+
+            <!-- Auto-fixable Bugs -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Auto-fixable</h2>
+                {% if auto_fixable %}
+                <div class="space-y-2 max-h-72 overflow-y-auto">
+                    {% for bug in auto_fixable %}
+                    <div class="bg-gray-800/50 rounded px-3 py-2 border border-emerald-900/30">
+                        <div class="flex items-center justify-between">
+                            <span class="mono text-xs text-emerald-300">{{ bug.error_type }}</span>
+                            <span class="mono text-[10px] text-gray-500">{{ bug.occurrence_count }}x</span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-0.5 truncate">{{ bug.error_message }}</p>
+                        <p class="text-[10px] text-emerald-400/70 mt-0.5">{{ bug.fix_description }}</p>
+                        {% if bug.fix_proposal_id %}
+                        <a href="/upgrades" class="text-[10px] text-blue-400 hover:underline mt-0.5 block">Proposal: {{ bug.fix_proposal_id }}</a>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-gray-500">No auto-fixable bugs pending</p>
+                {% endif %}
+            </div>
+
+            <!-- Bug Categories Breakdown -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Categories</h2>
+                <div class="space-y-1.5">
+                    {% set traceback_count = bugs | selectattr("category", "equalto", "traceback") | list | length %}
+                    {% set exit_count = bugs | selectattr("category", "equalto", "exit_code") | list | length %}
+                    {% set silent_count = bugs | selectattr("category", "equalto", "silent_failure") | list | length %}
+                    {% set data_count = bugs | selectattr("category", "equalto", "data_error") | list | length %}
+                    <div class="flex items-center justify-between text-[10px]">
+                        <span class="text-gray-500">Python Tracebacks</span>
+                        <span class="mono {% if traceback_count > 0 %}text-orange-400{% else %}text-gray-600{% endif %}">{{ traceback_count }}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px]">
+                        <span class="text-gray-500">Session Failures</span>
+                        <span class="mono {% if exit_count > 0 %}text-orange-400{% else %}text-gray-600{% endif %}">{{ exit_count }}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px]">
+                        <span class="text-gray-500">Silent Failures</span>
+                        <span class="mono {% if silent_count > 0 %}text-purple-400{% else %}text-gray-600{% endif %}">{{ silent_count }}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-[10px]">
+                        <span class="text-gray-500">Data/Process Errors</span>
+                        <span class="mono {% if data_count > 0 %}text-orange-400{% else %}text-gray-600{% endif %}">{{ data_count }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Source -->
+            <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Data Source</h2>
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-[10px]">
+                        <span class="text-gray-500">bug_reports.json</span>
+                        <span class="{% if bugs %}text-emerald-400{% else %}text-gray-600{% endif %}">
+                            {% if bugs %}{{ bugs | length }} bugs{% else %}No data{% endif %}
+                        </span>
+                    </div>
+                    <p class="text-[10px] text-gray-600 mt-2">Cron: every 2h during market hours</p>
+                    <p class="text-[10px] text-gray-600">Manual: PYTHONPATH=. python3 scripts/run_bug_monitor.py</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
