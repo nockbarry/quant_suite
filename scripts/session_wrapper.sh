@@ -469,6 +469,12 @@ else
 
     log "One-shot session completed"
 
+    # Run ensemble before auto-execute for trade-decision sessions
+    if [ "$SESSION_TYPE" = "trade-decision" ]; then
+        log "Running decision ensemble before auto-execute..."
+        cd "$PROJECT_DIR" && PYTHONPATH="$PROJECT_DIR" python3 scripts/run_ensemble.py >> "$LOG_DIR/ensemble.log" 2>&1 || true
+    fi
+
     # Auto-execute pending decisions after trade-decision sessions (paper only)
     if [ "$SESSION_TYPE" = "trade-decision" ]; then
         log "Auto-executing pending paper decisions"

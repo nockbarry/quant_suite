@@ -93,6 +93,9 @@ This prevents common errors like:
 /theorist            # Weekly scenario planning, blind spots, strategic context
 /swarm-operator      # Orchestrate multi-agent swarms
 
+# System Health
+/system-review       # Weekly evaluation: instance comparison, thesis health, parameter tuning
+
 # Validation & Production
 /critic              # Safety validation for strategies
 /validate            # Full validation suite (MCPT, walk-forward)
@@ -188,7 +191,7 @@ Validated signals: Bollinger Bounce (IC=0.31, 61.4%), RSI Extreme (IC=0.20, 53.8
 ### Autonomous Thesis Creation
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| **ThesisSuggester.auto_create** | `src/knowledge/thesis_suggester.py` | Auto-creates theses when confidence > 0.75, max 2/week |
+| **ThesisSuggester.auto_create_from_suggestions** | `src/knowledge/thesis_suggester.py` | Auto-creates theses when confidence > 0.75, max 2/week |
 
 ### Strategic Analysis Layer
 | Component | Location | Purpose |
@@ -200,6 +203,14 @@ Validated signals: Bollinger Bounce (IC=0.31, 61.4%), RSI Extreme (IC=0.20, 53.8
 | **run_cross_reference.py** | `scripts/run_cross_reference.py` | Cron wrapper — runs every 30 min, pushes alerts to situation board |
 
 Evening research skill restructured with 5-step investigative checklist: insider check, regulatory check, market reaction analysis, strategic analysis search, cross-reference review. Web dashboard at `/alerts`.
+
+### Self-Improvement Loop
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **AutoCorrectionEngine** | `scripts/auto_corrections.py` | Mechanical fixes from alerts: conviction +/-, position freeze, thesis invalidation. Every 30 min. |
+| **SystemReview skill** | `.claude/skills/system-review/SKILL.md` | Weekly evaluation: instance comparison, thesis health, parameter tuning, bug triage. Sunday 4:30 PM. |
+| **AutoUpgrader** | `src/upgrades/auto_upgrader.py` | Branch-test-merge code changes. Tier 1 (whitelist), Tier 2 (new files), Tier 3 (propose). |
+| **BugMonitor** | `src/intelligence/bug_monitor.py` | Scans logs for tracebacks, categorizes, proposes fixes. Every 2h. Dashboard at `/bugs`. |
 
 ### Knowledge Layer
 | Component | Location | Purpose |
@@ -415,6 +426,14 @@ Read `docs/TRADING_PATTERNS.md` for accumulated wisdom: vehicle enumeration, con
 | **Ensemble Logs** | `~/quant_results/decisions/ensemble/ensemble_*.json` |
 | **Meta Reports** | `~/quant_results/parallel/meta_report_*.json` |
 | **War Dashboard** | `~/quant_results/war/` |
+| **Cross-Reference Alerts** | `~/quant_results/live/cross_reference_alerts.json` |
+| **Bug Reports** | `~/quant_results/logs/bug_reports.json` |
+| **Stress Test** | `~/quant_results/risk_reports/stress_test_latest.json` |
+| **Meta Reports** | `~/quant_results/parallel/meta_report_latest.json` |
+| **Upgrade Log** | `~/quant_results/logs/upgrade_log.jsonl` |
+| **Auto-Corrections Log** | `~/quant_results/logs/auto_corrections.jsonl` |
+| **Signal Engines** | `~/quant_results/live/signal_engines.json` |
+| **SEC Insider Alerts** | `~/quant_results/live/sec_insider_alerts.json` |
 
 ---
 
@@ -460,6 +479,14 @@ Alerting (`smart_alerter.py`, `mobile_bot.py`), execution rules (`rules_engine.p
 | `signpost_monitor.py` | Every 10 min (9-3pm) | Thesis signpost price checks |
 | `cron_prediction_scorer.py` | 5:15 PM Mon-Fri | Score predictions |
 | `cron_belief_update.py` | 5:30 PM Mon-Fri | Update signal weights |
+| `run_cross_reference.py` | Every 30 min (9-4pm) | Cross-reference red flags |
+| `auto_corrections.py` | Every 30 min (9-4pm) | Mechanical conviction/position fixes |
+| `run_market_reaction.py` | Every 30 min (9-4pm) | News reaction scoring |
+| `run_signal_engines.py` | Every 30 min (9-4pm) | Conviction velocity + crisis alpha signals |
+| `run_stress_test.py` | 5:35 PM Mon-Fri | Portfolio VaR and scenario analysis |
+| `run_meta_observer.py` | 5:40 PM Mon-Fri | Cross-instance divergence |
+| `run_bug_monitor.py` | Every 2h Mon-Fri | Log scanning and bug detection |
+| `run_ensemble.py` | After trade-decision | 3x consensus before execution |
 
 ```bash
 ./scripts/setup_cron.sh install       # Data collection cron
@@ -482,6 +509,7 @@ Architecture: `cron → athena_scheduler.sh (tmux) → session_wrapper.sh → cl
 | 16:30 | `/eod-review` | opus |
 | 17:10 | sentinel-stop | - |
 | 17:30 | `/evening-research` | opus |
+| Sun 16:30 | `/system-review` | opus |
 | Sun 18:00 | `/thesis` | sonnet |
 | Sun 19:00 | `/brainstorm` | opus |
 | Sun 20:00 | `/theorist` | opus |

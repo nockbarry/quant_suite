@@ -88,6 +88,7 @@ class CrossReferenceEngine:
         self.positions: list[dict] = []
         self.market: dict = {}
         self.insider_data: dict = {}
+        self.sec_insider_data: dict = {}
         self.treasury_alerts: list[dict] = []
         self.market_reactions: list[dict] = []
         self.news_items: list[dict] = []
@@ -147,7 +148,15 @@ class CrossReferenceEngine:
         except Exception as e:
             logger.warning(f"Failed to load theses: {e}")
 
-        # 8. Existing alerts (for dedup)
+        # 8. SEC insider data (from SECInsiderMonitor)
+        sec_file = paths.live / "sec_insider_alerts.json"
+        if sec_file.exists():
+            try:
+                self.sec_insider_data = json.loads(sec_file.read_text())
+            except Exception as e:
+                logger.debug(f"SEC insider data not available: {e}")
+
+        # 9. Existing alerts (for dedup)
         alerts_path = paths.live / "cross_reference_alerts.json"
         if alerts_path.exists():
             try:
@@ -200,9 +209,9 @@ class CrossReferenceEngine:
     def check_insider_divergence(self) -> list[CrossReferenceAlert]:
         """Detect: stock near 52-week high + 2+ insiders selling.
 
-        Cross-references position performance with insider buying/selling screens.
-        If our portfolio stocks are NOT in the insider_buying list but ARE showing
-        high unrealized gains (near highs), that's a divergence warning.
+        Cross-references position performance with insider buying/selling screens
+        AND SEC EDGAR Form 4 filings. If SEC data shows 2+ insiders selling a
+        symbol that's in our portfolio and near highs, that's a RED FLAG.
         """
         alerts = []
         insider_buying_symbols = set(
@@ -212,10 +221,61 @@ class CrossReferenceEngine:
             self.insider_data.get("institutional_accumulation", {}).get("symbols", [])
         )
 
+        # Build SEC insider selling lookup: symbol -> list of sell transactions
+        sec_sells_by_symbol: dict[str, list[dict]] = {}
+        if self.sec_insider_data:
+            for txn in self.sec_insider_data.get("all_transactions", []):
+                if txn.get("transaction_type") == "sell":
+                    sym = txn.get("symbol", "")
+                    sec_sells_by_symbol.setdefault(sym, []).append(txn)
+
+        # Also collect SEC red flags by symbol
+        sec_red_flag_symbols: set[str] = set()
+        if self.sec_insider_data:
+            for rf in self.sec_insider_data.get("red_flags", []):
+                sec_red_flag_symbols.add(rf.get("symbol", ""))
+
         for pos in self.positions:
             symbol = pos.get("symbol", "")
             pnl_pct = pos.get("unrealized_pnl_pct", 0)
             weight_pct = pos.get("weight_pct", 0)
+
+            # Check SEC data for clustered insider selling (2+ sellers)
+            sec_sells = sec_sells_by_symbol.get(symbol, [])
+            unique_sec_sellers = set(s.get("insider_name", "") for s in sec_sells)
+            has_sec_selling = len(unique_sec_sellers) >= 2
+
+            # SEC red flag: 2+ insiders selling near highs — always a red flag
+            if has_sec_selling and pnl_pct >= 10:
+                total_sold = sum(s.get("total_value", 0) for s in sec_sells)
+                seller_names = ", ".join(list(unique_sec_sellers)[:3])
+                thesis_names = self._get_thesis_names_for_symbol(symbol)
+
+                severity = SEVERITY_RED_FLAG if symbol in sec_red_flag_symbols else SEVERITY_WARNING
+                alerts.append(CrossReferenceAlert(
+                    alert_id=_make_alert_id("sec_insider_selling", [symbol]),
+                    alert_type="sec_insider_selling",
+                    severity=severity,
+                    title=f"SEC Insider Selling: {len(unique_sec_sellers)} insiders sold {symbol}",
+                    description=(
+                        f"{len(unique_sec_sellers)} insiders ({seller_names}) sold {symbol} "
+                        f"per SEC Form 4 filings while position is up {pnl_pct:.1f}%. "
+                        f"Total insider sales: ${total_sold:,.0f}. "
+                        f"Clustered insider selling near highs is a bearish signal."
+                    ),
+                    symbols=[symbol],
+                    theses=thesis_names,
+                    data_sources_used=["sec_insider_alerts.json", "state.json"],
+                    recommended_action="Do NOT add to position. Tighten stop loss. Review thesis.",
+                    evidence={
+                        "unrealized_pnl_pct": pnl_pct,
+                        "weight_pct": weight_pct,
+                        "unique_sellers": len(unique_sec_sellers),
+                        "total_value_sold": total_sold,
+                        "sellers": list(unique_sec_sellers)[:5],
+                        "sec_red_flag": symbol in sec_red_flag_symbols,
+                    },
+                ))
 
             # Stock with big gains (proxy for "near highs") but no insider buying
             if pnl_pct >= 20 and weight_pct >= 2:
@@ -230,11 +290,15 @@ class CrossReferenceEngine:
                         for item in self.news_items
                     )
 
-                    if has_bearish_news:
+                    if has_bearish_news or has_sec_selling:
                         severity = SEVERITY_RED_FLAG
+                        sec_note = (
+                            f" SEC Form 4 shows {len(unique_sec_sellers)} insiders selling."
+                            if has_sec_selling else ""
+                        )
                         desc = (
                             f"{symbol} is up {pnl_pct:.1f}% (near highs) with bearish news "
-                            f"and NO insider/institutional buying detected. "
+                            f"and NO insider/institutional buying detected.{sec_note} "
                             f"Insiders may know something the market doesn't yet."
                         )
                     else:
@@ -254,13 +318,14 @@ class CrossReferenceEngine:
                         description=desc,
                         symbols=[symbol],
                         theses=thesis_names,
-                        data_sources_used=["state.json", "screens_finviz"],
+                        data_sources_used=["state.json", "screens_finviz", "sec_insider_alerts.json"],
                         recommended_action="Monitor for insider selling filings. Do not add to position.",
                         evidence={
                             "unrealized_pnl_pct": pnl_pct,
                             "weight_pct": weight_pct,
                             "in_insider_buying": False,
                             "has_bearish_news": has_bearish_news,
+                            "sec_insider_selling": has_sec_selling,
                         },
                     ))
 
