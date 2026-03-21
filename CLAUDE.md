@@ -211,6 +211,7 @@ Evening research skill restructured with 5-step investigative checklist: insider
 | **SystemReview skill** | `.claude/skills/system-review/SKILL.md` | Weekly evaluation: instance comparison, thesis health, parameter tuning, bug triage. Sunday 4:30 PM. |
 | **AutoUpgrader** | `src/upgrades/auto_upgrader.py` | Branch-test-merge code changes. Tier 1 (whitelist), Tier 2 (new files), Tier 3 (propose). |
 | **BugMonitor** | `src/intelligence/bug_monitor.py` | Scans logs for tracebacks, categorizes, proposes fixes. Every 2h. Dashboard at `/bugs`. |
+| **AdaptiveTriggerEngine** | `src/intelligence/adaptive_triggers.py` | Event-driven session spawning: portfolio drawdown, VIX spike, position stop, red flag cluster, crash loop, thesis invalidation. Integrated into sentinel. |
 
 ### Knowledge Layer
 | Component | Location | Purpose |
@@ -365,6 +366,28 @@ If NONE checked → **DO NOT SELL**
 - No buying if portfolio down 3%+ today
 - Trading hours 9 AM - 4 PM ET only
 - PDT compliance (<$25k accounts)
+
+### Adaptive Triggers (Event-Driven Sessions)
+
+The `AdaptiveTriggerEngine` (`src/intelligence/adaptive_triggers.py`) runs inside the sentinel every 30s and spawns unscheduled sessions when conditions warrant. Each trigger has a cooldown to prevent spam.
+
+| Trigger | Threshold | Level | Session Spawned | Cooldown |
+|---------|-----------|-------|-----------------|----------|
+| Portfolio drawdown | -3% day | elevated | trade-decision | 4h |
+| Portfolio drawdown | -5% day | critical | system-review | 8h |
+| Position stop hit | -15% unrealized | elevated | trade-decision | 1h |
+| VIX spike | +10% session | elevated | trade-decision | 4h |
+| VIX extreme | >35 absolute | critical | trade-decision | 8h |
+| Oil crash (BNO/USO) | -10% day | critical | system-review | 8h |
+| Red flag cluster | 3+ in 4h | elevated | trade-decision | 4h |
+| Insider selling cluster | 3+ portfolio stocks in 24h | elevated | trade-decision | 8h |
+| Thesis invalidated | conviction <25% | elevated | trade-decision | 4h |
+| Conviction velocity | >5pp/day | alert | analyst | 8h |
+| Crash loop | 5+ same error/1h | critical | system-review | 12h |
+| Ensemble rejections | 3+ consecutive | elevated | system-review | 24h |
+| Instance divergence | >15% equity spread | critical | system-review | 24h |
+
+Trigger history visible on web dashboard at `/alerts`. Log at `~/quant_results/logs/adaptive_triggers.jsonl`.
 
 ### PDT Compliance (<$25k)
 Max 3 day trades per 5 rolling business days. 2-day minimum hold. Use `PDTManager` from `src/execution/pdt_manager.py`.

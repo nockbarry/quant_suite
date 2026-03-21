@@ -15,7 +15,7 @@
     </div>
 
     <!-- Summary Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <!-- Red Flags -->
         <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
             <div class="flex items-center gap-3">
@@ -52,7 +52,81 @@
                 </div>
             </div>
         </div>
+        <!-- Adaptive Triggers (24h) -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-purple-900/40 flex items-center justify-center">
+                    <span class="text-purple-400 text-lg">&#9889;</span>
+                </div>
+                <div>
+                    <p class="mono text-2xl font-bold text-purple-400">{{ trigger_count_24h }}</p>
+                    <p class="text-xs text-gray-500">Triggers (24h)</p>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <!-- Adaptive Triggers Section -->
+    {% if adaptive_triggers %}
+    <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+            Adaptive Triggers
+            <span class="text-[10px] text-gray-500 ml-1">(last {{ adaptive_triggers | length }}, {{ trigger_count_24h }} in 24h)</span>
+        </h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="text-gray-500 text-[10px] uppercase tracking-wider border-b border-gray-800">
+                        <th class="text-left pb-2 pr-3">Timestamp</th>
+                        <th class="text-left pb-2 pr-3">Level</th>
+                        <th class="text-left pb-2 pr-3">Trigger</th>
+                        <th class="text-left pb-2 pr-3">Description</th>
+                        <th class="text-left pb-2 pr-3">Session</th>
+                        <th class="text-left pb-2 pr-3">Symbols</th>
+                        <th class="text-left pb-2">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for trigger in adaptive_triggers | reverse %}
+                    <tr class="border-b border-gray-800/50 hover:bg-gray-800/30">
+                        <td class="py-1.5 pr-3 text-gray-400 whitespace-nowrap">{{ trigger.timestamp[:16] if trigger.timestamp else '' }}</td>
+                        <td class="py-1.5 pr-3">
+                            {% if trigger.level == 'emergency' %}
+                            <span class="bg-red-900/60 text-red-300 px-1.5 py-0.5 rounded text-[10px] font-medium">EMERGENCY</span>
+                            {% elif trigger.level == 'critical' %}
+                            <span class="bg-red-900/40 text-red-400 px-1.5 py-0.5 rounded text-[10px] font-medium">CRITICAL</span>
+                            {% elif trigger.level == 'elevated' %}
+                            <span class="bg-yellow-900/40 text-yellow-400 px-1.5 py-0.5 rounded text-[10px] font-medium">ELEVATED</span>
+                            {% else %}
+                            <span class="bg-blue-900/40 text-blue-400 px-1.5 py-0.5 rounded text-[10px] font-medium">ALERT</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-1.5 pr-3 text-gray-300 mono text-[10px]">{{ trigger.trigger_type }}</td>
+                        <td class="py-1.5 pr-3 text-gray-400 max-w-xs truncate">{{ trigger.description }}</td>
+                        <td class="py-1.5 pr-3">
+                            <span class="bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded text-[10px]">{{ trigger.session_to_spawn }}</span>
+                        </td>
+                        <td class="py-1.5 pr-3 mono text-[10px] text-gray-400">
+                            {% if trigger.symbols %}
+                            {{ trigger.symbols | join(', ') }}
+                            {% else %}
+                            --
+                            {% endif %}
+                        </td>
+                        <td class="py-1.5">
+                            {% if trigger.fired %}
+                            <span class="text-emerald-400 text-[10px]">FIRED</span>
+                            {% else %}
+                            <span class="text-red-400 text-[10px]">FAILED</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Main Content Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">

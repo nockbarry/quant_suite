@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 # Import swarm modules
 from src.swarm.situation_board import SituationBoard
 from src.monitoring.operator_loop import OperatorLoop
+from src.intelligence.adaptive_triggers import AdaptiveTriggerEngine
 
 # ---- Health Monitor Functions (absorbed from health_monitor.py) ----
 
@@ -353,6 +354,18 @@ class Sentinel:
                 if launch_trade_decision():
                     consume_trade_triggers(symbols)
 
+        # 7b. Adaptive triggers (portfolio drawdown, VIX extreme, crash loop, etc.)
+        adaptive_triggers_fired = []
+        try:
+            adaptive = AdaptiveTriggerEngine()
+            adaptive_events = adaptive.evaluate_all()
+            for trigger in adaptive_events:
+                logger.warning(f"ADAPTIVE TRIGGER: [{trigger.level}] {trigger.description}")
+                adaptive.fire_trigger(trigger)
+                adaptive_triggers_fired.append(trigger.trigger_type)
+        except Exception as e:
+            logger.error(f"Adaptive trigger check failed: {e}", exc_info=True)
+
         # 8. Health actions
         # Only restart operator AFTER 8:30 AM — before that, the 8:30 cron handles
         # the initial launch. Restarting too early causes "stale task" when the
@@ -430,6 +443,7 @@ class Sentinel:
                 "trade_triggers": len(trade_triggers),
             },
             "triggers_fired": [t["type"] for t in triggers_fired],
+            "adaptive_triggers_fired": adaptive_triggers_fired,
             "actions_taken": actions_taken,
         }
 
@@ -450,6 +464,8 @@ class Sentinel:
             summary_parts.append(f"{len(signposts)} signposts")
         if triggers_fired:
             summary_parts.append(f"{len(triggers_fired)} triggers fired")
+        if adaptive_triggers_fired:
+            summary_parts.append(f"{len(adaptive_triggers_fired)} adaptive triggers: {', '.join(adaptive_triggers_fired)}")
         if actions_taken:
             summary_parts.append(f"actions: {actions_taken}")
 
@@ -461,6 +477,7 @@ class Sentinel:
         return {
             "check": self.check_count,
             "triggers": len(triggers_fired),
+            "adaptive_triggers": len(adaptive_triggers_fired),
             "alerts": len(alerts),
             "convergences": len(convergences),
             "signposts": len(signposts),

@@ -1,6 +1,6 @@
 """Alerts dashboard data service."""
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.core.paths import paths
 
 
@@ -25,6 +25,9 @@ def get_alerts_dashboard_data() -> dict:
     treasury_data = _load_json(paths.live / "treasury_alerts.json")
     market_reactions = _load_json(paths.live / "market_reactions.json")
 
+    # Load adaptive trigger history
+    adaptive_triggers, trigger_count_24h = _load_adaptive_triggers()
+
     return {
         "alerts": alerts,
         "red_flag_count": len([a for a in alerts if a.get("severity") == "red_flag"]),
@@ -34,7 +37,41 @@ def get_alerts_dashboard_data() -> dict:
         "sec_insider": sec_data,
         "treasury_alerts": treasury_data,
         "market_reactions": market_reactions,
+        "adaptive_triggers": adaptive_triggers,
+        "trigger_count_24h": trigger_count_24h,
     }
+
+
+def _load_adaptive_triggers() -> tuple[list[dict], int]:
+    """Load adaptive trigger history from JSONL log.
+
+    Returns:
+        Tuple of (last 20 triggers, count within 24h)
+    """
+    trigger_log = paths.base / "logs" / "adaptive_triggers.jsonl"
+    triggers = []
+
+    if trigger_log.exists():
+        try:
+            with open(trigger_log) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            triggers.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+        except OSError:
+            pass
+
+    # Count triggers within last 24h
+    cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+    count_24h = len([
+        t for t in triggers
+        if t.get("timestamp", "") >= cutoff
+    ])
+
+    return triggers[-20:], count_24h
 
 
 def _load_json(path):
