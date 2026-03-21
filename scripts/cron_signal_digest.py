@@ -39,7 +39,7 @@ SOURCE_WEIGHTS = {
     "agent": 1.1,
     "options_flow": 1.1,
     "news": 1.0,
-    "prediction_market": 1.0,
+    "prediction_market": 1.3,
     "thesis_suggestion": 0.9,
     "wsb": 0.8,
     "stocktwits": 0.7,
@@ -226,33 +226,65 @@ def load_alt_data_signals() -> list[dict]:
 
 
 def load_prediction_market_signals() -> list[dict]:
-    """Load signals from prediction_markets.json."""
+    """Load signals from prediction market sources.
+
+    Reads from two files:
+    1. live/prediction_market_signals.json — thesis-matched signals from
+       PredictionMarketCollector (probability shifts, thesis divergences)
+    2. social/prediction_markets.json — legacy macro signals from cron_signal_scan
+    """
     signals = []
+
+    # Source 1: Thesis-matched prediction market signals (higher quality)
+    pm_thesis_file = RESULTS_DIR / "live" / "prediction_market_signals.json"
+    if pm_thesis_file.exists():
+        try:
+            with open(pm_thesis_file) as f:
+                data = json.load(f)
+
+            ts = data.get("timestamp", datetime.now().isoformat())
+
+            for s in data.get("signals", []):
+                # Use the first matched thesis symbol as the signal symbol
+                symbols = s.get("matched_thesis_symbols", [])
+                symbol = symbols[0] if symbols else "SPY"
+                signals.append({
+                    "symbol": symbol,
+                    "direction": s.get("signal_direction", "bullish"),
+                    "strength": s.get("signal_strength", 0.5),
+                    "source": "prediction_market",
+                    "timestamp": s.get("timestamp", ts),
+                    "detail": (
+                        f"{s.get('source', '?')}: {s.get('question', '')[:50]} "
+                        f"({s.get('current_probability', 0):.0%})"
+                    ),
+                })
+        except Exception as e:
+            logger.warning(f"Error loading thesis prediction market signals: {e}")
+
+    # Source 2: Legacy macro-category signals
     pm_file = RESULTS_DIR / "social" / "prediction_markets.json"
+    if pm_file.exists():
+        try:
+            with open(pm_file) as f:
+                data = json.load(f)
 
-    if not pm_file.exists():
-        return signals
+            ts = data.get("timestamp", datetime.now().isoformat())
 
-    try:
-        with open(pm_file) as f:
-            data = json.load(f)
-
-        ts = data.get("timestamp", datetime.now().isoformat())
-
-        for signal in data.get("signals", []):
-            symbol = signal.get("symbol", "")
-            if not symbol:
-                continue
-            signals.append({
-                "symbol": symbol,
-                "direction": signal.get("direction", "bullish"),
-                "strength": signal.get("strength", 0.5),
-                "source": "prediction_market",
-                "timestamp": ts,
-                "detail": signal.get("detail", ""),
-            })
-    except Exception as e:
-        logger.warning(f"Error loading prediction market signals: {e}")
+            for signal in data.get("signals", []):
+                symbol = signal.get("symbol", "")
+                if not symbol:
+                    continue
+                signals.append({
+                    "symbol": symbol,
+                    "direction": signal.get("direction", "bullish"),
+                    "strength": signal.get("strength", 0.5),
+                    "source": "prediction_market",
+                    "timestamp": ts,
+                    "detail": signal.get("detail", ""),
+                })
+        except Exception as e:
+            logger.warning(f"Error loading legacy prediction market signals: {e}")
 
     return signals
 
@@ -462,6 +494,7 @@ def get_source_freshness(sources: dict[str, str]) -> dict:
         "signals": RESULTS_DIR / "live" / "research" / "signals.json",
         "alt_data": RESULTS_DIR / "live" / "research" / "alt_data.json",
         "prediction_markets": RESULTS_DIR / "social" / "prediction_markets.json",
+        "prediction_market_signals": RESULTS_DIR / "live" / "prediction_market_signals.json",
         "news_cache": RESULTS_DIR / "live" / "news_cache.json",
         "state": RESULTS_DIR / "live" / "state.json",
     }

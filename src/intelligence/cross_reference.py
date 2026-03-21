@@ -200,6 +200,7 @@ class CrossReferenceEngine:
         alerts.extend(self.check_conviction_price_divergence())
         alerts.extend(self.check_concentration_catalyst())
         alerts.extend(self.check_regulatory_ceiling())
+        alerts.extend(self.check_prediction_market_divergence())
 
         # Deduplicate against existing alerts
         alerts = self._dedup_alerts(alerts)
@@ -642,6 +643,88 @@ class CrossReferenceEngine:
                         "regulatory_headlines": headlines[:3],
                     },
                 ))
+
+        return alerts
+
+    def check_prediction_market_divergence(self) -> list[CrossReferenceAlert]:
+        """Prediction market probability significantly diverges from thesis conviction.
+
+        Reads prediction_market_signals.json and surfaces thesis_divergence signals
+        as cross-reference alerts. This warns when the aggregated market view
+        disagrees with our thesis conviction by 30%+.
+
+        Example: Ceasefire market at 40% implies 60% war continues.
+        Our Iran War thesis at 95% conviction. Divergence = 35%.
+        Alert: "The market disagrees with you."
+        """
+        alerts = []
+
+        pm_file = paths.live / "prediction_market_signals.json"
+        if not pm_file.exists():
+            return alerts
+
+        try:
+            data = json.loads(pm_file.read_text())
+        except Exception as e:
+            logger.debug(f"Prediction market signals not available: {e}")
+            return alerts
+
+        # Look for thesis_divergence signals
+        for sig in data.get("signals", []):
+            if sig.get("signal_type") != "thesis_divergence":
+                continue
+
+            thesis_name = sig.get("matched_thesis", "")
+            probability = sig.get("current_probability", 0.5)
+            strength = sig.get("signal_strength", 0)
+            direction = sig.get("signal_direction", "")
+            question = sig.get("question", "")
+            source = sig.get("source", "unknown")
+            symbols = sig.get("matched_thesis_symbols", [])
+
+            if strength < 0.3:
+                continue  # Only flag significant divergences
+
+            severity = SEVERITY_RED_FLAG if strength >= 0.7 else SEVERITY_WARNING
+
+            # Find thesis conviction for the description
+            thesis_conviction = None
+            for thesis in self.theses:
+                if thesis.name == thesis_name:
+                    thesis_conviction = thesis.conviction
+                    break
+
+            conviction_str = f" (our conviction: {thesis_conviction:.0f}%)" if thesis_conviction else ""
+
+            alerts.append(CrossReferenceAlert(
+                alert_id=_make_alert_id("prediction_market_divergence", symbols or [thesis_name]),
+                alert_type="prediction_market_divergence",
+                severity=severity,
+                title=f"Prediction Market Divergence: {thesis_name}",
+                description=(
+                    f"Prediction market ({source}) '{question[:80]}' at "
+                    f"{probability:.0%} diverges from thesis '{thesis_name}'"
+                    f"{conviction_str}. "
+                    f"The market is {direction} relative to our view. "
+                    f"This is a blind spot warning — aggregated market intelligence "
+                    f"disagrees with our position."
+                ),
+                symbols=symbols,
+                theses=[thesis_name],
+                data_sources_used=["prediction_market_signals.json", "theses"],
+                recommended_action=(
+                    f"Review thesis '{thesis_name}' in light of market pricing. "
+                    f"Either the market is wrong (opportunity) or we have a blind spot (risk)."
+                ),
+                evidence={
+                    "market_probability": probability,
+                    "thesis_conviction": thesis_conviction,
+                    "signal_strength": strength,
+                    "question": question,
+                    "source": source,
+                    "url": sig.get("url", ""),
+                },
+            ))
 
         return alerts
 
