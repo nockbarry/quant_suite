@@ -103,7 +103,7 @@ install_auto() {
     echo ""
 
     # Get existing crontab (without our auto entries and orphaned standalone entries)
-    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "readiness_check.py" | grep -v "auto_corrections.py" | grep -v "@reboot.*athena_scheduler")
+    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "readiness_check.py" | grep -v "auto_corrections.py" | grep -v "run_prediction_markets.py" | grep -v "@reboot.*athena_scheduler")
 
     # Create new crontab
     {
@@ -156,6 +156,10 @@ install_auto() {
         echo "$CRON_AUTO_MARKER - Signal Scan (Python + Prediction Markets)"
         echo "# Scan WSB, Stocktwits, prediction markets, thesis suggestions every 2 hours"
         echo "0 6,8,10,12,14,16 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_signal_scan.py >> $LOG_DIR/signal_scan.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Prediction Market Signals"
+        echo "# Thesis-matched prediction market signals every 2 hours"
+        echo "5 6,8,10,12,14,16 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/run_prediction_markets.py >> $LOG_DIR/prediction_markets.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Signal Scan Claude (Morning + Afternoon)"
         echo "# LLM analysis of social signals at 10:30 AM and 2:30 PM ET (Mon-Fri)"
@@ -221,7 +225,7 @@ install_auto() {
 remove_auto() {
     echo "Removing autonomous Claude session cron jobs..."
 
-    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "readiness_check.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "auto_corrections.py" | grep -v "@reboot.*athena_scheduler" | crontab -
+    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "readiness_check.py" | grep -v "cron_prediction_scorer" | grep -v "cron_belief_update" | grep -v "auto_corrections.py" | grep -v "run_prediction_markets.py" | grep -v "@reboot.*athena_scheduler" | crontab -
 
     echo "Autonomous cron jobs removed."
 }

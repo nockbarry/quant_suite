@@ -563,6 +563,61 @@ else:
     print("No market mover data available. Run: PYTHONPATH=. python3 scripts/cron_market_movers.py")
 ```
 
+### Step 1.11: Check Prediction Market Signals (NEW - Added 2026-03-21)
+
+Review thesis-relevant prediction market probabilities and detect divergences:
+
+```python
+import json
+from pathlib import Path
+
+pm_file = Path.home() / "quant_results" / "live" / "prediction_market_signals.json"
+if pm_file.exists():
+    with open(pm_file) as f:
+        pm_data = json.load(f)
+
+    print(f"=== PREDICTION MARKETS ({pm_data.get('matched_market_count', 0)} thesis-matched markets) ===")
+
+    # Thesis-implied probabilities (market's view of our theses)
+    thesis_probs = pm_data.get("thesis_probabilities", {})
+    if thesis_probs:
+        print("\nMarket View of Active Theses:")
+        for thesis_name, info in thesis_probs.items():
+            implied = info.get("implied_probability", 0.5)
+            count = info.get("market_count", 0)
+            print(f"  {thesis_name}: {implied:.0%} implied probability ({count} markets)")
+            for mkt in info.get("markets", [])[:2]:
+                print(f"    - {mkt}")
+
+    # Actionable signals (probability shifts > 5% or thesis divergences)
+    signals = pm_data.get("signals", [])
+    if signals:
+        print(f"\nActionable Signals ({len(signals)}):")
+        for sig in signals[:8]:
+            sig_type = sig.get("signal_type", "")
+            if sig_type == "probability_shift":
+                change = sig.get("probability_change_24h", 0)
+                print(f"  [{sig.get('signal_direction', '?').upper()}] "
+                      f"{sig.get('matched_thesis', '?')}: "
+                      f"{sig.get('question', '')[:60]} "
+                      f"({sig.get('current_probability', 0):.0%}, {change:+.1%} change)")
+            elif sig_type == "thesis_divergence":
+                print(f"  [DIVERGENCE] {sig.get('matched_thesis', '?')}: "
+                      f"{sig.get('question', '')[:60]} — "
+                      f"market at {sig.get('current_probability', 0):.0%}, "
+                      f"strength={sig.get('signal_strength', 0):.2f}")
+    else:
+        print("\nNo actionable signals (no shifts > 5% or divergences > 30%)")
+else:
+    print("No prediction market data. Run: PYTHONPATH=. python3 scripts/run_prediction_markets.py")
+```
+
+**Key things to check:**
+- **Probability shifts > 10%**: Something major may have happened overnight
+- **Thesis divergences**: When markets disagree with our conviction by 30%+, investigate
+- **Ceasefire/peace probabilities**: Directly affects Iran War, Defense, Energy theses
+- **Fed rate cut probabilities**: Affects interest rate sensitive positions
+
 ### Step 2: Web Search for Overnight News
 ```
 Search: "stock market news today [current date]"
