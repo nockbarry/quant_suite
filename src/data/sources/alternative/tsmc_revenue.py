@@ -264,22 +264,22 @@ class TSMCRevenueCollector:
                 if data.empty:
                     return {"price": 0, "change_5d": 0, "change_20d": 0, "high_52w": 0, "pct_from_high": 0}
 
-                close = data["Close"].dropna()
-                if close.empty:
+                close = data["Close"].dropna().values.flatten()
+                if len(close) == 0:
                     return {"price": 0, "change_5d": 0, "change_20d": 0, "high_52w": 0, "pct_from_high": 0}
 
-                latest = float(close.iloc[-1])
+                latest = float(close[-1])
                 high_52w = float(close.max())
                 pct_from_high = ((latest - high_52w) / high_52w) * 100 if high_52w > 0 else 0
 
                 chg_5d = 0.0
                 if len(close) >= 6:
-                    prev = float(close.iloc[-6])
+                    prev = float(close[-6])
                     chg_5d = ((latest - prev) / prev) * 100 if prev > 0 else 0
 
                 chg_20d = 0.0
                 if len(close) >= 21:
-                    prev = float(close.iloc[-21])
+                    prev = float(close[-21])
                     chg_20d = ((latest - prev) / prev) * 100 if prev > 0 else 0
 
                 return {

@@ -248,11 +248,11 @@ class EUGasStorageCollector:
                 data = yf.download("UNG", period="10d", progress=False)
                 if data.empty:
                     return 0.0, 0.0
-                series = data["Close"].dropna()
-                latest = float(series.iloc[-1])
+                series = data["Close"].dropna().values.flatten()
+                latest = float(series[-1])
                 chg = 0.0
                 if len(series) >= 6:
-                    prev = float(series.iloc[-6])
+                    prev = float(series[-6])
                     chg = ((latest - prev) / prev) * 100 if prev > 0 else 0.0
                 return latest, chg
             except Exception:

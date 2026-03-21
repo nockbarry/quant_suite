@@ -225,9 +225,9 @@ class FedWatchCollector:
             try:
                 data = yf.download(ticker, period="5d", progress=False)
                 if not data.empty:
-                    series = data["Close"].dropna()
-                    if not series.empty:
-                        results[label] = float(series.iloc[-1])
+                    series = data["Close"].dropna().values.flatten()
+                    if len(series) > 0:
+                        results[label] = float(series[-1])
             except Exception as e:
                 logger.debug(f"Could not fetch {ticker}: {e}")
         return results
