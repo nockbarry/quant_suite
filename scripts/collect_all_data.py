@@ -368,6 +368,118 @@ async def collect_sec_insider():
         return {"sec_insider": {"error": str(e)}}
 
 
+async def collect_yield_curve():
+    """Collect Treasury yield curve, dollar index, and real yields."""
+    try:
+        from src.data.sources.alternative.yield_curve import YieldCurveCollector
+        collector = YieldCurveCollector()
+        snapshot = await collector.collect()
+        return {"yield_curve": {
+            "ten_year": snapshot.ten_year,
+            "spread_2y10y": snapshot.spread_2y10y,
+            "dxy": snapshot.dxy,
+            "dxy_change_5d": snapshot.dxy_change_5d,
+            "tips_yield": snapshot.tips_yield,
+            "curve_status": snapshot.curve_status,
+            "data_quality": snapshot.data_quality,
+        }}
+    except Exception as e:
+        logger.error(f"Yield curve collection failed: {e}")
+        return {"yield_curve": {"error": str(e)}}
+
+
+async def collect_usda_reports():
+    """Collect USDA crop reports and planting progress."""
+    try:
+        from src.data.sources.alternative.usda_reports import USDACollector
+        collector = USDACollector()
+        snapshot = await collector.collect()
+        return {"usda_reports": {
+            "crop_relevant": snapshot.crop_relevant,
+            "thesis_matched": snapshot.thesis_matched,
+            "feeds_succeeded": snapshot.feeds_succeeded,
+            "data_quality": snapshot.data_quality,
+        }}
+    except Exception as e:
+        logger.error(f"USDA reports collection failed: {e}")
+        return {"usda_reports": {"error": str(e)}}
+
+
+async def collect_centcom():
+    """Collect CENTCOM military operations press releases."""
+    try:
+        from src.data.sources.alternative.centcom_feed import CentcomCollector
+        collector = CentcomCollector()
+        snapshot = await collector.collect()
+        return {"centcom": {
+            "total_found": snapshot.total_found,
+            "urgent_count": snapshot.urgent_count,
+            "thesis_matched": snapshot.thesis_matched,
+            "data_quality": snapshot.data_quality,
+        }}
+    except Exception as e:
+        logger.error(f"CENTCOM collection failed: {e}")
+        return {"centcom": {"error": str(e)}}
+
+
+async def collect_eu_gas_storage():
+    """Collect European gas storage levels."""
+    try:
+        from src.data.sources.alternative.eu_gas_storage import EUGasStorageCollector
+        collector = EUGasStorageCollector()
+        snapshot = await collector.collect()
+        return {"eu_gas_storage": {
+            "eu_storage_pct": snapshot.eu_storage_pct,
+            "trend": snapshot.trend,
+            "days_of_supply": snapshot.days_of_supply_estimate,
+            "storage_risk": snapshot.storage_risk,
+            "ung_price": snapshot.ung_price,
+            "data_quality": snapshot.data_quality,
+        }}
+    except Exception as e:
+        logger.error(f"EU gas storage collection failed: {e}")
+        return {"eu_gas_storage": {"error": str(e)}}
+
+
+async def collect_fedwatch():
+    """Collect CME FedWatch rate probabilities."""
+    try:
+        from src.data.sources.alternative.fedwatch_scraper import FedWatchCollector
+        collector = FedWatchCollector()
+        snapshot = await collector.collect()
+        return {"fedwatch": {
+            "current_rate": snapshot.current_rate,
+            "implied_cuts_2026": snapshot.implied_cuts_2026,
+            "implied_rate_yearend": snapshot.implied_rate_yearend,
+            "market_expectation": snapshot.market_expectation,
+            "next_meeting": snapshot.next_meeting_date,
+            "data_quality": snapshot.data_quality,
+        }}
+    except Exception as e:
+        logger.error(f"FedWatch collection failed: {e}")
+        return {"fedwatch": {"error": str(e)}}
+
+
+async def collect_tsmc_revenue():
+    """Collect TSMC monthly revenue data."""
+    try:
+        from src.data.sources.alternative.tsmc_revenue import TSMCRevenueCollector
+        collector = TSMCRevenueCollector()
+        snapshot = await collector.collect()
+        return {"tsmc_revenue": {
+            "latest_month": snapshot.latest_month,
+            "yoy_growth_pct": snapshot.yoy_growth_pct,
+            "tsm_price": snapshot.tsm_price,
+            "tsm_change_5d": snapshot.tsm_change_5d,
+            "semi_cycle_signal": snapshot.semi_cycle_signal,
+            "is_revenue_day": snapshot.is_revenue_day,
+            "data_quality": snapshot.data_quality,
+        }}
+    except Exception as e:
+        logger.error(f"TSMC revenue collection failed: {e}")
+        return {"tsmc_revenue": {"error": str(e)}}
+
+
 async def collect_treasury():
     """Collect OFAC/Treasury sanctions and press release alerts."""
     try:
@@ -562,6 +674,12 @@ async def collect_all(quick: bool = False):
         "hormuz_status": collect_hormuz_status(),
         "sec_insider": collect_sec_insider(),
         "treasury": collect_treasury(),
+        "yield_curve": collect_yield_curve(),
+        "usda_reports": collect_usda_reports(),
+        "centcom": collect_centcom(),
+        "eu_gas_storage": collect_eu_gas_storage(),
+        "fedwatch": collect_fedwatch(),
+        "tsmc_revenue": collect_tsmc_revenue(),
         "daemon": collect_from_daemon(),
     }
 

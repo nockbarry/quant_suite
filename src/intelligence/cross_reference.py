@@ -201,6 +201,7 @@ class CrossReferenceEngine:
         alerts.extend(self.check_concentration_catalyst())
         alerts.extend(self.check_regulatory_ceiling())
         alerts.extend(self.check_prediction_market_divergence())
+        alerts.extend(self.check_yield_curve_thesis_alignment())
 
         # Deduplicate against existing alerts
         alerts = self._dedup_alerts(alerts)
@@ -723,6 +724,162 @@ class CrossReferenceEngine:
                     "question": question,
                     "source": source,
                     "url": sig.get("url", ""),
+                },
+            ))
+
+        return alerts
+
+    def check_yield_curve_thesis_alignment(self) -> list[CrossReferenceAlert]:
+        """Check if yield curve signals align with thesis positioning.
+
+        Cross-references yield curve data with portfolio theses:
+        - Inverted curve + long growth stocks = WARNING
+        - Rising real yields + large gold position = WARNING
+        - Dollar strengthening + heavy EM/commodity exposure = WARNING
+        - Inverted curve + recession-vulnerable theses = WARNING
+
+        Reads from yield_curve.json — NO network calls.
+        """
+        alerts = []
+
+        yc_path = paths.live / "yield_curve.json"
+        if not yc_path.exists():
+            return alerts
+
+        try:
+            yc = json.loads(yc_path.read_text())
+        except Exception as e:
+            logger.debug(f"Yield curve data not available: {e}")
+            return alerts
+
+        curve_status = yc.get("curve_status", "normal")
+        spread_2y10y = yc.get("spread_2y10y", 0)
+        dxy_change_5d = yc.get("dxy_change_5d", 0)
+        dxy_change_20d = yc.get("dxy_change_20d", 0)
+        tips_yield = yc.get("tips_yield", 0)
+        tips_change_5d = yc.get("tips_change_5d", 0)
+        dxy = yc.get("dxy", 0)
+
+        # Build thesis name -> weight mapping
+        thesis_weights: dict[str, float] = {}
+        thesis_symbols_map: dict[str, list[str]] = {}
+        pos_by_symbol = {p["symbol"]: p for p in self.positions}
+
+        for thesis in self.theses:
+            weight = 0.0
+            syms = []
+            for sym in thesis.positions:
+                pos = pos_by_symbol.get(sym)
+                if pos:
+                    weight += pos.get("weight_pct", 0)
+                    syms.append(sym)
+            thesis_weights[thesis.name] = weight
+            thesis_symbols_map[thesis.name] = syms
+
+        # --- Check 1: Inverted curve + growth stock exposure ---
+        if curve_status == "inverted" and spread_2y10y < -0.2:
+            growth_symbols = ["NVDA", "AMD", "GOOGL", "MSFT", "META", "AMZN", "TSM", "MU"]
+            growth_weight = sum(
+                pos_by_symbol.get(s, {}).get("weight_pct", 0) for s in growth_symbols
+            )
+
+            if growth_weight >= 10:
+                alerts.append(CrossReferenceAlert(
+                    alert_id=_make_alert_id("yield_curve_growth", growth_symbols[:3]),
+                    alert_type="yield_curve_growth_warning",
+                    severity=SEVERITY_WARNING,
+                    title=f"Inverted Curve + {growth_weight:.0f}% Growth Exposure",
+                    description=(
+                        f"Yield curve is inverted (2y10y spread {spread_2y10y:+.3f}%), "
+                        f"a recession signal. Portfolio has {growth_weight:.1f}% in growth "
+                        f"stocks which are most vulnerable to recession. Consider reducing "
+                        f"growth exposure or hedging."
+                    ),
+                    symbols=[s for s in growth_symbols if s in pos_by_symbol],
+                    theses=[t.name for t in self.theses
+                            if any(s in t.positions for s in growth_symbols)],
+                    data_sources_used=["yield_curve.json", "state.json"],
+                    recommended_action=(
+                        "Review growth positions. Inverted curve historically precedes "
+                        "recession by 6-18 months. Do not add to growth positions."
+                    ),
+                    evidence={
+                        "spread_2y10y": spread_2y10y,
+                        "curve_status": curve_status,
+                        "growth_weight_pct": round(growth_weight, 1),
+                    },
+                ))
+
+        # --- Check 2: Rising real yields + large gold position ---
+        gold_symbols = ["GLD", "IAU", "GOLD", "NEM", "AEM", "RGLD", "WPM"]
+        gold_weight = sum(
+            pos_by_symbol.get(s, {}).get("weight_pct", 0) for s in gold_symbols
+        )
+
+        if tips_change_5d > 10 and gold_weight >= 8:
+            # Real yields rising > 10bps in a week with significant gold exposure
+            alerts.append(CrossReferenceAlert(
+                alert_id=_make_alert_id("yield_curve_gold", ["GLD"]),
+                alert_type="real_yield_gold_warning",
+                severity=SEVERITY_WARNING,
+                title=f"Rising Real Yields + {gold_weight:.0f}% Gold Exposure",
+                description=(
+                    f"Real yields rose {tips_change_5d:+.0f}bps in 5 days (now {tips_yield:.3f}%). "
+                    f"Rising real yields are the primary headwind for gold. "
+                    f"Portfolio has {gold_weight:.1f}% gold exposure. "
+                    f"If real yields continue rising, gold may face pressure."
+                ),
+                symbols=[s for s in gold_symbols if s in pos_by_symbol],
+                theses=[t.name for t in self.theses
+                        if any(s in t.positions for s in gold_symbols)],
+                data_sources_used=["yield_curve.json", "state.json"],
+                recommended_action=(
+                    "Monitor real yield trend. If thesis is de-dollarization/war driven, "
+                    "real yields may be less relevant. But if yield-driven, tighten stops."
+                ),
+                evidence={
+                    "tips_yield": tips_yield,
+                    "tips_change_5d_bps": tips_change_5d,
+                    "gold_weight_pct": round(gold_weight, 1),
+                },
+            ))
+
+        # --- Check 3: Dollar strengthening + heavy EM/commodity exposure ---
+        commodity_symbols = [
+            "SLB", "HAL", "XOM", "CVX", "FRO", "DHT", "STNG",
+            "CF", "MOS", "NTR", "FCX", "VALE", "BHP",
+            "EWZ", "PBR",  # Brazil/EM
+        ]
+        commodity_weight = sum(
+            pos_by_symbol.get(s, {}).get("weight_pct", 0) for s in commodity_symbols
+        )
+
+        if dxy_change_5d > 2.0 and commodity_weight >= 15:
+            alerts.append(CrossReferenceAlert(
+                alert_id=_make_alert_id("yield_curve_dollar", ["DXY"]),
+                alert_type="dollar_commodity_warning",
+                severity=SEVERITY_WARNING,
+                title=f"Dollar Surging + {commodity_weight:.0f}% Commodity/EM Exposure",
+                description=(
+                    f"Dollar index surged {dxy_change_5d:+.1f}% in 5 days (DXY={dxy:.1f}). "
+                    f"Strong dollar is a headwind for commodities and EM stocks. "
+                    f"Portfolio has {commodity_weight:.1f}% commodity/EM exposure. "
+                    f"Dollar strength may compress commodity margins."
+                ),
+                symbols=[s for s in commodity_symbols if s in pos_by_symbol],
+                theses=[t.name for t in self.theses
+                        if any(s in t.positions for s in commodity_symbols)],
+                data_sources_used=["yield_curve.json", "state.json"],
+                recommended_action=(
+                    "If dollar strength is driven by risk-off, this compounds commodity "
+                    "weakness. If driven by rate differentials, may be temporary. "
+                    "Do not add to commodity positions while DXY is accelerating."
+                ),
+                evidence={
+                    "dxy": dxy,
+                    "dxy_change_5d": dxy_change_5d,
+                    "dxy_change_20d": dxy_change_20d,
+                    "commodity_weight_pct": round(commodity_weight, 1),
                 },
             ))
 

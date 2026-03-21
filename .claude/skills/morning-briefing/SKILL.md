@@ -618,6 +618,125 @@ else:
 - **Ceasefire/peace probabilities**: Directly affects Iran War, Defense, Energy theses
 - **Fed rate cut probabilities**: Affects interest rate sensitive positions
 
+### Step 1.12: Check Macro & Thesis Data Sources (NEW - Added 2026-03-21)
+
+Read yield curve, USDA, CENTCOM, EU gas storage, and FedWatch data:
+
+```python
+import json
+from pathlib import Path
+
+live = Path.home() / "quant_results" / "live"
+
+# 1. Yield Curve — recession signal, gold driver, Fed thesis
+yc_file = live / "yield_curve.json"
+if yc_file.exists():
+    with open(yc_file) as f:
+        yc = json.load(f)
+    print(f"=== YIELD CURVE ({yc.get('curve_status', '?').upper()}) ===")
+    print(f"  10yr: {yc.get('ten_year', 0):.3f}%  |  2y10y spread: {yc.get('spread_2y10y', 0):+.3f}")
+    print(f"  3m10y spread: {yc.get('spread_3m10y', 0):+.3f}  |  30yr: {yc.get('thirty_year', 0):.3f}%")
+    print(f"  DXY: {yc.get('dxy', 0):.2f} ({yc.get('dxy_change_5d', 0):+.1f}% 5d, {yc.get('dxy_change_20d', 0):+.1f}% 20d)")
+    print(f"  Real yield: {yc.get('tips_yield', 0):.3f}% ({yc.get('tips_change_5d', 0):+.1f}bps 5d)")
+    if yc.get("curve_status") == "inverted":
+        print("  WARNING: Yield curve inverted — recession signal active")
+    if yc.get("dxy_change_5d", 0) > 1.5:
+        print("  WARNING: Dollar strengthening rapidly — headwind for gold/EM")
+    if yc.get("dxy_change_5d", 0) < -1.5:
+        print("  SIGNAL: Dollar weakening — tailwind for gold thesis")
+else:
+    print("No yield curve data. Run: PYTHONPATH=. python3 scripts/collect_all_data.py")
+
+# 2. FedWatch — rate probability, Fed thesis signal
+fw_file = live / "fedwatch.json"
+if fw_file.exists():
+    with open(fw_file) as f:
+        fw = json.load(f)
+    print(f"\n=== FEDWATCH ({fw.get('market_expectation', '?').upper()}) ===")
+    print(f"  Current rate: {fw.get('current_rate', 0)}%  |  Next FOMC: {fw.get('next_meeting_date', '?')}")
+    print(f"  Cuts priced 2026: {fw.get('implied_cuts_2026', 0):.1f}  |  Year-end rate: {fw.get('implied_rate_yearend', 0):.3f}%")
+    for mtg in fw.get("meetings", [])[:3]:
+        print(f"  {mtg['meeting_date']}: cut={mtg['cut_probability']:.0%} hold={mtg['hold_probability']:.0%} hike={mtg['hike_probability']:.0%}")
+else:
+    print("\nNo FedWatch data available.")
+
+# 3. CENTCOM — military operations, Iran war thesis
+cc_file = live / "centcom_alerts.json"
+if cc_file.exists():
+    with open(cc_file) as f:
+        cc = json.load(f)
+    urgent = cc.get("urgent_count", 0)
+    total = cc.get("total_found", 0)
+    print(f"\n=== CENTCOM ALERTS ({total} total, {urgent} URGENT) ===")
+    for alert in cc.get("alerts", [])[:5]:
+        marker = "URGENT" if alert.get("is_urgent") else "info"
+        theses = ", ".join(alert.get("matched_thesis", []))
+        print(f"  [{marker}] {alert.get('title', '')[:80]}")
+        if theses:
+            print(f"         Theses: {theses}")
+    if urgent > 0:
+        print(f"  WARNING: {urgent} urgent CENTCOM alerts — check Iran/defense thesis impact")
+else:
+    print("\nNo CENTCOM data available.")
+
+# 4. EU Gas Storage — LNG/energy thesis
+gs_file = live / "eu_gas_storage.json"
+if gs_file.exists():
+    with open(gs_file) as f:
+        gs = json.load(f)
+    print(f"\n=== EU GAS STORAGE ({gs.get('storage_risk', '?').upper()} risk) ===")
+    print(f"  Storage: {gs.get('eu_storage_pct', 0):.1f}% full ({gs.get('storage_volume_twh', 0):.0f} TWh)")
+    print(f"  Trend: {gs.get('trend', '?')}  |  Net flow: {gs.get('injection_withdrawal_gwh', 0):+.0f} GWh/day")
+    print(f"  Days of supply: {gs.get('days_of_supply_estimate', 0):.0f}  |  YoY: {gs.get('yoy_comparison', 0):+.1f}pp")
+    print(f"  UNG: ${gs.get('ung_price', 0):.2f} ({gs.get('ung_change_5d', 0):+.1f}% 5d)")
+    if gs.get("storage_risk") in ("low", "critical"):
+        print(f"  WARNING: EU gas storage {gs['storage_risk']} — LNG demand signal")
+else:
+    print("\nNo EU gas storage data available.")
+
+# 5. USDA Reports — fertilizer agflation thesis
+usda_file = live / "usda_reports.json"
+if usda_file.exists():
+    with open(usda_file) as f:
+        usda = json.load(f)
+    relevant = usda.get("crop_relevant", 0)
+    thesis = usda.get("thesis_matched", 0)
+    print(f"\n=== USDA REPORTS ({relevant} crop-relevant, {thesis} thesis-matched) ===")
+    for report in usda.get("reports", [])[:5]:
+        theses = ", ".join(report.get("matched_thesis", []))
+        cat = report.get("category", "other")
+        print(f"  [{cat}] {report.get('title', '')[:80]}")
+        if theses:
+            print(f"       Theses: {theses}")
+else:
+    print("\nNo USDA report data available.")
+
+# 6. TSMC Revenue — semiconductor/HBM thesis
+tsmc_file = live / "tsmc_revenue.json"
+if tsmc_file.exists():
+    with open(tsmc_file) as f:
+        tsmc = json.load(f)
+    print(f"\n=== TSMC REVENUE ({tsmc.get('semi_cycle_signal', '?').upper()}) ===")
+    print(f"  Latest: {tsmc.get('latest_month', '?')} TWD {tsmc.get('latest_revenue_twd_b', 0):.1f}B "
+          f"(YoY {tsmc.get('yoy_growth_pct', 0):+.1f}%, MoM {tsmc.get('mom_growth_pct', 0):+.1f}%)")
+    print(f"  TSM: ${tsmc.get('tsm_price', 0):.2f} ({tsmc.get('tsm_change_5d', 0):+.1f}% 5d) "
+          f"| {tsmc.get('tsm_pct_from_high', 0):+.1f}% from 52w high")
+    if tsmc.get("is_revenue_day"):
+        print("  NOTE: Revenue release window — check TSMC IR for new monthly figure")
+    print(f"  Next revenue: {tsmc.get('next_revenue_date', '?')}")
+else:
+    print("\nNo TSMC revenue data available.")
+```
+
+**Key things to check:**
+- **Yield curve inverted** + long growth stocks = WARNING (rotate to defensives)
+- **Rising real yields** + large gold position = headwind for Gold thesis
+- **Dollar strengthening** + heavy EM/commodity exposure = WARNING
+- **CENTCOM urgent alerts** = immediate check on Iran/defense theses
+- **EU gas storage critical** = validates LNG demand thesis
+- **FedWatch dovish shift** = bonds rally, growth stocks benefit
+- **TSMC revenue acceleration** = HBM/semi cycle thesis confirmation
+
 ### Step 2: Web Search for Overnight News
 ```
 Search: "stock market news today [current date]"
