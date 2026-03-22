@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """Claude Execute - Trade execution interface for Claude's autonomous operation.
 
+# DEPRECATED: superseded by scheduler/swarm/session path
+# Canonical execution path:
+#   DecisionRecord → run_ensemble.py → cron_auto_execute.py → AlpacaBroker
+# This script bypasses ensemble validation and DecisionRecord logging.
+# The 'check' and 'status' commands are still useful for debugging,
+# but 'execute' should NOT be used for live trading.
+
 This script provides Claude with a simple interface to:
 1. Check if a trade is allowed under current safety rails
 2. Execute trades with proper logging

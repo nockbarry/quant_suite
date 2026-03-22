@@ -97,7 +97,7 @@ for inst in instances:
     if inst == 'auto':
         state_path = paths.live_state
     else:
-        state_path = Path.home() / f'quant_results_{inst}' / 'live' / 'state.json'
+        state_path = Path.home() / f'quant_results_{inst}' / 'live' / 'state.json'  # Multi-instance glob - intentional
     if state_path.exists():
         with open(state_path) as f:
             data = json.load(f)

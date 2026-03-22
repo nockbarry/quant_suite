@@ -348,6 +348,12 @@ class AutonomousOperator:
         dry_run: bool = False,
     ) -> ExecutionResult:
         """
+        # DEPRECATED: superseded by scheduler/swarm/session path
+        # Canonical execution path:
+        #   DecisionRecord → run_ensemble.py → cron_auto_execute.py → AlpacaBroker
+        # This method bypasses ensemble validation and DecisionRecord logging.
+        # Use create_decision() + cron_auto_execute.py instead.
+
         Execute a trade proposal with safety checks.
 
         Args:
@@ -360,6 +366,13 @@ class AutonomousOperator:
         Returns:
             ExecutionResult with success/failure details
         """
+        import warnings
+        warnings.warn(
+            "AutonomousOperator.execute_trade() is deprecated. "
+            "Use create_decision() + cron_auto_execute.py instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Check if allowed
         allowed, reason = self.check_trade_allowed(
             proposal, portfolio_value, current_positions, daily_pnl_pct

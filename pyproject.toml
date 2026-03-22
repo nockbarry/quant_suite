@@ -124,8 +124,10 @@ notebook = [
     "ipywidgets>=8.1.0",
 ]
 
-[project.scripts]
-quant = "quant_suite.cli:main"
+# Console entrypoint removed — no quant_suite.cli module exists.
+# Use scripts/ directly: PYTHONPATH=. python3 scripts/<script>.py
+# [project.scripts]
+# quant = "quant_suite.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
@@ -146,5 +148,6 @@ warn_unused_ignores = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "-v --cov=src --cov-report=term-missing"
+addopts = "-v"

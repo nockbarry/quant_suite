@@ -571,7 +571,7 @@ Review thesis-relevant prediction market probabilities and detect divergences:
 import json
 from pathlib import Path
 
-pm_file = Path.home() / "quant_results" / "live" / "prediction_market_signals.json"
+pm_file = paths.live / "prediction_market_signals.json"
 if pm_file.exists():
     with open(pm_file) as f:
         pm_data = json.load(f)
@@ -626,7 +626,7 @@ Read yield curve, USDA, CENTCOM, EU gas storage, and FedWatch data:
 import json
 from pathlib import Path
 
-live = Path.home() / "quant_results" / "live"
+live = paths.live
 
 # 1. Yield Curve — recession signal, gold driver, Fed thesis
 yc_file = live / "yield_curve.json"
