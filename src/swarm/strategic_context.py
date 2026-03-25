@@ -401,7 +401,7 @@ class StrategicContext:
         cutoff = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
         upcoming = [c for c in catalysts if c.get("date", "") <= cutoff and c.get("date", "") >= datetime.now().strftime("%Y-%m-%d")]
         if upcoming:
-            cat_texts = [f"{c['date']}: {c['event']}" for c in upcoming[:3]]
+            cat_texts = [f"{c.get('date', '?')}: {c.get('event', c.get('description', '?'))}" for c in upcoming[:3]]
             parts.append(f"Upcoming catalysts: {', '.join(cat_texts)}")
 
         # Untested hypotheses

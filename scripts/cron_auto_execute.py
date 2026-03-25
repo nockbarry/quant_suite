@@ -182,10 +182,17 @@ async def _execute_one(
             qty = held_qty_fractional  # Fractional shares (remnants)
     elif action in ("SELL", "TRIM"):
         # Trim by size_pct, but never more than held
-        target_value = equity * (size_pct / 100.0)
-        qty = min(int(target_value / price), held_qty)
-        if qty < 1:
-            qty = 1
+        if size_pct >= 100.0 or held_qty < 1:
+            # Full exit or fractional remnant — sell everything
+            if held_qty >= 1:
+                qty = held_qty
+            else:
+                qty = held_qty_fractional  # Fractional shares (remnants)
+        else:
+            target_value = equity * (size_pct / 100.0)
+            qty = min(int(target_value / price), held_qty)
+            if qty < 1:
+                qty = 1
 
     logger.info(
         f"{'[DRY RUN] ' if dry_run else ''}"

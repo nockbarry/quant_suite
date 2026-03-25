@@ -171,8 +171,11 @@ def save_alerts(triggered: list[dict]):
 
     existing = []
     if alerts_file.exists():
-        with open(alerts_file) as f:
-            existing = json.load(f)
+        try:
+            with open(alerts_file) as f:
+                existing = json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            existing = []
 
     # Add new alerts (avoid duplicates)
     for alert in triggered:

@@ -563,9 +563,17 @@ class BugMonitor:
         """Save bug report to JSON file."""
         try:
             self.REPORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+            # Inline summary to avoid recursion (get_summary -> scan_all -> _save_report)
             report = {
                 "timestamp": datetime.now().isoformat(),
-                "summary": self.get_summary(),
+                "summary": {
+                    "total": len(self.bugs),
+                    "crashes": len([b for b in self.bugs if b.severity == "crash"]),
+                    "errors": len([b for b in self.bugs if b.severity == "error"]),
+                    "warnings": len([b for b in self.bugs if b.severity == "warning"]),
+                    "auto_fixable": len([b for b in self.bugs if b.auto_fixable and not b.fix_applied]),
+                    "recurring": len([b for b in self.bugs if b.occurrence_count >= 3]),
+                },
                 "bugs": [asdict(b) for b in self.bugs],
             }
             # Atomic write

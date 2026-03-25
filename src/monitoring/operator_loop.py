@@ -547,18 +547,37 @@ class OperatorLoop:
             return []
 
     def _write_trade_triggers(self, convergences: list[dict]) -> None:
-        """Write strong convergences as trade triggers for health monitor."""
+        """Write strong convergences as trade triggers for sentinel.
+
+        Deduplicates: won't write a trigger for a symbol that already has
+        an unconsumed trigger written in the last 2 hours.
+        """
         try:
             from src.monitoring.autonomous_mode import write_trade_trigger
+            triggers_path = self.results_dir / "scheduler" / "trade_triggers.json"
+
+            # Load existing triggers for dedup
+            existing_symbols: set[str] = set()
+            if triggers_path.exists():
+                with open(triggers_path) as f:
+                    data = json.load(f)
+                cutoff = (datetime.now() - timedelta(hours=2)).isoformat()
+                for t in data.get("triggers", []):
+                    created = t.get("created_at", "")
+                    if not t.get("consumed") and created > cutoff:
+                        existing_symbols.add(t.get("symbol", ""))
+
             for conv in convergences:
-                if conv.get("signal_count", 0) >= 4:
+                symbol = conv.get("symbol", "")
+                if conv.get("signal_count", 0) >= 4 and symbol not in existing_symbols:
                     write_trade_trigger(
-                        symbol=conv.get("symbol", ""),
+                        symbol=symbol,
                         direction=conv.get("direction", "unknown"),
                         signal_count=conv.get("signal_count", 0),
                         signals=conv.get("signals", []),
                         source="operator",
                     )
+                    existing_symbols.add(symbol)
         except Exception as e:
             logger.debug(f"Error writing trade triggers: {e}")
 

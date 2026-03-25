@@ -338,25 +338,28 @@ get_timeout() {
 }
 
 get_model() {
+    # Model tier policy:
+    #   opus   — primary instance trade decisions, weekly strategic reviews
+    #   sonnet — beta/gamma instances, research, monitoring, analysis, synthesis
+    # Beta/gamma use sonnet for trade-decision to save ~$1,200/month while still
+    # providing independent comparison signals for the parallel experiment.
     case "$SESSION_TYPE" in
-        morning-briefing)  echo "opus" ;;
-        trade-decision)    echo "opus" ;;
-        eod-review)        echo "opus" ;;
-        research)          echo "sonnet" ;;
-        thesis)            echo "sonnet" ;;
-        brainstorm)        echo "opus" ;;
-        signal-scan)       echo "sonnet" ;;
-        research-theory)   echo "sonnet" ;;
-        internal-review)   echo "sonnet" ;;
-        analyst)           echo "sonnet" ;;
-        theorist)          echo "opus" ;;
-        evening-research)  echo "opus" ;;
-        hypothesis-gen)    echo "opus" ;;
-        research-queue)    echo "sonnet" ;;
+        trade-decision)
+            if [ "$ATHENA_INSTANCE" = "auto" ] || [ -z "$ATHENA_INSTANCE" ]; then
+                echo "opus"
+            else
+                echo "sonnet"
+            fi
+            ;;
         system-review)     echo "opus" ;;
-        operator)          echo "sonnet" ;;
+        theorist)          echo "opus" ;;
         *)                 echo "sonnet" ;;
     esac
+}
+
+get_fallback_model() {
+    # When the primary model hits a rate limit, fall back to this
+    echo "sonnet"
 }
 
 get_skill_prompt() {
@@ -394,6 +397,7 @@ log_event('session_started', source='scheduler:$SESSION_TYPE', title='Session st
 
 TIMEOUT=$(get_timeout)
 MODEL=$(get_model)
+FALLBACK_MODEL=$(get_fallback_model)
 SKILL_PROMPT=$(get_skill_prompt)
 AUTO_PROMPT=$(build_autonomous_prompt "$SESSION_TYPE" "$TIMEOUT")
 
@@ -440,6 +444,48 @@ unset CLAUDECODE 2>/dev/null || true
 PROMPT_FILE=$(mktemp /tmp/athena_prompt_XXXXXX.txt)
 printf '%s' "$AUTO_PROMPT" | tr '\n' ' ' > "$PROMPT_FILE"
 
+# --- Run Claude with model fallback ---
+# If the primary model fails (rate limit / overloaded), retry with the fallback model.
+
+run_claude_with_fallback() {
+    local PROMPT="$1"
+    local CURRENT_MODEL="$MODEL"
+    local EXIT_CODE=0
+
+    log "Attempting with model=$CURRENT_MODEL"
+
+    # Capture both stdout and stderr so we can detect rate limit errors
+    local TMPOUT=$(mktemp /tmp/athena_claude_XXXXXX.out)
+
+    timeout --foreground "${TIMEOUT}m" claude \
+        --model "$CURRENT_MODEL" \
+        --dangerously-skip-permissions \
+        --append-system-prompt "$(cat "$PROMPT_FILE")" \
+        -p "$PROMPT" \
+        2>&1 | tee -a "$LOG_FILE" "$TMPOUT" || EXIT_CODE=$?
+
+    # Check for rate limit / overloaded errors
+    if [ $EXIT_CODE -ne 0 ] && [ "$CURRENT_MODEL" != "$FALLBACK_MODEL" ]; then
+        if grep -qi "rate.limit\|overloaded\|capacity\|too many\|429\|529\|limit.*reset" "$TMPOUT" 2>/dev/null; then
+            log "WARNING: $CURRENT_MODEL hit rate limit (exit=$EXIT_CODE), retrying with $FALLBACK_MODEL"
+            rm -f "$TMPOUT"
+
+            timeout --foreground "${TIMEOUT}m" claude \
+                --model "$FALLBACK_MODEL" \
+                --dangerously-skip-permissions \
+                --append-system-prompt "$(cat "$PROMPT_FILE")" \
+                -p "$PROMPT" \
+                2>&1 | tee -a "$LOG_FILE" || true
+
+            rm -f "$TMPOUT"
+            return 0
+        fi
+    fi
+
+    rm -f "$TMPOUT"
+    return 0
+}
+
 if [ "$SESSION_TYPE" = "operator" ]; then
     # Operator is long-running — runs with -p but the autonomous prompt
     # instructs Claude to implement a persistent monitoring loop with sleep
@@ -448,24 +494,14 @@ if [ "$SESSION_TYPE" = "operator" ]; then
     # when a previous operator session completed earlier the same day.
     log "Launching operator session (persistent loop via autonomous prompt)"
 
-    timeout --foreground "${TIMEOUT}m" claude \
-        --model "$MODEL" \
-        --dangerously-skip-permissions \
-        --append-system-prompt "$(cat "$PROMPT_FILE")" \
-        -p "/operator-session --active --session=$(date +%s)" \
-        2>&1 | tee -a "$LOG_FILE" || true
+    run_claude_with_fallback "/operator-session --active --session=$(date +%s)"
 
     log "Operator session ended"
 else
     # One-shot sessions use -p for non-interactive execution
     log "Launching one-shot: $SKILL_PROMPT"
 
-    timeout --foreground "${TIMEOUT}m" claude \
-        --model "$MODEL" \
-        --dangerously-skip-permissions \
-        --append-system-prompt "$(cat "$PROMPT_FILE")" \
-        -p "$SKILL_PROMPT" \
-        2>&1 | tee -a "$LOG_FILE" || true
+    run_claude_with_fallback "$SKILL_PROMPT"
 
     log "One-shot session completed"
 

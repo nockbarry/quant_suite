@@ -58,8 +58,76 @@ from src.intelligence.adaptive_triggers import AdaptiveTriggerEngine
 ONESHOT_TIMEOUT = 15 * 60  # 15 minutes
 OPERATOR_RESTART_COOLDOWN = 300  # 5 minutes
 STATE_STALE_THRESHOLD = 15 * 60  # 15 minutes
+TRADE_DECISION_COOLDOWN = 30 * 60  # 30 minutes between trade-decision launches
+OPERATOR_BACKOFF_THRESHOLD = 3  # restarts before engaging backoff
+OPERATOR_BACKOFF_WINDOW = 3600  # 1 hour window to count restarts
+OPERATOR_BACKOFF_DELAY = 900  # 15 minute backoff when threshold hit
 
-last_operator_restart = datetime.min
+# Persistent cooldown file — survives sentinel restarts (fixes runaway session bug)
+COOLDOWN_FILE = SCHEDULER_DIR / "sentinel_cooldowns.json"
+
+
+def _load_cooldowns() -> dict:
+    """Load cooldown timestamps from disk."""
+    try:
+        if COOLDOWN_FILE.exists():
+            data = json.loads(COOLDOWN_FILE.read_text())
+            return data
+    except (json.JSONDecodeError, OSError):
+        pass
+    return {}
+
+
+def _save_cooldowns(data: dict) -> None:
+    """Save cooldown timestamps to disk."""
+    try:
+        COOLDOWN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        COOLDOWN_FILE.write_text(json.dumps(data))
+    except OSError as e:
+        logger.error(f"Failed to save cooldowns: {e}")
+
+
+def _get_cooldown_time(key: str) -> datetime:
+    """Get a persisted cooldown timestamp."""
+    data = _load_cooldowns()
+    ts = data.get(key)
+    if ts:
+        try:
+            return datetime.fromisoformat(ts)
+        except ValueError:
+            pass
+    return datetime.min
+
+
+def _set_cooldown_time(key: str, when: datetime = None) -> None:
+    """Set a persisted cooldown timestamp."""
+    data = _load_cooldowns()
+    data[key] = (when or datetime.now()).isoformat()
+    _save_cooldowns(data)
+
+
+def _get_operator_restart_count() -> int:
+    """Count operator restarts within the backoff window."""
+    data = _load_cooldowns()
+    restarts = data.get("operator_restart_history", [])
+    cutoff = (datetime.now() - timedelta(seconds=OPERATOR_BACKOFF_WINDOW)).isoformat()
+    return len([t for t in restarts if t > cutoff])
+
+
+def _record_operator_restart() -> None:
+    """Record an operator restart for backoff tracking."""
+    data = _load_cooldowns()
+    restarts = data.get("operator_restart_history", [])
+    restarts.append(datetime.now().isoformat())
+    # Keep only last hour of history
+    cutoff = (datetime.now() - timedelta(seconds=OPERATOR_BACKOFF_WINDOW)).isoformat()
+    data["operator_restart_history"] = [t for t in restarts if t > cutoff]
+    _save_cooldowns(data)
+
+
+# Initialize from persisted state (survives restarts)
+last_operator_restart = _get_cooldown_time("last_operator_restart")
+last_trade_decision_launch = _get_cooldown_time("last_trade_decision_launch")
 
 
 def tmux_session_exists() -> bool:
@@ -127,11 +195,28 @@ def check_locks() -> list[dict]:
 
 
 def restart_operator() -> bool:
-    """Restart the operator session via athena_scheduler.sh."""
+    """Restart the operator session via athena_scheduler.sh.
+
+    Includes exponential backoff: if operator has been restarted 3+ times
+    in the last hour, wait 15 minutes before next attempt. This prevents
+    tight restart loops when the API is rate-limited or returning 500s.
+    """
     global last_operator_restart
     if (datetime.now() - last_operator_restart).total_seconds() < OPERATOR_RESTART_COOLDOWN:
         logger.info("Operator restart on cooldown, skipping")
         return False
+
+    # Backoff: if restarted too many times recently, extend cooldown
+    recent_restarts = _get_operator_restart_count()
+    if recent_restarts >= OPERATOR_BACKOFF_THRESHOLD:
+        last_restart_age = (datetime.now() - last_operator_restart).total_seconds()
+        if last_restart_age < OPERATOR_BACKOFF_DELAY:
+            remaining = int(OPERATOR_BACKOFF_DELAY - last_restart_age)
+            logger.warning(
+                f"Operator restart backoff engaged ({recent_restarts} restarts in last hour). "
+                f"Waiting {remaining}s before next attempt."
+            )
+            return False
 
     logger.warning("Restarting operator session")
     result = subprocess.run(
@@ -139,6 +224,8 @@ def restart_operator() -> bool:
         capture_output=True, text=True, cwd=str(PROJECT_DIR),
     )
     last_operator_restart = datetime.now()
+    _set_cooldown_time("last_operator_restart", last_operator_restart)
+    _record_operator_restart()
 
     if result.returncode == 0:
         logger.info("Operator restart initiated")
@@ -347,22 +434,40 @@ class Sentinel:
                     self._last_analyst_launch = time.time()
 
         # 7. Handle trade triggers (from operator or other sessions)
+        #    Cooldown: max 1 trade-decision launch per 30 minutes from triggers
         if trade_triggers:
+            global last_trade_decision_launch
             symbols = [t.get("symbol", "") for t in trade_triggers]
             td_lock = SCHEDULER_DIR / "locks" / "trade-decision.lock"
-            if not td_lock.exists():
+            cooldown_ok = (datetime.now() - last_trade_decision_launch).total_seconds() > TRADE_DECISION_COOLDOWN
+            if not td_lock.exists() and cooldown_ok:
                 if launch_trade_decision():
                     consume_trade_triggers(symbols)
+                    last_trade_decision_launch = datetime.now()
+                    _set_cooldown_time("last_trade_decision_launch", last_trade_decision_launch)
+            elif not cooldown_ok:
+                logger.debug(f"Trade-decision on cooldown, {int(TRADE_DECISION_COOLDOWN - (datetime.now() - last_trade_decision_launch).total_seconds())}s remaining")
 
         # 7b. Adaptive triggers (portfolio drawdown, VIX extreme, crash loop, etc.)
+        #     Respect global trade-decision cooldown for trade-decision triggers
         adaptive_triggers_fired = []
         try:
             adaptive = AdaptiveTriggerEngine()
             adaptive_events = adaptive.evaluate_all()
             for trigger in adaptive_events:
+                # Skip trade-decision triggers if on global cooldown
+                if trigger.session_to_spawn == "trade-decision":
+                    td_lock = SCHEDULER_DIR / "locks" / "trade-decision.lock"
+                    td_cooldown_ok = (datetime.now() - last_trade_decision_launch).total_seconds() > TRADE_DECISION_COOLDOWN
+                    if td_lock.exists() or not td_cooldown_ok:
+                        logger.info(f"ADAPTIVE TRIGGER [{trigger.level}] {trigger.description} — skipped (trade-decision on cooldown)")
+                        continue
                 logger.warning(f"ADAPTIVE TRIGGER: [{trigger.level}] {trigger.description}")
                 adaptive.fire_trigger(trigger)
                 adaptive_triggers_fired.append(trigger.trigger_type)
+                if trigger.session_to_spawn == "trade-decision":
+                    last_trade_decision_launch = datetime.now()
+                    _set_cooldown_time("last_trade_decision_launch", last_trade_decision_launch)
         except Exception as e:
             logger.error(f"Adaptive trigger check failed: {e}", exc_info=True)
 

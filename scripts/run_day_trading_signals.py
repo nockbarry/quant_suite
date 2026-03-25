@@ -419,7 +419,9 @@ def print_scan_results(results: dict):
         bullish = [s for s in signals if s.get("direction") == "bullish"]
         bearish = [s for s in signals if s.get("direction") == "bearish"]
 
-        intraday = scan.get("intraday_features", {})
+        intraday = scan.get("intraday_features")
+        if not isinstance(intraday, dict):
+            intraday = {}
         bias = intraday.get("trading_bias", "neutral")
 
         signal_str = ""

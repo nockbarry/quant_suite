@@ -113,13 +113,54 @@ PYTHONPATH=. python3 scripts/quick_trade.py positions --thesis "Venezuela"
 
 ### Key Method Signatures
 ```python
-# Broker
-AlpacaBroker(api_key=..., secret_key=..., paper=True)
-position.quantity  # NOT .qty
+# Broker — MUST connect() before any calls
+from src.execution.broker.alpaca import AlpacaBroker
+from src.execution.broker.base import AccountInfo, Quote
+
+broker = AlpacaBroker(api_key=..., secret_key=..., paper=True)
+await broker.connect()           # REQUIRED before any API call
+
+account = await broker.get_account()  # Returns AccountInfo (NOT raw Alpaca object)
+account.portfolio_value          # Decimal — total equity (NOT .equity)
+account.cash                     # Decimal
+account.buying_power             # Decimal
+account.day_trade_count          # int
+account.pattern_day_trader       # bool
+
+positions = await broker.get_positions()  # list — each has .symbol, .quantity, etc.
+position.quantity                # NOT .qty
+
+quote = await broker.get_quote(symbol)    # Returns Quote
+quote.last                       # Decimal — last price
+
 await broker.market_buy(symbol, Decimal(qty))
 await broker.market_sell(symbol, Decimal(qty))
+await broker.disconnect()        # Clean up when done
+
+# Shortcut: use quick_trade helper (handles connect/disconnect)
+from scripts.quick_trade import get_broker
+broker = get_broker(paper=True)
 
 # Credentials: config/credentials.yaml → alpaca.api_key, alpaca.secret_key
+```
+
+### Situation Board (~/quant_results/scheduler/situation_board.json)
+```python
+# Top-level keys (auto-resets daily):
+board["date"]                    # str — "2026-03-24"
+board["last_updated"]            # str — ISO timestamp
+board["market_snapshot"]         # dict — spy, vix, regime
+board["today_observations"]      # list — NOT "observations"
+board["active_analyses"]         # list — analyst session results
+board["decisions_today"]         # list — {symbol, action, status, reasoning_summary}
+board["portfolio_alerts"]        # list — {symbol, type, current_pnl}
+board["regime_context"]          # dict — current, vix_trend, interpretation
+
+# Each observation in today_observations:
+obs["time"]                      # str — "10:14"
+obs["source"]                    # str — "sentinel", "analyst", etc.
+obs["type"]                      # str — "signpost", "alert", etc.
+obs["text"]                      # str — description
 ```
 
 ---
