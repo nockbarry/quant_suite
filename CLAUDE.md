@@ -165,6 +165,44 @@ obs["text"]                      # str — description
 
 ---
 
+## Market Opinion System
+
+Continuous LLM-generated market appraisal. Replaces the broken binary prediction system.
+
+### Key Components
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **OpinionUniverse** | `src/opinions/universe.py` | 50-80 symbol universe (thesis vehicles + watchlist + movers + commodities) |
+| **OpinionContextAssembler** | `src/opinions/context_assembler.py` | Compact per-symbol context lines for batched prompts |
+| **OpinionCaptureEngine** | `src/opinions/capture.py` | Generate prompt, parse LLM JSON response, save to DB |
+| **OpinionScorer** | `src/opinions/scorer.py` | Score opinions at 5d/10d/30d horizons |
+| **DecisionQualityTracker** | `src/opinions/decision_quality.py` | Track decision outcomes at 1d/5d/10d/30d |
+
+### Usage (from any session)
+```python
+from src.opinions.capture import OpinionCaptureEngine
+
+engine = OpinionCaptureEngine()
+result = engine.capture(session_type="operator")  # Returns {"prompt": str, "batch_id": str, ...}
+# LLM reads result["prompt"], outputs JSON array of opinions
+opinions = engine.parse_response(json_text, result["batch_id"], "operator", result["universe"])
+saved = engine.save_batch(opinions)
+```
+
+### Operator hook (rate-limited to every 15 min)
+```python
+opinion_result = loop.get_opinion_prompt()  # Returns None if not due
+```
+
+### Web Dashboard
+`/opinions/` — scorecard, calibration, recent opinions
+`/opinions/quality` — decision quality curves per instance
+`/opinions/divergence` — cross-instance opinion divergence
+
+### Cron: 5:20 PM opinion scorer, 5:22 PM decision quality
+
+---
+
 ## Core Architecture
 
 All layers have code examples in `docs/API_QUICK_REF.md`. Component tables below for quick reference.

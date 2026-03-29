@@ -183,6 +183,7 @@ class OperatorLoop:
         self.last_regime: str = "unknown"
         self.check_count = 0
         self.session_start = datetime.now()
+        self._last_opinion_capture: datetime | None = None
 
     def operator_check(self) -> OperatorObservation:
         """
@@ -297,6 +298,27 @@ class OperatorLoop:
             pass  # Don't break operator loop if board update fails
 
         return observation
+
+    def get_opinion_prompt(self) -> dict | None:
+        """Generate opinion capture prompt if due (every 15 min).
+
+        Returns capture dict with 'prompt', 'batch_id', 'universe', etc.
+        or None if not yet due.
+        """
+        now = datetime.now()
+        if self._last_opinion_capture and (now - self._last_opinion_capture).total_seconds() < 900:
+            return None
+
+        try:
+            from src.opinions.capture import OpinionCaptureEngine
+
+            engine = OpinionCaptureEngine(results_dir=self.results_dir)
+            result = engine.capture(session_type="operator")
+            self._last_opinion_capture = now
+            return result
+        except Exception as e:
+            logger.error(f"Opinion capture failed: {e}")
+            return None
 
     def _load_state(self) -> dict:
         """Load current unified state."""

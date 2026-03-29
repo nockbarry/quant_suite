@@ -1120,3 +1120,175 @@ class AutonomyCheck(Base):
             "actions_taken": json.loads(self.actions_taken or "[]"),
             "errors": json.loads(self.errors or "[]"),
         }
+
+
+# ---------------------------------------------------------------------------
+# Market Opinion System
+# ---------------------------------------------------------------------------
+
+
+class MarketOpinionRecord(Base):
+    """Continuous market opinion capture from LLM sessions.
+
+    Replaces binary predictions with rich, multi-horizon opinions
+    on 50-80 symbols captured multiple times per day.
+    """
+
+    __tablename__ = "market_opinions"
+
+    id = Column(String(100), primary_key=True)
+    created = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Identity
+    symbol = Column(String(10), nullable=False, index=True)
+    instance_id = Column(String(20), default="default", index=True)
+    session_type = Column(String(30), default="operator", index=True)
+    batch_id = Column(String(100), nullable=True, index=True)
+
+    # Snapshot at opinion time
+    price_at_opinion = Column(Float, nullable=True)
+    composite_signal = Column(Float, nullable=True)
+    rsi_at_opinion = Column(Float, nullable=True)
+
+    # Price targets: bull/base/bear at 3 horizons
+    target_5d_bull = Column(Float, nullable=True)
+    target_5d_base = Column(Float, nullable=True)
+    target_5d_bear = Column(Float, nullable=True)
+    target_10d_bull = Column(Float, nullable=True)
+    target_10d_base = Column(Float, nullable=True)
+    target_10d_bear = Column(Float, nullable=True)
+    target_30d_bull = Column(Float, nullable=True)
+    target_30d_base = Column(Float, nullable=True)
+    target_30d_bear = Column(Float, nullable=True)
+
+    # Trend opinion
+    trend_direction = Column(String(10), default="neutral")
+    trend_magnitude = Column(String(10), default="flat")
+    trend_confidence = Column(Float, default=0.5)
+
+    # Relative performance opinion
+    relative_benchmark = Column(String(10), default="SPY")
+    relative_direction = Column(String(15), default="inline")
+    relative_magnitude = Column(Float, nullable=True)
+
+    # Context and reasoning
+    thesis_id = Column(String(100), ForeignKey("theses.id"), nullable=True)
+    key_driver = Column(String(200), default="")
+    risk_flag = Column(String(200), default="")
+
+    # Scoring — 5-day
+    status = Column(String(20), default="open", index=True)
+    actual_5d_price = Column(Float, nullable=True)
+    score_5d_direction = Column(Float, nullable=True)
+    score_5d_range = Column(Float, nullable=True)
+    score_5d_proximity = Column(Float, nullable=True)
+    scored_5d_at = Column(DateTime, nullable=True)
+
+    # Scoring — 10-day
+    actual_10d_price = Column(Float, nullable=True)
+    score_10d_direction = Column(Float, nullable=True)
+    score_10d_range = Column(Float, nullable=True)
+    score_10d_proximity = Column(Float, nullable=True)
+    scored_10d_at = Column(DateTime, nullable=True)
+
+    # Scoring — 30-day
+    actual_30d_price = Column(Float, nullable=True)
+    score_30d_direction = Column(Float, nullable=True)
+    score_30d_range = Column(Float, nullable=True)
+    score_30d_proximity = Column(Float, nullable=True)
+    scored_30d_at = Column(DateTime, nullable=True)
+
+    # Relative performance scores
+    actual_relative_5d = Column(Float, nullable=True)
+    actual_relative_10d = Column(Float, nullable=True)
+    actual_relative_30d = Column(Float, nullable=True)
+    score_relative_5d = Column(Float, nullable=True)
+    score_relative_10d = Column(Float, nullable=True)
+    score_relative_30d = Column(Float, nullable=True)
+
+    __table_args__ = (
+        Index("ix_opinions_symbol_created", "symbol", "created"),
+        Index("ix_opinions_instance_created", "instance_id", "created"),
+        Index("ix_opinions_batch", "batch_id"),
+        Index("ix_opinions_status", "status"),
+        Index("ix_opinions_session_type", "session_type"),
+    )
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MarketOpinionRecord":
+        d = dict(data)
+        for field in ("created", "scored_5d_at", "scored_10d_at", "scored_30d_at"):
+            if isinstance(d.get(field), str):
+                try:
+                    d[field] = datetime.fromisoformat(d[field])
+                except (ValueError, TypeError):
+                    d[field] = None
+        valid_cols = {c.key for c in cls.__table__.columns}
+        return cls(**{k: v for k, v in d.items() if k in valid_cols})
+
+
+class DecisionQualityRecord(Base):
+    """Tracks price trajectory after each trade decision.
+
+    For every BUY/SELL/ADD/TRIM, records the actual price at
+    1d/5d/10d/30d after execution to build quality curves.
+    """
+
+    __tablename__ = "decision_quality"
+
+    id = Column(String(100), primary_key=True)
+    decision_id = Column(String(100), ForeignKey("decisions.id"), nullable=False, index=True)
+    instance_id = Column(String(20), default="default", index=True)
+    symbol = Column(String(10), nullable=False, index=True)
+    action = Column(String(10), nullable=False)
+    execution_price = Column(Float, nullable=True)
+    execution_date = Column(DateTime, nullable=True, index=True)
+
+    # Price tracking
+    price_1d = Column(Float, nullable=True)
+    price_5d = Column(Float, nullable=True)
+    price_10d = Column(Float, nullable=True)
+    price_30d = Column(Float, nullable=True)
+
+    # Return tracking (% from execution)
+    return_1d = Column(Float, nullable=True)
+    return_5d = Column(Float, nullable=True)
+    return_10d = Column(Float, nullable=True)
+    return_30d = Column(Float, nullable=True)
+
+    # Quality scores (action-adjusted: BUY correct if up, SELL correct if down)
+    quality_1d = Column(Float, nullable=True)
+    quality_5d = Column(Float, nullable=True)
+    quality_10d = Column(Float, nullable=True)
+    quality_30d = Column(Float, nullable=True)
+
+    # Benchmark comparison
+    spy_return_1d = Column(Float, nullable=True)
+    spy_return_5d = Column(Float, nullable=True)
+    spy_return_10d = Column(Float, nullable=True)
+    spy_return_30d = Column(Float, nullable=True)
+
+    last_scored_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_dq_decision", "decision_id", unique=True),
+        Index("ix_dq_instance_date", "instance_id", "execution_date"),
+    )
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "DecisionQualityRecord":
+        d = dict(data)
+        for field in ("execution_date", "last_scored_at"):
+            if isinstance(d.get(field), str):
+                try:
+                    d[field] = datetime.fromisoformat(d[field])
+                except (ValueError, TypeError):
+                    d[field] = None
+        valid_cols = {c.key for c in cls.__table__.columns}
+        return cls(**{k: v for k, v in d.items() if k in valid_cols})

@@ -239,7 +239,11 @@ class BeliefUpdater:
         return updates
 
     def _suggest_thesis_updates(self) -> list[ThesisSuggestion]:
-        """Suggest conviction changes based on prediction accuracy per thesis."""
+        """Suggest conviction changes based on prediction/opinion accuracy per thesis.
+
+        Uses Market Opinion System data when available (20+ scored opinions),
+        falls back to legacy PredictionRecord data otherwise.
+        """
         from src.db.database import get_db
         from src.db.models import PredictionRecord, ThesisRecord
 
@@ -247,38 +251,51 @@ class BeliefUpdater:
 
         try:
             with get_db() as session:
-                # Get theses with resolved predictions
                 theses = session.query(ThesisRecord).filter(
                     ThesisRecord.status == "active"
                 ).all()
 
                 for thesis in theses:
-                    preds = session.query(PredictionRecord).filter(
-                        PredictionRecord.thesis_id == thesis.id,
-                        PredictionRecord.status.in_(["hit", "miss"]),
-                    ).all()
+                    accuracy = None
+                    count = 0
+                    source = "predictions"
 
-                    if len(preds) < 3:
+                    # Try Market Opinion System first (more reliable)
+                    opinion_data = self._get_opinion_accuracy_for_thesis(session, thesis.id)
+                    if opinion_data and opinion_data["count"] >= 20:
+                        accuracy = opinion_data["direction_accuracy"]
+                        count = opinion_data["count"]
+                        source = "opinions"
+                    else:
+                        # Fall back to legacy predictions
+                        preds = session.query(PredictionRecord).filter(
+                            PredictionRecord.thesis_id == thesis.id,
+                            PredictionRecord.status.in_(["hit", "miss"]),
+                        ).all()
+
+                        if len(preds) >= 3:
+                            hits = sum(1 for p in preds if p.status == "hit")
+                            accuracy = hits / len(preds)
+                            count = len(preds)
+
+                    if accuracy is None or count < 3:
                         continue
-
-                    hits = sum(1 for p in preds if p.status == "hit")
-                    accuracy = hits / len(preds)
 
                     # Suggestion logic
                     suggested_change = 0
                     reason = ""
-                    if accuracy >= 0.75 and len(preds) >= 5:
+                    if accuracy >= 0.75 and count >= 5:
                         suggested_change = 5
-                        reason = f"{accuracy:.0%} prediction accuracy over {len(preds)} predictions — strong confirmation"
+                        reason = f"{accuracy:.0%} {source} accuracy over {count} — strong confirmation"
                     elif accuracy >= 0.6:
                         suggested_change = 2
-                        reason = f"{accuracy:.0%} accuracy — mild confirmation"
+                        reason = f"{accuracy:.0%} {source} accuracy — mild confirmation"
                     elif accuracy <= 0.35:
                         suggested_change = -10
-                        reason = f"Only {accuracy:.0%} accuracy — predictions consistently wrong"
+                        reason = f"Only {accuracy:.0%} {source} accuracy — consistently wrong"
                     elif accuracy <= 0.45:
                         suggested_change = -5
-                        reason = f"{accuracy:.0%} accuracy — below coin flip"
+                        reason = f"{accuracy:.0%} {source} accuracy — below coin flip"
 
                     if suggested_change != 0:
                         suggestions.append(ThesisSuggestion(
@@ -288,12 +305,33 @@ class BeliefUpdater:
                             suggested_change=suggested_change,
                             reason=reason,
                             prediction_accuracy=round(accuracy, 3),
-                            prediction_count=len(preds),
+                            prediction_count=count,
                         ))
         except Exception as e:
             logger.warning(f"Thesis suggestion query failed: {e}")
 
         return suggestions
+
+    def _get_opinion_accuracy_for_thesis(self, session, thesis_id: str) -> dict | None:
+        """Get direction accuracy from Market Opinion System for a thesis."""
+        try:
+            from src.db.models import MarketOpinionRecord
+
+            opinions = session.query(MarketOpinionRecord).filter(
+                MarketOpinionRecord.thesis_id == thesis_id,
+                MarketOpinionRecord.score_10d_direction.isnot(None),
+            ).all()
+
+            if not opinions:
+                return None
+
+            dir_acc = sum(o.score_10d_direction for o in opinions) / len(opinions)
+            return {
+                "direction_accuracy": dir_acc,
+                "count": len(opinions),
+            }
+        except Exception:
+            return None
 
     def _update_calibration(self) -> dict:
         """Compute and persist calibration data."""

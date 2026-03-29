@@ -1201,6 +1201,183 @@ class AthenaWriteAPI:
             pass  # Best-effort — no web server running is fine
 
 
+    # ------------------------------------------------------------------
+    # Market Opinions
+    # ------------------------------------------------------------------
+
+    def save_opinion_batch(self, opinions: list[dict]) -> int:
+        """Save a batch of market opinions in one transaction. Returns count saved."""
+        from src.db.database import get_db
+        from src.db.models import MarketOpinionRecord
+
+        if not opinions:
+            return 0
+
+        batch_id = f"batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+        saved = 0
+
+        try:
+            with get_db() as session:
+                for op in opinions:
+                    op.setdefault("id", f"op_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}")
+                    op.setdefault("batch_id", batch_id)
+                    op.setdefault("created", datetime.utcnow().isoformat())
+                    op.setdefault("status", "open")
+
+                    record = MarketOpinionRecord.from_dict(op)
+                    session.add(record)
+                    saved += 1
+
+                session.commit()
+        except Exception as e:
+            logger.error(f"Failed to save opinion batch: {e}")
+            return 0
+
+        logger.info(f"Saved {saved} opinions (batch={batch_id})")
+        return saved
+
+    def score_opinion(self, opinion_id: str, horizon: int, scores: dict) -> bool:
+        """Update scoring fields for an opinion at a given horizon (5, 10, or 30)."""
+        from src.db.database import get_db
+        from src.db.models import MarketOpinionRecord
+
+        try:
+            with get_db() as session:
+                record = session.query(MarketOpinionRecord).filter(
+                    MarketOpinionRecord.id == opinion_id
+                ).first()
+                if not record:
+                    return False
+
+                prefix = f"score_{horizon}d_"
+                for key, val in scores.items():
+                    col_name = f"{prefix}{key}" if not key.startswith("actual") else f"actual_{horizon}d_price"
+                    if key == "actual_price":
+                        col_name = f"actual_{horizon}d_price"
+                    elif key == "actual_relative":
+                        col_name = f"actual_relative_{horizon}d"
+                    elif key == "score_relative":
+                        col_name = f"score_relative_{horizon}d"
+                    elif not key.startswith("score_"):
+                        col_name = f"{prefix}{key}"
+                    else:
+                        col_name = key.replace("_Xd_", f"_{horizon}d_")
+
+                    if hasattr(record, col_name):
+                        setattr(record, col_name, val)
+
+                setattr(record, f"scored_{horizon}d_at", datetime.utcnow())
+
+                # Update status progression
+                if horizon == 5:
+                    record.status = "scored_5d"
+                elif horizon == 10:
+                    record.status = "scored_10d"
+                elif horizon == 30:
+                    record.status = "scored_30d"
+
+                session.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Failed to score opinion {opinion_id}: {e}")
+            return False
+
+    def get_opinion_scorecard(self, instance_id: str | None = None) -> dict:
+        """Accuracy breakdown by horizon, symbol, and session type."""
+        from src.db.database import get_db
+        from src.db.models import MarketOpinionRecord
+
+        try:
+            with get_db() as session:
+                q = session.query(MarketOpinionRecord).filter(
+                    MarketOpinionRecord.status != "open"
+                )
+                if instance_id:
+                    q = q.filter(MarketOpinionRecord.instance_id == instance_id)
+
+                opinions = q.all()
+                if not opinions:
+                    return {"total_scored": 0}
+
+                result = {"total_scored": len(opinions)}
+                for horizon in (5, 10, 30):
+                    scored = [o for o in opinions if getattr(o, f"score_{horizon}d_direction") is not None]
+                    if scored:
+                        dir_acc = sum(getattr(o, f"score_{horizon}d_direction") for o in scored) / len(scored)
+                        range_acc = sum(getattr(o, f"score_{horizon}d_range") or 0 for o in scored) / len(scored)
+                        avg_prox = sum(getattr(o, f"score_{horizon}d_proximity") or 0 for o in scored) / len(scored)
+                        result[f"{horizon}d"] = {
+                            "count": len(scored),
+                            "direction_accuracy": round(dir_acc, 3),
+                            "range_accuracy": round(range_acc, 3),
+                            "avg_proximity": round(avg_prox, 3),
+                        }
+
+                return result
+        except Exception as e:
+            logger.error(f"Failed to get opinion scorecard: {e}")
+            return {"error": str(e)}
+
+    # ------------------------------------------------------------------
+    # Decision Quality
+    # ------------------------------------------------------------------
+
+    def save_decision_quality(self, data: dict) -> str:
+        """Save a decision quality tracking record."""
+        from src.db.database import get_db
+        from src.db.models import DecisionQualityRecord
+
+        dq_id = data.get("id", f"dq_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}")
+        data["id"] = dq_id
+
+        try:
+            with get_db() as session:
+                existing = session.query(DecisionQualityRecord).filter(
+                    DecisionQualityRecord.decision_id == data.get("decision_id")
+                ).first()
+                if existing:
+                    for key, val in data.items():
+                        if key == "id":
+                            continue
+                        if hasattr(existing, key):
+                            setattr(existing, key, val)
+                    dq_id = existing.id
+                else:
+                    record = DecisionQualityRecord.from_dict(data)
+                    session.add(record)
+
+                session.commit()
+        except Exception as e:
+            logger.error(f"Failed to save decision quality: {e}")
+            return ""
+
+        return dq_id
+
+    def update_decision_quality(self, decision_id: str, updates: dict) -> bool:
+        """Update scoring fields on a decision quality record."""
+        from src.db.database import get_db
+        from src.db.models import DecisionQualityRecord
+
+        try:
+            with get_db() as session:
+                record = session.query(DecisionQualityRecord).filter(
+                    DecisionQualityRecord.decision_id == decision_id
+                ).first()
+                if not record:
+                    return False
+
+                for key, val in updates.items():
+                    if hasattr(record, key):
+                        setattr(record, key, val)
+
+                record.last_scored_at = datetime.utcnow()
+                session.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Failed to update decision quality for {decision_id}: {e}")
+            return False
+
+
 # Singleton
 athena_db = AthenaWriteAPI()
 

@@ -681,23 +681,10 @@ def create_decision(
                 "key_reasoning": (reasoning or "")[:500],
                 "created": decision.timestamp.isoformat(),
             })
-            # Also create a fast-feedback 3-day prediction for the intelligence loop.
-            # These resolve quickly, giving the belief updater real data to learn from.
-            athena_db.save_prediction({
-                "decision_id": decision.id,
-                "thesis_id": thesis_id,
-                "symbol": symbol,
-                "prediction_type": "direction",
-                "direction": pred_direction,
-                "target_value": limit_price,
-                "target_description": f"3-day {pred_direction} on {symbol} ({action.value})",
-                "confidence": max(confidence - 0.10, 0.50),  # Lower confidence for shorter horizon
-                "timeframe_days": 3,
-                "reasoning_category": norm_setup,
-                "setup_type": norm_setup,
-                "key_reasoning": f"Short-horizon: {(reasoning or '')[:300]}",
-                "created": decision.timestamp.isoformat(),
-            })
+            # NOTE: 3-day shadow predictions removed 2026-03-29.
+            # They dragged accuracy to 32% by scoring on short-term noise.
+            # Replaced by Market Opinion System (src/opinions/) which captures
+            # continuous price/trend views on 50-80 symbols.
     except Exception:
         pass  # Never block decision creation
 

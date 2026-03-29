@@ -67,6 +67,9 @@ class CrossInstanceMetrics:
     # Performance
     equity_comparison: dict  # {instance: equity}
 
+    # Opinion divergence (Market Opinion System)
+    opinion_divergence: dict = None  # {symbol: {direction_agreement, target_spread, ...}}
+
     # Recommendations
     recommendations: list
 
@@ -502,6 +505,150 @@ class MetaObserver:
 
         return recs
 
+    def compute_opinion_divergence(self, snapshots: list) -> dict:
+        """Compare recent market opinions across instances.
+
+        For each symbol with opinions in 2+ instance DBs, compares:
+        - trend_direction agreement rate
+        - target_10d_base spread ($ difference)
+        - relative_direction agreement rate
+
+        Returns dict with per-symbol divergence + overall metrics.
+        """
+        from datetime import timedelta
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        cutoff = datetime.now() - timedelta(hours=24)
+        instance_opinions: dict[str, dict[str, dict]] = {}  # {instance: {symbol: opinion_data}}
+
+        for snap in snapshots:
+            db_path = snap.results_dir / "athena.db"
+            if not db_path.exists():
+                continue
+
+            try:
+                engine = create_engine(f"sqlite:///{db_path}", echo=False)
+                Session = sessionmaker(bind=engine)
+                with Session() as session:
+                    # Raw SQL to avoid importing models in different DB context
+                    result = session.execute(
+                        session.bind.execute(
+                            "SELECT symbol, trend_direction, target_10d_base, "
+                            "relative_direction, trend_confidence, price_at_opinion "
+                            "FROM market_opinions "
+                            "WHERE created > ? ORDER BY created DESC",
+                            (cutoff.isoformat(),)
+                        ) if hasattr(session.bind, 'execute') else
+                        engine.execute(
+                            "SELECT symbol, trend_direction, target_10d_base, "
+                            "relative_direction, trend_confidence, price_at_opinion "
+                            "FROM market_opinions "
+                            "WHERE created > ? ORDER BY created DESC",
+                            (cutoff.isoformat(),)
+                        )
+                    )
+            except Exception:
+                # Try simpler approach with raw sqlite3
+                try:
+                    import sqlite3
+                    conn = sqlite3.connect(str(db_path))
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.execute(
+                        "SELECT symbol, trend_direction, target_10d_base, "
+                        "relative_direction, trend_confidence, price_at_opinion "
+                        "FROM market_opinions "
+                        "WHERE created > ? ORDER BY created DESC",
+                        (cutoff.isoformat(),)
+                    )
+                    rows = cursor.fetchall()
+                    conn.close()
+
+                    opinions = {}
+                    for row in rows:
+                        sym = row["symbol"]
+                        if sym not in opinions:  # Keep most recent per symbol
+                            opinions[sym] = {
+                                "direction": row["trend_direction"],
+                                "target_10d": row["target_10d_base"],
+                                "relative": row["relative_direction"],
+                                "confidence": row["trend_confidence"],
+                                "price": row["price_at_opinion"],
+                            }
+                    instance_opinions[snap.instance_name] = opinions
+                except Exception as e:
+                    logger.debug(f"Failed to read opinions from {snap.instance_name}: {e}")
+                    continue
+
+        if len(instance_opinions) < 2:
+            return {}
+
+        # Compare across instances for overlapping symbols
+        all_symbols = set()
+        for opinions in instance_opinions.values():
+            all_symbols.update(opinions.keys())
+
+        divergences = {}
+        direction_agreements = []
+        relative_agreements = []
+
+        for sym in sorted(all_symbols):
+            views = {}
+            for inst_name, opinions in instance_opinions.items():
+                if sym in opinions:
+                    views[inst_name] = opinions[sym]
+
+            if len(views) < 2:
+                continue
+
+            # Direction agreement
+            directions = [v["direction"] for v in views.values()]
+            most_common = max(set(directions), key=directions.count)
+            dir_agreement = directions.count(most_common) / len(directions)
+            direction_agreements.append(dir_agreement)
+
+            # Target spread
+            targets = [v["target_10d"] for v in views.values() if v.get("target_10d")]
+            target_spread = max(targets) - min(targets) if len(targets) >= 2 else 0
+
+            # Relative agreement
+            relatives = [v["relative"] for v in views.values() if v.get("relative")]
+            if relatives:
+                most_common_rel = max(set(relatives), key=relatives.count)
+                rel_agreement = relatives.count(most_common_rel) / len(relatives)
+                relative_agreements.append(rel_agreement)
+            else:
+                rel_agreement = None
+
+            divergences[sym] = {
+                "direction_agreement": round(dir_agreement, 2),
+                "consensus_direction": most_common,
+                "target_10d_spread": round(target_spread, 2),
+                "relative_agreement": round(rel_agreement, 2) if rel_agreement else None,
+                "instances_with_opinion": list(views.keys()),
+            }
+
+        overall = {
+            "symbol_count": len(divergences),
+            "avg_direction_agreement": round(
+                sum(direction_agreements) / len(direction_agreements), 3
+            ) if direction_agreements else None,
+            "avg_relative_agreement": round(
+                sum(relative_agreements) / len(relative_agreements), 3
+            ) if relative_agreements else None,
+            "high_divergence": [
+                sym for sym, d in divergences.items()
+                if d["direction_agreement"] < 0.5
+            ],
+            "high_consensus": [
+                sym for sym, d in divergences.items()
+                if d["direction_agreement"] == 1.0
+            ],
+            "per_symbol": divergences,
+        }
+
+        return overall
+
     def run(self) -> CrossInstanceMetrics:
         """Full analysis pipeline.
 
@@ -538,6 +685,8 @@ class MetaObserver:
             thesis_overlap, position_overlap, conviction_dists, snapshots
         )
 
+        opinion_div = self.compute_opinion_divergence(snapshots)
+
         metrics = CrossInstanceMetrics(
             timestamp=datetime.now().isoformat(),
             num_instances=len(snapshots),
@@ -562,6 +711,7 @@ class MetaObserver:
             divergent_positions=position_overlap[2],
             position_agreement_rate=position_overlap[3],
             equity_comparison={s.instance_name: s.equity for s in snapshots},
+            opinion_divergence=opinion_div,
             recommendations=recommendations,
         )
 

@@ -960,6 +960,25 @@ Or use the convenience script:
 PYTHONPATH=. python3 scripts/context_for_symbol.py SLB
 ```
 
+## Market Opinion Capture (Before Decisions)
+
+BEFORE generating trade decisions, capture opinions on the full symbol universe.
+This records your "at decision time" view, which is compared with post-decision outcomes.
+
+```python
+from src.opinions.capture import OpinionCaptureEngine
+
+engine = OpinionCaptureEngine()
+result = engine.capture(session_type="trade_decision")
+# Read result["prompt"], output JSON with your opinions, then:
+opinions = engine.parse_response(json_text, result["batch_id"], "trade_decision", result["universe"])
+saved = engine.save_batch(opinions)
+print(f"Decision-time opinions: {saved} saved")
+```
+
+This is critical for measuring decision quality — the opinion you had BEFORE deciding
+can be compared with what actually happened.
+
 ## Key Files
 
 | File | Purpose |

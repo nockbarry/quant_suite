@@ -98,7 +98,7 @@ from src.web.routes import dashboard, knowledge, theses, learnings, decisions
 from src.web.routes import agents, flows, llm, signals, data_sources
 from src.web.routes import reports, system, upload, api, websocket, tasks, portfolio, research
 from src.web.routes import documents, intelligence, sessions, usage, swarm, reviews, movers
-from src.web.routes import war, risk, meta, alerts, upgrades, bugs
+from src.web.routes import war, risk, meta, alerts, upgrades, bugs, opinions
 
 app.include_router(dashboard.router)
 app.include_router(knowledge.router, prefix="/knowledge", tags=["knowledge"])
@@ -131,3 +131,4 @@ app.include_router(meta.router, prefix="/meta", tags=["meta"])
 app.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
 app.include_router(upgrades.router, prefix="/upgrades", tags=["upgrades"])
 app.include_router(bugs.router, prefix="/bugs", tags=["bugs"])
+app.include_router(opinions.router, prefix="/opinions", tags=["opinions"])

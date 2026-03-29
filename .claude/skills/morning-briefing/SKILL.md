@@ -1075,3 +1075,26 @@ PYTHONPATH=. python scripts/calendar_cli.py resolve \
     --outcome "Fed only cut once, not twice as predicted" \
     --notes "Inflation stickier than expected"
 ```
+
+## Step 12: Pre-Market Opinion Capture
+
+As the FINAL step of the briefing, capture market opinions on the full universe (~50-80 symbols).
+This provides the "before action" baseline for the day's opinion tracking.
+
+```python
+from src.opinions.capture import OpinionCaptureEngine
+
+engine = OpinionCaptureEngine()
+result = engine.capture(session_type="briefing")
+
+# Read result["prompt"] — it contains the context for all symbols.
+# Based on everything you've read in this briefing (news, state, signals, theses),
+# output a JSON array of opinions for ALL symbols in the universe.
+# Then parse and save:
+opinions = engine.parse_response(json_text, result["batch_id"], "briefing", result["universe"])
+saved = engine.save_batch(opinions)
+print(f"Pre-market opinions: {saved} saved")
+```
+
+Use your full briefing context (overnight news, macro, thesis state) to inform these opinions.
+Be especially thoughtful about symbols with upcoming catalysts or overnight news.

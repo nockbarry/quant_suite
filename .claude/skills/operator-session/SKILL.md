@@ -127,6 +127,40 @@ if observation.has_urgent_items():
 print(loop.get_session_summary())
 ```
 
+## Market Opinion Capture
+
+Every ~15 minutes (every 3rd-5th check cycle), capture market opinions on 50-80 symbols:
+
+```python
+from src.opinions.capture import OpinionCaptureEngine
+
+engine = OpinionCaptureEngine()
+result = engine.capture(session_type="operator")
+if result:
+    # The prompt in result["prompt"] asks you to output a JSON array of opinions.
+    # Read the prompt, form your opinions based on ALL context you have, then output JSON.
+    # After outputting JSON, parse and save:
+    opinions = engine.parse_response(json_text, result["batch_id"], "operator", result["universe"])
+    saved = engine.save_batch(opinions)
+    print(f"Saved {saved} market opinions (batch {result['batch_id']})")
+```
+
+Alternatively, use the rate-limited hook on the operator loop:
+
+```python
+opinion_result = loop.get_opinion_prompt()
+if opinion_result:
+    # This returns None if less than 15 minutes since last capture.
+    # When it returns a result, follow the same flow as above.
+```
+
+**Key rules for opinion capture:**
+- Include ALL symbols in the universe, not just held positions
+- Be honest about uncertainty — use 0.3-0.5 confidence when unsure
+- Price targets should be realistic (not always bullish)
+- Key driver and risk should be thesis-specific, not generic
+- Use compressed JSON keys: s, t5, t10, t30, dir, mag, conf, rel, relm, drv, risk
+
 ## Check Output Example
 
 ```
