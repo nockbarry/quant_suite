@@ -39,12 +39,15 @@ class OpinionUniverse:
         """
         # Gather from all sources
         thesis_vehicles = self._get_thesis_vehicles()
+        held_positions = self._get_held_positions()
         watchlist = self._get_watchlist_core()
         movers = self._get_movers()
         commodities = self._get_commodity_proxies()
 
-        # Merge with thesis vehicles taking priority
-        return self._deduplicate(thesis_vehicles + watchlist + movers + commodities)
+        # Merge with thesis vehicles taking priority, then held positions
+        return self._deduplicate(
+            thesis_vehicles + held_positions + watchlist + movers + commodities
+        )
 
     def _get_thesis_vehicles(self) -> list[dict]:
         """Read active thesis vehicles from theses/*.yaml."""
@@ -74,6 +77,37 @@ class OpinionUniverse:
                     })
             except Exception as e:
                 logger.debug(f"Error reading thesis {f}: {e}")
+
+        return results
+
+    def _get_held_positions(self) -> list[dict]:
+        """Read currently held positions from state.json.
+
+        Ensures every held symbol is in the universe even if not
+        in a thesis or watchlist (e.g., recently bought movers).
+        """
+        results = []
+        state_path = self.results_dir / "live" / "state.json"
+        if not state_path.exists():
+            return results
+
+        try:
+            data = json.loads(state_path.read_text())
+            for pos in data.get("positions", []):
+                sym = pos.get("symbol", "")
+                if not sym or len(sym) > 6:  # Skip options symbols
+                    continue
+                thesis_id = pos.get("thesis_id", "")
+                results.append({
+                    "symbol": sym,
+                    "category": "held",
+                    "thesis_id": thesis_id,
+                    "thesis_name": "",
+                    "conviction": 0,
+                    "extra": f"held={pos.get('unrealized_pnl_pct', 0):+.1f}%",
+                })
+        except Exception as e:
+            logger.debug(f"Error reading positions: {e}")
 
         return results
 

@@ -51,6 +51,11 @@ class DecisionQualityTracker:
                     DecisionRecord.action.in_(["BUY", "SELL", "ADD", "TRIM", "CLOSE"]),
                 ).all()
 
+                # Filter out options symbols (contain digits in the middle, e.g. HAL260206C00032000)
+                import re
+                _options_re = re.compile(r"^[A-Z]+\d{6}[CP]\d+$")
+                decisions = [d for d in decisions if not _options_re.match(d.symbol)]
+
                 for d in decisions:
                     if d.id in existing_ids:
                         continue
@@ -263,7 +268,8 @@ class DecisionQualityTracker:
             data.index = data.index.tz_localize(None) if data.index.tz else data.index
             closest_idx = data.index[data.index.get_indexer([target_ts], method="nearest")]
             if len(closest_idx) > 0:
-                price = float(data.loc[closest_idx[0], "Close"])
+                close_val = data.loc[closest_idx[0], "Close"]
+                price = float(close_val.iloc[0]) if hasattr(close_val, 'iloc') else float(close_val)
                 if hasattr(price, 'item'):
                     price = price.item()
                 self._price_cache[key] = price

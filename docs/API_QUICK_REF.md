@@ -299,3 +299,52 @@ from src.synthesis.daemon import LiveDaemon
 asyncio.run(LiveDaemon().update_now())
 "
 ```
+
+---
+
+## Market Opinion System (src/opinions/)
+
+```python
+from src.opinions.capture import OpinionCaptureEngine
+from src.opinions.universe import OpinionUniverse
+from src.opinions.scorer import OpinionScorer
+from src.opinions.decision_quality import DecisionQualityTracker
+
+# Get the symbol universe (dynamic — updates with thesis changes)
+universe = OpinionUniverse().get_universe()  # list[dict] with symbol, category, thesis_id, conviction
+
+# Generate opinion capture prompt
+engine = OpinionCaptureEngine()
+result = engine.capture(session_type="operator")
+# result: {"prompt": str, "batch_id": str, "universe_size": int, "universe": list}
+
+# Parse LLM JSON response and save
+opinions = engine.parse_response(json_text, result["batch_id"], "operator", result["universe"])
+saved = engine.save_batch(opinions)  # Returns count saved
+
+# Score opinions at horizons (run by cron)
+scorer = OpinionScorer()
+summary = scorer.score_due_opinions()  # {"scored_5d": N, "scored_10d": N, "scored_30d": N}
+
+# Decision quality tracking
+tracker = DecisionQualityTracker()
+tracker.backfill_untracked_decisions()  # Creates records for untracked decisions
+tracker.score_due_decisions()  # Scores at 1d/5d/10d/30d
+curve = tracker.get_quality_curve(instance_id="auto", horizon=10)  # Quality over time
+summary = tracker.get_quality_summary()  # Avg quality per horizon
+
+# From operator loop (rate-limited to 15 min)
+from src.monitoring.operator_loop import get_operator_loop
+loop = get_operator_loop()
+prompt_result = loop.get_opinion_prompt()  # Returns None if not due
+```
+
+### Opinion JSON format (LLM output)
+```json
+[{"s":"MU","t5":[108,105,100],"t10":[115,110,98],"t30":[125,115,95],
+  "dir":"bullish","mag":"moderate","conf":0.65,
+  "rel":"outperform","relm":3.0,"drv":"HBM demand","risk":"inventory correction"}]
+```
+
+Keys: s=symbol, t5/t10/t30=[bull,base,bear], dir=direction, mag=magnitude,
+conf=confidence, rel=relative vs SPY, relm=alpha %, drv=driver, risk=risk

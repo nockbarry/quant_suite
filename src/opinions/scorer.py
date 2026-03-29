@@ -179,7 +179,8 @@ class OpinionScorer:
             data.index = data.index.tz_localize(None) if data.index.tz else data.index
             closest_idx = data.index[data.index.get_indexer([target_ts], method="nearest")]
             if len(closest_idx) > 0:
-                price = float(data.loc[closest_idx[0], "Close"])
+                close_val = data.loc[closest_idx[0], "Close"]
+                price = float(close_val.iloc[0]) if hasattr(close_val, 'iloc') else float(close_val)
                 if hasattr(price, 'item'):
                     price = price.item()
                 self._price_cache[key] = price
