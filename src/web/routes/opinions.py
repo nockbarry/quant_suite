@@ -37,7 +37,8 @@ async def divergence_dashboard(request: Request):
     from src.web.services import opinion_service
 
     divergence = opinion_service.get_opinion_divergence()
-    html = _build_divergence_html(divergence)
+    cross_instance = opinion_service.get_cross_instance_accuracy()
+    html = _build_divergence_html(divergence, cross_instance)
     return HTMLResponse(content=html)
 
 
@@ -77,6 +78,13 @@ async def api_divergence():
     """JSON API for divergence data."""
     from src.web.services import opinion_service
     return opinion_service.get_opinion_divergence()
+
+
+@router.get("/api/cross-instance", response_class=JSONResponse)
+async def api_cross_instance():
+    """JSON API for cross-instance accuracy comparison."""
+    from src.web.services import opinion_service
+    return opinion_service.get_cross_instance_accuracy()
 
 
 # --- HTML builders (minimal, dark-themed) ---
@@ -181,8 +189,35 @@ def _build_quality_html(curves: dict) -> str:
     return _page_wrapper("Decision Quality", body)
 
 
-def _build_divergence_html(divergence: dict) -> str:
-    body = '<div class="card"><h2>Cross-Instance Opinion Divergence</h2>'
+def _build_divergence_html(divergence: dict, cross_instance: dict = None) -> str:
+    # Cross-instance accuracy comparison (show first)
+    body = '<div class="card"><h2>Instance Accuracy Comparison</h2>'
+    if cross_instance:
+        body += "<table><tr><th>Instance</th><th>Opinions</th><th>Scored</th><th>Dir Acc (10d)</th><th>Range Acc</th><th>Decision Quality</th><th>Avg Alpha</th></tr>"
+        for inst in ("auto", "beta", "gamma"):
+            d = cross_instance.get(inst, {})
+            if not d or d.get("error"):
+                body += f'<tr><td>{inst}</td><td colspan="6">No data</td></tr>'
+                continue
+            dir_acc = d.get("direction_accuracy_10d")
+            range_acc = d.get("range_accuracy_10d")
+            dq = d.get("decision_quality_10d", {})
+            dq_quality = dq.get("avg_quality")
+            dq_alpha = dq.get("avg_alpha")
+            dir_cls = "good" if dir_acc and dir_acc > 0.5 else ("bad" if dir_acc and dir_acc < 0.4 else "neutral")
+            dq_cls = "good" if dq_quality and dq_quality > 0.5 else ("bad" if dq_quality and dq_quality < 0.4 else "neutral")
+            body += f'<tr><td><b>{inst}</b></td><td>{d.get("total_opinions",0)}</td><td>{d.get("scored_opinions",0)}</td>'
+            body += f'<td class="{dir_cls}">{dir_acc:.0%}</td>' if dir_acc else '<td>-</td>'
+            body += f'<td>{range_acc:.0%}</td>' if range_acc else '<td>-</td>'
+            body += f'<td class="{dq_cls}">{dq_quality:.0%}</td>' if dq_quality else '<td>-</td>'
+            body += f'<td>{dq_alpha:+.1f}%</td>' if dq_alpha else '<td>-</td>'
+            body += '</tr>'
+        body += "</table>"
+    else:
+        body += "<p>No cross-instance data yet.</p>"
+    body += "</div>"
+
+    body += '<div class="card"><h2>Opinion Divergence by Symbol</h2>'
     if not divergence:
         body += "<p>No divergence data yet. Opinions must be captured by 2+ instances on the same symbols.</p></div>"
         return _page_wrapper("Opinion Divergence", body)

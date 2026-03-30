@@ -509,7 +509,68 @@ ctx.save()
 "
 ```
 
-### Step 7: Write Enriched Completion Record
+### Step 7: Market Opinion & Decision Quality Check
+
+Review the Market Opinion System health and cross-instance divergence:
+
+```python
+PYTHONPATH=. python3 -c "
+from src.db.database import get_db, init_db
+from src.db.models import MarketOpinionRecord, DecisionQualityRecord
+from datetime import datetime, timedelta
+import json
+from pathlib import Path
+
+init_db()
+
+# Opinion capture volume
+with get_db() as s:
+    day_ago = datetime.now() - timedelta(days=1)
+    recent_opinions = s.query(MarketOpinionRecord).filter(
+        MarketOpinionRecord.created >= day_ago
+    ).count()
+
+    scored_opinions = s.query(MarketOpinionRecord).filter(
+        MarketOpinionRecord.score_10d_direction.isnot(None)
+    ).count()
+
+    print(f'Opinions last 24h: {recent_opinions}')
+    print(f'Total scored (10d): {scored_opinions}')
+
+# Decision quality summary
+quality_file = Path.home() / 'quant_results/intelligence/decision_quality.json'
+if quality_file.exists():
+    q = json.loads(quality_file.read_text())
+    for h in ('1d', '5d', '10d'):
+        d = q.get(h, {})
+        if d:
+            print(f'Decision quality {h}: {d[\"avg_quality\"]:.0%} correct, alpha={d[\"avg_alpha\"]:+.1f}% (n={d[\"count\"]})')
+
+# Cross-instance opinion divergence
+meta_file = Path.home() / 'quant_results/parallel/meta_report_latest.json'
+if meta_file.exists():
+    meta = json.loads(meta_file.read_text())
+    div = meta.get('opinion_divergence', {})
+    if div:
+        print(f'\\nCross-instance opinion agreement: {div.get(\"avg_direction_agreement\",\"?\"):.0%}')
+        high_div = div.get('high_divergence', [])
+        if high_div:
+            print(f'HIGH DIVERGENCE (instances disagree): {high_div[:5]}')
+        high_con = div.get('high_consensus', [])
+        if high_con:
+            print(f'Full consensus: {high_con[:5]}')
+"
+```
+
+**Flag if:**
+- Opinion capture volume is 0 (sessions not capturing opinions — check skill integration)
+- Decision quality avg_quality < 40% at any horizon (decisions worse than random)
+- Cross-instance direction agreement < 50% on held positions (high uncertainty)
+- Any held position appears in high_divergence list (instances disagree on your position)
+
+For high-divergence held symbols, add an action item: "Review [SYMBOL] — instances disagree on direction. Auto=[dir], Beta=[dir], Gamma=[dir]."
+
+### Step 8: Write Enriched Completion Record
 
 ```python
 from src.monitoring.autonomous_mode import write_session_completion

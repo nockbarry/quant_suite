@@ -130,7 +130,98 @@ Answer these questions in your analysis:
 - What was the alpha vs SPY for each instance?
 - Were there any decisions that all 3 instances made differently? What happened?
 
-## Step 2b: Bug Triage
+## Step 2b: Cross-Instance Opinion Analysis (Deep Dive)
+
+This is the weekly deep reasoning about how the 3 instances see the market differently.
+
+```python
+PYTHONPATH=. python3 -c "
+import json, sqlite3
+from pathlib import Path
+from datetime import datetime, timedelta
+from collections import defaultdict
+
+# 1. Read opinion divergence from meta-observer
+meta_file = Path.home() / 'quant_results/parallel/meta_report_latest.json'
+if meta_file.exists():
+    meta = json.loads(meta_file.read_text())
+    div = meta.get('opinion_divergence', {})
+    if div:
+        print('=== OPINION DIVERGENCE ===')
+        print(f'Symbols compared: {div.get(\"symbol_count\",0)}')
+        print(f'Avg direction agreement: {div.get(\"avg_direction_agreement\",0):.0%}')
+        print(f'High divergence: {div.get(\"high_divergence\",[])}')
+        print(f'Full consensus: {div.get(\"high_consensus\",[])}')
+    else:
+        print('No opinion divergence data yet')
+
+# 2. Decision quality comparison across instances
+for inst in ('auto', 'beta', 'gamma'):
+    if inst == 'auto':
+        qf = Path.home() / 'quant_results/intelligence/decision_quality.json'
+    else:
+        qf = Path.home() / f'quant_results_{inst}/intelligence/decision_quality.json'
+    if qf.exists():
+        q = json.loads(qf.read_text())
+        d10 = q.get('10d', {})
+        if d10:
+            print(f'{inst}: 10d quality={d10[\"avg_quality\"]:.0%}, return={d10[\"avg_return\"]:+.1f}%, alpha={d10[\"avg_alpha\"]:+.1f}% (n={d10[\"count\"]})')
+
+# 3. Per-symbol opinion accuracy comparison (from each instance's DB)
+print()
+print('=== PER-INSTANCE OPINION ACCURACY ===')
+for inst in ('auto', 'beta', 'gamma'):
+    if inst == 'auto':
+        db_path = Path.home() / 'quant_results/athena.db'
+    else:
+        db_path = Path.home() / f'quant_results_{inst}/athena.db'
+    if not db_path.exists():
+        continue
+    try:
+        conn = sqlite3.connect(str(db_path))
+        # Total opinions and scored count
+        total = conn.execute('SELECT COUNT(*) FROM market_opinions').fetchone()[0]
+        scored = conn.execute('SELECT COUNT(*) FROM market_opinions WHERE score_10d_direction IS NOT NULL').fetchone()[0]
+        if scored > 0:
+            avg_dir = conn.execute('SELECT AVG(score_10d_direction) FROM market_opinions WHERE score_10d_direction IS NOT NULL').fetchone()[0]
+            avg_range = conn.execute('SELECT AVG(score_10d_range) FROM market_opinions WHERE score_10d_range IS NOT NULL').fetchone()[0]
+            print(f'{inst}: {total} opinions, {scored} scored. 10d direction={avg_dir:.0%}, range={avg_range:.0%}')
+
+            # Per-sector accuracy (group by first letter of symbol as rough proxy)
+            # Better: get thesis-linked opinions
+            rows = conn.execute('''
+                SELECT thesis_id, COUNT(*) as n, AVG(score_10d_direction) as dir_acc
+                FROM market_opinions
+                WHERE score_10d_direction IS NOT NULL AND thesis_id IS NOT NULL AND thesis_id != ''
+                GROUP BY thesis_id
+                HAVING n >= 5
+                ORDER BY dir_acc DESC
+            ''').fetchall()
+            for thesis_id, n, dir_acc in rows[:5]:
+                print(f'  thesis {thesis_id[:8]}: {dir_acc:.0%} accuracy (n={n})')
+        else:
+            print(f'{inst}: {total} opinions, none scored yet')
+        conn.close()
+    except Exception as e:
+        print(f'{inst}: error reading DB: {e}')
+"
+```
+
+**Analyze and answer these questions:**
+
+1. **Which instance is most accurate?** Compare 10d direction accuracy across auto/beta/gamma. Is the most accurate also the most profitable?
+
+2. **Where do they disagree most?** For high-divergence symbols, which instance has been RIGHT historically on that sector/thesis?
+
+3. **Instance specialization**: Does any instance show consistently better accuracy on specific thesis types (energy vs tech vs defense)?
+
+4. **Consensus as signal**: When all 3 agree on direction, what's the actual hit rate? (This is the "error bar" — unanimous agreement should have higher accuracy than split opinions.)
+
+5. **Contrarian signal**: When one instance disagrees with the other two, is the contrarian or the majority right more often?
+
+Write findings to strategic context as `developing_patterns` for the operator/trade-decision sessions to consume.
+
+## Step 2c: Bug Triage
 
 Read the bug monitor report:
 ```python
