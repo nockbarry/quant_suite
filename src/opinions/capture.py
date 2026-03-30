@@ -154,6 +154,9 @@ class OpinionCaptureEngine:
         vix = market.get("vix", 0)
         regime = market.get("regime", "unknown")
 
+        hormuz = market.get("hormuz_disruption")
+        hormuz_str = f" | Hormuz disruption: {hormuz:.0f}%" if hormuz else ""
+
         return f"""MARKET OPINION CAPTURE — {timestamp}
 
 Form price opinions on {n} symbols. For each, provide:
@@ -162,7 +165,7 @@ Form price opinions on {n} symbols. For each, provide:
 3. Expected performance vs SPY over 10 days (outperform/underperform/inline and alpha %)
 4. Confidence (0-1), key driver (one phrase), key risk (one phrase)
 
-Current market: SPY ${spy:.2f} ({spy_chg:+.1f}%) | VIX {vix:.1f} | Regime: {regime}
+Current market: SPY ${spy:.2f} ({spy_chg:+.1f}%) | VIX {vix:.1f} | Regime: {regime}{hormuz_str}
 
 Symbol context:
 {context_lines}
