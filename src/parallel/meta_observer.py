@@ -67,11 +67,11 @@ class CrossInstanceMetrics:
     # Performance
     equity_comparison: dict  # {instance: equity}
 
-    # Opinion divergence (Market Opinion System)
-    opinion_divergence: dict = None  # {symbol: {direction_agreement, target_spread, ...}}
-
     # Recommendations
     recommendations: list
+
+    # Opinion divergence (Market Opinion System)
+    opinion_divergence: dict = None  # {symbol: {direction_agreement, target_spread, ...}}
 
 
 class MetaObserver:
@@ -523,7 +523,7 @@ class MetaObserver:
         instance_opinions: dict[str, dict[str, dict]] = {}  # {instance: {symbol: opinion_data}}
 
         for snap in snapshots:
-            db_path = snap.results_dir / "athena.db"
+            db_path = Path(snap.results_dir) / "athena.db"
             if not db_path.exists():
                 continue
 

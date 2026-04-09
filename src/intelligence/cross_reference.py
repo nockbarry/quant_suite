@@ -17,7 +17,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -538,14 +538,19 @@ class CrossReferenceEngine:
             for signpost in thesis.get_pending_signposts():
                 if signpost.target_date:
                     try:
-                        target = datetime.strptime(signpost.target_date, "%Y-%m-%d")
+                        if isinstance(signpost.target_date, datetime):
+                            target = signpost.target_date
+                        elif isinstance(signpost.target_date, date):
+                            target = datetime.combine(signpost.target_date, datetime.min.time())
+                        else:
+                            target = datetime.strptime(signpost.target_date, "%Y-%m-%d")
                         days_until = (target - now).days
                         if 0 <= days_until <= 3:
                             for sym in thesis.positions:
                                 catalyst_symbols.setdefault(sym, []).append(
                                     f"Signpost: {signpost.description}"
                                 )
-                    except ValueError:
+                    except (ValueError, TypeError):
                         pass
 
         # Check concentrated positions with catalysts

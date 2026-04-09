@@ -39,6 +39,22 @@ log() {
     [ -t 1 ] && echo "$msg" || true
 }
 
+# Check if today is a market trading day (weekday + not a holiday)
+is_market_day() {
+    local DOW=$(date +%u)  # 1=Mon, 7=Sun
+    if [ "$DOW" -ge 6 ]; then return 1; fi
+    local TODAY=$(date '+%Y-%m-%d')
+    local HOLIDAYS=(
+        "2026-01-01" "2026-01-19" "2026-02-16" "2026-04-03"
+        "2026-05-25" "2026-06-19" "2026-07-03" "2026-09-07"
+        "2026-11-26" "2026-12-25"
+    )
+    for holiday in "${HOLIDAYS[@]}"; do
+        if [ "$TODAY" = "$holiday" ]; then return 1; fi
+    done
+    return 0
+}
+
 # --- Setup ---
 
 cmd_setup() {
@@ -72,6 +88,11 @@ cmd_setup() {
 # --- Operator ---
 
 cmd_operator_start() {
+    # Skip on non-market days (prevents 36x restart spam on holidays)
+    if ! is_market_day; then
+        return 0
+    fi
+
     # Ensure tmux session exists
     if ! tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
         cmd_setup
@@ -449,7 +470,7 @@ cmd_boot() {
         log "BOOT: Outside market hours ($hour ET), skipping sentinel"
     fi
 
-    # 3. Set up secondary instances (beta, gamma, etc.)
+    # 3. Set up secondary instances (beta, gamma, etc.) — including sentinels
     for instance_dir in "$HOME"/quant_results_*; do
         if [ ! -d "$instance_dir" ]; then
             continue
@@ -460,6 +481,13 @@ cmd_boot() {
 
         QUANT_RESULTS_DIR="$instance_dir" ATHENA_INSTANCE="$inst_name" \
             "$SCRIPT_DIR/athena_scheduler.sh" setup >> "$BOOT_LOG" 2>&1 || true
+
+        # Start sentinel for secondary instances during market hours
+        if [ "$hour" -ge 5 ] && [ "$hour" -lt 18 ]; then
+            log "BOOT: Starting sentinel for instance '$inst_name'"
+            QUANT_RESULTS_DIR="$instance_dir" ATHENA_INSTANCE="$inst_name" \
+                "$SCRIPT_DIR/athena_scheduler.sh" sentinel-start >> "$BOOT_LOG" 2>&1 || true
+        fi
     done
 
     log "BOOT: All instances initialized"
@@ -478,10 +506,10 @@ cmd_health_check() {
         cmd_setup
     fi
 
-    # 2. Check sentinel PID (only during market hours 6 AM - 5 PM ET)
+    # 2. Check sentinel PID (only during market hours 6 AM - 5 PM ET on market days)
     local hour
     hour=$(TZ="America/New_York" date +%H)
-    if [ "$hour" -ge 6 ] && [ "$hour" -lt 17 ]; then
+    if [ "$hour" -ge 6 ] && [ "$hour" -lt 17 ] && is_market_day; then
         local sentinel_pid=""
         if [ -f "$SCHEDULER_DIR/locks/sentinel.lock" ]; then
             sentinel_pid=$(cat "$SCHEDULER_DIR/locks/sentinel.lock" 2>/dev/null)
@@ -493,8 +521,8 @@ cmd_health_check() {
         fi
     fi
 
-    # 3. Check operator (only between 9 AM and 4 PM ET)
-    if [ "$hour" -ge 9 ] && [ "$hour" -lt 16 ]; then
+    # 3. Check operator (only between 9 AM and 4 PM ET on market days)
+    if [ "$hour" -ge 9 ] && [ "$hour" -lt 16 ] && is_market_day; then
         local op_lock="$SCHEDULER_DIR/locks/operator.lock"
         if [ -f "$op_lock" ]; then
             local op_pid

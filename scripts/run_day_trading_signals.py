@@ -409,7 +409,7 @@ def print_scan_results(results: dict):
     print("-" * 70)
 
     for symbol, scan in results.get("by_symbol", {}).items():
-        if scan.get("error"):
+        if not scan or scan.get("error"):
             continue
 
         signals = scan.get("signals", [])

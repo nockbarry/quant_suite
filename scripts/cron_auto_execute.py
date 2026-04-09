@@ -30,8 +30,11 @@ async def auto_execute(dry_run: bool = False):
 
     init_db()
 
-    # Find PENDING decisions from last 4 hours (don't execute stale ones)
-    cutoff = datetime.now() - timedelta(hours=4)
+    # Find PENDING decisions from last 24 hours.
+    # Previous 4h cutoff was too aggressive — decisions created in evening sessions
+    # (e.g. 6:51 PM) were missed by next-morning auto-execute (6:45 AM = 12h later).
+    # 24h covers overnight + weekend gaps while still expiring stale decisions.
+    cutoff = datetime.now() - timedelta(hours=24)
 
     with get_db() as session:
         pending = (

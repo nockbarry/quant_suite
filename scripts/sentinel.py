@@ -354,6 +354,7 @@ class Sentinel:
         self.logged_alert_titles: set[str] = set()  # Track which alert types have been logged
         self._last_analyst_launch: float = 0  # Cooldown: min 5 min between analyst launches
         self._analyst_trigger_keys: set[str] = set()  # Dedup triggers within a day
+        self._logged_signposts_today: set[str] = set()  # Daily dedup: signpost text → logged once per day
 
     def run_check(self) -> dict:
         """Run a single sentinel check cycle.
@@ -507,14 +508,17 @@ class Sentinel:
                     symbols=[alert.symbol] if alert.symbol else [],
                 )
 
-        # 10. Log signpost triggers to board
+        # 10. Log signpost triggers to board (daily dedup — fire once per signpost text per day)
         for sp in signposts:
-            self.board.add_observation(
-                source="sentinel",
-                obs_type="signpost",
-                text=f"Signpost triggered: {sp.thesis_name} — {sp.signpost_description} ({sp.outcome})",
-                thesis=sp.thesis_name,
-            )
+            sp_key = f"{sp.thesis_name}|{sp.signpost_description}|{sp.outcome}"
+            if sp_key not in self._logged_signposts_today:
+                self._logged_signposts_today.add(sp_key)
+                self.board.add_observation(
+                    source="sentinel",
+                    obs_type="signpost",
+                    text=f"Signpost triggered: {sp.thesis_name} — {sp.signpost_description} ({sp.outcome})",
+                    thesis=sp.thesis_name,
+                )
 
         # 11. Save board
         self.board.save()
