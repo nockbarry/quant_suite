@@ -88,6 +88,7 @@ SCENARIOS = [
             "energy": -0.15, "gold": -0.12, "tankers": -0.20,
             "fertilizer": -0.10, "tech": 0.10, "defense": -0.03,
             "volatility": -0.25, "em": 0.04, "em_debt": 0.03,
+            "healthcare": 0.02, "fixed_income": -0.03,
         },
         probability="medium",
     ),
@@ -101,6 +102,7 @@ SCENARIOS = [
             "fertilizer": 0.12, "defense": 0.05, "tech": -0.08,
             "volatility": 0.40, "materials": 0.05, "em": -0.06,
             "em_debt": -0.04, "consumer": -0.05, "utilities": -0.02,
+            "healthcare": -0.03, "fixed_income": 0.05,
         },
         probability="medium",
     ),
@@ -113,6 +115,7 @@ SCENARIOS = [
             "gold": -0.03, "financials": 0.05, "tech": 0.08,
             "energy": -0.02, "reits": 0.06, "consumer": 0.04,
             "em": 0.05, "em_debt": 0.04, "volatility": -0.15,
+            "healthcare": 0.03, "fixed_income": 0.05,
         },
         probability="low",
     ),
@@ -127,6 +130,7 @@ SCENARIOS = [
             "financials": -0.03, "tankers": 0.05, "fertilizer": 0.06,
             "defense": 0.02, "volatility": 0.20, "consumer": -0.04,
             "em": -0.04, "em_debt": -0.03, "utilities": -0.02,
+            "healthcare": -0.02, "fixed_income": -0.08,
         },
         probability="medium",
     ),
@@ -165,7 +169,7 @@ SCENARIOS = [
             "fertilizer": 0.25, "defense": 0.08, "tech": -0.15,
             "volatility": 0.60, "consumer": -0.12, "financials": -0.08,
             "em": -0.10, "em_debt": -0.08, "utilities": -0.05,
-            "materials": 0.05,
+            "materials": 0.05, "healthcare": -0.03, "fixed_income": 0.08,
         },
         probability="low",
     ),
@@ -178,7 +182,7 @@ SCENARIOS = [
             "consumer": -0.10, "defense": -0.06, "tankers": -0.08,
             "materials": -0.12, "em": -0.15, "em_debt": -0.08,
             "gold": 0.05, "volatility": 0.50, "utilities": -0.04,
-            "fertilizer": -0.08,
+            "fertilizer": -0.08, "healthcare": -0.05, "fixed_income": 0.06,
         },
         probability="low",
     ),
@@ -196,21 +200,30 @@ SYMBOL_SECTOR_MAP = {
     # Gold
     "GLD": "gold", "GDX": "gold", "GOLD": "gold", "NEM": "gold",
     "UGL": "gold", "NUGT": "gold", "IAU": "gold",
-    # Tankers
+    # Tankers / LNG carriers
     "FRO": "tankers", "DHT": "tankers", "INSW": "tankers", "STNG": "tankers",
+    "FLNG": "tankers", "GLNG": "tankers",
     # Defense
     "NOC": "defense", "GD": "defense", "LMT": "defense", "RTX": "defense",
     "LHX": "defense", "KBR": "defense", "J": "defense", "FLR": "defense",
     "PSN": "defense", "EUAD": "defense",
-    # Tech
+    # Tech / Cyber
     "NVDA": "tech", "GOOGL": "tech", "MU": "tech", "AMD": "tech",
     "AAPL": "tech", "MSFT": "tech", "META": "tech", "TSM": "tech",
+    "QCOM": "tech", "CRWD": "tech", "CIBR": "tech", "ZS": "tech",
+    "AMAT": "tech", "LRCX": "tech", "KLAC": "tech",
     # Fertilizer
     "CF": "fertilizer", "MOS": "fertilizer", "NTR": "fertilizer",
     # Materials / Copper / Rare Earth
     "FCX": "materials", "COPX": "materials", "REMX": "materials",
+    "MP": "materials",
     # Utilities / Nuclear
     "NEE": "utilities", "LEU": "utilities", "CCJ": "utilities",
+    "CEG": "utilities", "VST": "utilities", "ETR": "utilities", "OKLO": "utilities",
+    # Healthcare / GLP-1
+    "LLY": "healthcare", "NVO": "healthcare", "DECK": "consumer",
+    # Fixed Income
+    "TLT": "fixed_income", "UUP": "fixed_income", "LNG": "energy",
     # EM / Brazil
     "PBR": "em", "ITUB": "em", "EWZ": "em",
     "EMB": "em_debt", "VWOB": "em_debt",
