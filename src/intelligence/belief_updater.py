@@ -112,7 +112,12 @@ class BeliefUpdater:
         return report
 
     def _auto_apply_suggestions(self, suggestions: list[ThesisSuggestion]):
-        """Auto-apply ALL thesis conviction changes. Fully autonomous — no human review needed."""
+        """Auto-apply ALL thesis conviction changes. Fully autonomous — no human review needed.
+
+        Safeguards:
+        - Hard ceiling at 95% (prevents anchoring at 100%)
+        - Per-day velocity cap: max ±5% change per run (prevents whiplash)
+        """
         if not suggestions:
             return
 
@@ -122,15 +127,21 @@ class BeliefUpdater:
 
             tracker = ThesisTracker(paths.theses)
 
+            MAX_CONVICTION = 95  # Prevent anchoring at ceiling
+            MAX_DAILY_CHANGE = 5  # Cap per-run velocity
+
             for s in suggestions:
                 thesis = tracker.get_thesis(s.thesis_id)
                 if not thesis or thesis.status != "active":
                     continue
 
-                new_conviction = max(15, min(100, thesis.conviction + s.suggested_change))
+                # Clamp change to velocity limit
+                clamped_change = max(-MAX_DAILY_CHANGE, min(MAX_DAILY_CHANGE, s.suggested_change))
+                new_conviction = max(15, min(MAX_CONVICTION, thesis.conviction + clamped_change))
                 if new_conviction == thesis.conviction:
                     continue
 
+                actual_change = new_conviction - thesis.conviction
                 thesis.update_conviction(
                     new_value=new_conviction,
                     reason=f"[auto] Belief updater: {s.reason}",
@@ -138,8 +149,8 @@ class BeliefUpdater:
                 tracker._save_thesis(thesis)
                 logger.info(
                     f"Belief updater auto-applied: {s.thesis_name} "
-                    f"{thesis.conviction - s.suggested_change:.0f}% → {new_conviction:.0f}% "
-                    f"({s.suggested_change:+}%)"
+                    f"{thesis.conviction - actual_change:.0f}% → {new_conviction:.0f}% "
+                    f"({actual_change:+.0f}%, requested {s.suggested_change:+}%)"
                 )
 
                 # Audit trail

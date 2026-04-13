@@ -130,6 +130,14 @@ TRIGGER_RULES = {
         "check": "conviction_velocity",
         "threshold": 5.0,
     },
+    "thesis_review_overdue": {
+        "description": "Thesis review overdue by 7+ days — spawn thesis review session",
+        "level": "alert",
+        "session": "thesis",
+        "cooldown_hours": 24,
+        "check": "thesis_review_overdue",
+        "threshold": 7,
+    },
 
     # === SYSTEM TRIGGERS ===
     "crash_loop_detected": {
@@ -217,6 +225,9 @@ class AdaptiveTriggerEngine:
 
             elif check_type == "conviction_velocity":
                 return self._check_conviction_velocity(rule_name, rule, state, threshold)
+
+            elif check_type == "thesis_review_overdue":
+                return self._check_thesis_review_overdue(rule_name, rule, state, threshold)
 
             elif check_type == "error_frequency":
                 return self._check_error_frequency(rule_name, rule, state, threshold)
@@ -506,6 +517,35 @@ class AdaptiveTriggerEngine:
             )
             trigger.data = {"low_conviction_theses": low_conviction}
             return trigger
+        return None
+
+    def _check_thesis_review_overdue(self, rule_name, rule, state, threshold) -> Optional[TriggerEvent]:
+        """Check for theses with reviews overdue by threshold days."""
+        try:
+            from src.knowledge.thesis import ThesisTracker
+            tracker = ThesisTracker(paths.theses)
+            overdue = []
+            for thesis in tracker.get_active_theses():
+                if thesis.next_review and thesis.next_review < datetime.now() - timedelta(days=threshold):
+                    days_late = (datetime.now() - thesis.next_review).days
+                    overdue.append({
+                        "name": thesis.name,
+                        "id": thesis.id,
+                        "conviction": thesis.conviction,
+                        "days_overdue": days_late,
+                    })
+            if overdue:
+                details = "; ".join(
+                    f"{t['name']} ({t['days_overdue']}d)" for t in overdue
+                )
+                trigger = self._make_trigger(
+                    rule_name, rule,
+                    f"{len(overdue)} theses overdue for review: {details}",
+                )
+                trigger.data = {"overdue_theses": overdue}
+                return trigger
+        except Exception as e:
+            logger.debug(f"Thesis review overdue check failed: {e}")
         return None
 
     def _check_conviction_velocity(self, rule_name, rule, state, threshold) -> Optional[TriggerEvent]:

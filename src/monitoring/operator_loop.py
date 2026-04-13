@@ -203,6 +203,7 @@ class OperatorLoop:
         agent_completions = self._get_recent_completions()
         convergences = self._check_convergences()
         stale_sources = self._check_data_freshness()
+        overdue_reviews = self._check_overdue_reviews()
 
         # Check autonomous session data
         session_updates = self._check_session_updates()
@@ -221,7 +222,7 @@ class OperatorLoop:
         # Generate action items (include autonomous session data)
         action_items = self._generate_action_items(
             alerts, signpost_triggers, convergences, portfolio_status, regime_change,
-            thesis_changes, new_research,
+            thesis_changes, new_research, overdue_reviews,
         )
 
         # Research suggestions based on findings
@@ -452,6 +453,30 @@ class OperatorLoop:
 
         return triggers
 
+    def _check_overdue_reviews(self) -> list[dict]:
+        """Check for theses overdue for scheduled review."""
+        overdue = []
+        if not self.theses_dir.exists():
+            return overdue
+
+        try:
+            from src.knowledge.thesis import ThesisTracker
+            tracker = ThesisTracker(self.theses_dir)
+            for thesis in tracker.get_theses_due_for_review():
+                days_overdue = 0
+                if thesis.next_review:
+                    days_overdue = (datetime.now() - thesis.next_review).days
+                overdue.append({
+                    "id": thesis.id,
+                    "name": thesis.name,
+                    "conviction": thesis.conviction,
+                    "days_overdue": days_overdue,
+                })
+        except Exception as e:
+            logger.debug(f"Error checking overdue reviews: {e}")
+
+        return overdue
+
     def _get_recent_completions(self) -> list[AgentCompletion]:
         """Get agent completions since last check."""
         completions = []
@@ -654,6 +679,7 @@ class OperatorLoop:
         regime_change: bool,
         thesis_changes: list[dict] | None = None,
         new_research: list[dict] | None = None,
+        overdue_reviews: list[dict] | None = None,
     ) -> list[ActionItem]:
         """Generate action recommendations based on findings."""
         actions = []
@@ -742,6 +768,17 @@ class OperatorLoop:
                     reason=f"Status changed from {change.get('old_status')} to {change.get('new_status')}",
                     thesis_id=change.get("thesis_id"),
                 ))
+
+        # Overdue thesis reviews
+        for review in (overdue_reviews or []):
+            priority = "high" if review.get("days_overdue", 0) >= 14 else "medium"
+            actions.append(ActionItem(
+                priority=priority,
+                category="thesis",
+                action=f"Review overdue: {review.get('name')} ({review.get('days_overdue')}d overdue)",
+                reason=f"Conviction {review.get('conviction')}% — last review was {review.get('days_overdue')} days ago",
+                thesis_id=review.get("id"),
+            ))
 
         # Trade triggers from research/other sessions
         for item in (new_research or []):

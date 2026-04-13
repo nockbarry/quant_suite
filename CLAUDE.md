@@ -283,6 +283,15 @@ Validated signals: Bollinger Bounce (IC=0.31, 61.4%), RSI Extreme (IC=0.20, 53.8
 
 Evening research skill restructured with 5-step investigative checklist: insider check, regulatory check, market reaction analysis, strategic analysis search, cross-reference review. Web dashboard at `/alerts`.
 
+### Thesis Maintenance (Automated)
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **ThesisMaintenanceCron** | `scripts/cron_thesis_maintenance.py` | Daily 6:10 AM: auto-suggest theses from signal convergences (≥75% confidence, max 2/week), surface overdue reviews to situation board, enforce 95% conviction ceiling |
+| **ThesisSuggester** | `src/knowledge/thesis_suggester.py` | Scan signal convergences → generate suggestions → auto-create theses. Source weights: congressional 1.4, insider 1.3, statistical 1.2, news 1.0 |
+| **Belief updater safeguards** | `src/intelligence/belief_updater.py` | Conviction ceiling 95% (prevents anchoring), ±5% per-run velocity cap (prevents whiplash) |
+| **Operator overdue check** | `src/monitoring/operator_loop.py` | Every operator check surfaces theses past `next_review` as action items |
+| **Sentinel trigger** | `src/intelligence/adaptive_triggers.py` | `thesis_review_overdue`: spawns `/thesis` session when any thesis 7+ days past review (24h cooldown) |
+
 ### Self-Improvement Loop
 | Component | Location | Purpose |
 |-----------|----------|---------|
@@ -290,7 +299,7 @@ Evening research skill restructured with 5-step investigative checklist: insider
 | **SystemReview skill** | `.claude/skills/system-review/SKILL.md` | Weekly evaluation: instance comparison, thesis health, parameter tuning, bug triage. Sunday 4:30 PM. |
 | **AutoUpgrader** | `src/upgrades/auto_upgrader.py` | Branch-test-merge code changes. Tier 1 (whitelist), Tier 2 (new files), Tier 3 (propose). |
 | **BugMonitor** | `src/intelligence/bug_monitor.py` | Scans logs for tracebacks, categorizes, proposes fixes. Every 2h. Dashboard at `/bugs`. |
-| **AdaptiveTriggerEngine** | `src/intelligence/adaptive_triggers.py` | Event-driven session spawning: portfolio drawdown, VIX spike, position stop, red flag cluster, crash loop, thesis invalidation. Integrated into sentinel. |
+| **AdaptiveTriggerEngine** | `src/intelligence/adaptive_triggers.py` | Event-driven session spawning: portfolio drawdown, VIX spike, position stop, red flag cluster, crash loop, thesis invalidation, thesis review overdue. Integrated into sentinel. |
 
 ### Knowledge Layer
 | Component | Location | Purpose |
@@ -462,6 +471,7 @@ The `AdaptiveTriggerEngine` (`src/intelligence/adaptive_triggers.py`) runs insid
 | Insider selling cluster | 3+ portfolio stocks in 24h | elevated | trade-decision | 8h |
 | Thesis invalidated | conviction <25% | elevated | trade-decision | 4h |
 | Conviction velocity | >5pp/day | alert | analyst | 8h |
+| Thesis review overdue | 7+ days past review | alert | thesis | 24h |
 | Crash loop | 5+ same error/1h | critical | system-review | 12h |
 | Ensemble rejections | 3+ consecutive | elevated | system-review | 24h |
 | Instance divergence | >15% equity spread | critical | system-review | 24h |
@@ -534,6 +544,8 @@ Read `docs/TRADING_PATTERNS.md` for accumulated wisdom: vehicle enumeration, con
 | **Meta Reports** | `~/quant_results/parallel/meta_report_latest.json` |
 | **Upgrade Log** | `~/quant_results/logs/upgrade_log.jsonl` |
 | **Auto-Corrections Log** | `~/quant_results/logs/auto_corrections.jsonl` |
+| **Thesis Maintenance Log** | `~/quant_results/logs/thesis_maintenance.jsonl` |
+| **Auto-Thesis Creation Log** | `~/quant_results/logs/auto_thesis_creation.jsonl` |
 | **Signal Engines** | `~/quant_results/live/signal_engines.json` |
 | **SEC Insider Alerts** | `~/quant_results/live/sec_insider_alerts.json` |
 
@@ -583,6 +595,7 @@ Alerting (`smart_alerter.py`, `mobile_bot.py`), execution rules (`rules_engine.p
 | `cron_belief_update.py` | 5:30 PM Mon-Fri | Update signal weights |
 | `run_cross_reference.py` | Every 30 min (9-4pm) | Cross-reference red flags |
 | `auto_corrections.py` | Every 30 min (9-4pm) | Mechanical conviction/position fixes |
+| `cron_thesis_maintenance.py` | 6:10 AM Mon-Fri | Auto-suggest theses, surface overdue reviews, conviction ceiling enforcement |
 | `run_market_reaction.py` | Every 30 min (9-4pm) | News reaction scoring |
 | `run_signal_engines.py` | Every 30 min (9-4pm) | Conviction velocity + crisis alpha signals |
 | `run_stress_test.py` | 5:35 PM Mon-Fri | Portfolio VaR and scenario analysis |

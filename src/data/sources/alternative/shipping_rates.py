@@ -67,10 +67,10 @@ class ShippingRateCollector:
     TICKERS = ["BDRY", "FRO", "DHT", "BNO"]
 
     REFERENCE_PRICES = {
-        "BDRY": 10.0,
-        "FRO": 20.0,
-        "DHT": 12.0,
-        "BNO": 30.0,
+        "BDRY": 11.0,
+        "FRO": 35.0,
+        "DHT": 17.5,
+        "BNO": 49.0,
     }
 
     def __init__(self, cache_dir: Optional[Path] = None):

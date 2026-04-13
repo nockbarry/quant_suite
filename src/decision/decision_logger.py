@@ -622,6 +622,9 @@ def create_decision(
         except Exception:
             pass
 
+    # HOLD decisions require no broker action — mark executed immediately
+    initial_status = DecisionStatus.EXECUTED if action == Action.HOLD else DecisionStatus.PENDING
+
     decision = TradingDecision(
         id=str(uuid.uuid4())[:8],
         timestamp=datetime.now(),
@@ -642,6 +645,7 @@ def create_decision(
         adversarial_notes=adversarial_notes,
         setup_type=setup_type or context.get("setup_type", ""),
         signal_ids=signal_ids or [],
+        status=initial_status,
     )
 
     # Persist context events as ProcessEvent records linked to this decision

@@ -345,6 +345,8 @@ class ThesisSuggester:
         thesis = self.thesis_tracker.create_thesis(
             name=suggestion.suggested_name,
             summary=suggestion.suggested_summary,
+            bull_case=f"Auto-suggested: {suggestion.signal_count} converging {suggestion.direction} signals from {', '.join(set(suggestion.signal_sources))}",
+            bear_case="Signals may be transient or already priced in",
             conviction=int(suggestion.confidence_score * 100),
             signposts=suggestion.suggested_signposts,
             positions=[symbol],
