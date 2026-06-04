@@ -48,15 +48,26 @@ async def main_async(live: bool) -> int:
     broker = get_broker(paper=True)
     await broker.connect()
     try:
+        # Market-hours guard: never submit live on stale after-hours quotes
+        # (the MU over-buy happened on a midnight run with a $52 stale print).
+        market_open = True
+        try:
+            market_open = bool(broker._trading_client.get_clock().is_open)
+        except Exception as e:
+            logger.warning(f"Could not read market clock ({e})")
+        if live and not market_open:
+            logger.warning("Market CLOSED — refusing to submit live orders. Re-run during market hours.")
+            return 0
+
         account = await broker.get_account()
         equity = float(account.portfolio_value)
+        cash = float(account.cash)
         positions = await broker.get_positions()
 
-        current_values, prices, pos_dicts = {}, {}, []
+        current_values, pos_dicts = {}, []
         for sym, p in positions.items():
             s = str(sym)
             current_values[s] = float(p.market_value)
-            prices[s] = float(p.current_price)
             try:
                 pos_dicts.append({"symbol": s, "unrealized_pnl_pct": float(p.unrealized_pnl_pct)})
             except Exception:
@@ -74,16 +85,25 @@ async def main_async(live: bool) -> int:
         )
         tid = save_target(target, source=f"live_runner:{instance}")
 
-        # Quotes for target symbols we don't currently hold
-        missing = [s for s in target.weights if s not in prices]
-        if missing:
-            quotes = await broker.get_quotes(missing)
-            for sym, q in (quotes or {}).items():
-                if q and getattr(q, "last", None):
-                    prices[str(sym)] = float(q.last)
+        # Robust prices via bid/ask MID for EVERY symbol in the plan universe
+        # (held + target). Falls back to the position's last price only if no
+        # two-sided quote exists; a symbol with no usable price is skipped.
+        prices = {}
+        universe = set(current_values) | set(target.weights)
+        quotes = await broker.get_quotes(list(universe))
+        for sym in universe:
+            q = (quotes or {}).get(sym)
+            px = Reconciler.safe_price(q) if q else None
+            if px is None and sym in positions:
+                px = float(positions[sym].current_price)  # fallback for held
+            if px and px > 0:
+                prices[sym] = px
 
         reconciler = Reconciler()
-        orders = reconciler.plan(target, current_values=current_values, equity=equity, prices=prices)
+        orders = reconciler.plan(
+            target, current_values=current_values, equity=equity, prices=prices,
+            available_cash=cash,
+        )
 
         logger.info(
             f"[{instance}/{mode}] equity=${equity:,.0f} "

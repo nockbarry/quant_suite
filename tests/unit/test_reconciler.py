@@ -39,13 +39,13 @@ class TestReconcilePlan:
         # the remaining 5% is filled by the next reconcile run (gradual convergence).
         tp = _target({"NVDA": 0.10})
         r = Reconciler()
-        orders = r.plan(tp, current_values={}, equity=100_000, prices=PRICES)
+        orders = r.plan(tp, current_values={}, equity=100_000, prices=PRICES, today="20260603")
         assert len(orders) == 1
         o = orders[0]
         assert o.symbol == "NVDA" and o.side == "buy"
         assert o.qty == 25  # $5,000 (5% rail) / $200
         assert "partial" in o.reason
-        assert o.client_order_id.startswith("recon-20260603-NVDA-b")
+        assert o.client_order_id == "recon-20260603-NVDA-b25"
 
     def test_unbacked_position_is_sold(self):
         # XLV held but not in target -> sell to zero
@@ -91,3 +91,46 @@ class TestReconcilePlan:
         a = r.plan(tp, current_values={}, equity=100_000, prices=PRICES)
         b = r.plan(tp, current_values={}, equity=100_000, prices=PRICES)
         assert [o.client_order_id for o in a] == [o.client_order_id for o in b]
+
+
+class _FakeQuote:
+    def __init__(self, bid=0, ask=0, last=0):
+        self.bid, self.ask, self.last = bid, ask, last
+
+
+class TestSafePrice:
+    def test_uses_mid_not_stale_last(self):
+        # The MU incident: stale last=$52, real market ~$992. Mid wins.
+        q = _FakeQuote(bid=990, ask=994, last=52.5)
+        assert Reconciler.safe_price(q) == 992.0
+
+    def test_absurd_spread_rejected(self):
+        assert Reconciler.safe_price(_FakeQuote(bid=10, ask=900)) is None
+
+    def test_no_two_sided_market_falls_back_to_last(self):
+        assert Reconciler.safe_price(_FakeQuote(last=100)) == 100
+
+    def test_no_price_returns_none(self):
+        assert Reconciler.safe_price(_FakeQuote()) is None
+
+
+class TestNoLeverageGuard:
+    def test_buys_capped_at_available_cash(self):
+        # Two 10% buys ($10k each clipped to 5% rail=$5k) but only $6k cash:
+        # first buy ($5k) fits, second is dropped (no margin).
+        tp = _target({"NVDA": 0.10, "MU": 0.10})
+        r = Reconciler()
+        orders = r.plan(tp, current_values={}, equity=100_000, prices=PRICES,
+                        available_cash=6_000)
+        buys = [o for o in orders if o.side == "buy"]
+        assert sum(o.qty * o.est_price for o in buys) <= 6_000 + 1e-6
+
+    def test_bad_price_cannot_lever(self):
+        # Reproduce the MU bug shape: target wants ~$8k of MU but the (mistaken)
+        # price is tiny, so qty would be huge — the cash cap still bounds spend.
+        tp = _target({"MU": 0.08})
+        r = Reconciler()
+        orders = r.plan(tp, current_values={}, equity=100_000,
+                        prices={"MU": 52.5}, available_cash=25_000)
+        spent = sum(o.qty * o.est_price for o in orders if o.side == "buy")
+        assert spent <= 25_000 + 1e-6  # never exceeds cash -> no leverage

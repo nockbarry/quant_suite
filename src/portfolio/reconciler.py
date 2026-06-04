@@ -74,6 +74,25 @@ class Reconciler:
         self.max_orders_per_run = max_orders_per_run
 
     @staticmethod
+    def safe_price(quote, max_spread_ratio: float = 3.0) -> Optional[float]:
+        """Robust price from a Quote: use bid/ask MID, never a stale `last`.
+
+        The MU incident: an after-hours `last` of $52 (real price ~$992) caused
+        a 19x over-buy. Mid-of-bid/ask is resistant to stale prints. Returns
+        None (caller skips the symbol) if there's no usable two-sided market.
+        """
+        bid = float(getattr(quote, "bid", 0) or 0)
+        ask = float(getattr(quote, "ask", 0) or 0)
+        last = float(getattr(quote, "last", 0) or 0)
+        if bid > 0 and ask >= bid:
+            if ask / bid > max_spread_ratio:   # absurd spread => untrustworthy
+                return None
+            return (bid + ask) / 2.0
+        # No two-sided market: only trust `last` if it's a positive number and
+        # we have nothing else. Conservative callers may still skip.
+        return last if last > 0 else None
+
+    @staticmethod
     def _client_order_id(today: str, symbol: str, side: str, qty: int) -> str:
         """Deterministic, idempotent, <=48 chars, alphanumeric+dash."""
         # e.g. recon-20260603-NVDA-b12  (date 8 + symbol<=5 + side 1 + qty)
@@ -89,6 +108,7 @@ class Reconciler:
         *,
         today: Optional[str] = None,
         allow_buys: bool = True,
+        available_cash: Optional[float] = None,
         block_buy_reason: str = "drawdown",
     ) -> list[ReconcileOrder]:
         """Diff current vs target into idempotent orders.
@@ -97,8 +117,12 @@ class Reconciler:
             target: desired portfolio.
             current_values: symbol -> current market value (USD).
             equity: total account equity (USD).
-            prices: symbol -> last price (USD). Symbols without a price are skipped.
+            prices: symbol -> price (USD). Symbols without a price are skipped.
             allow_buys: if False, only SELL legs are emitted (drawdown protection).
+            available_cash: if set, total BUY notional is capped at this (no
+                leverage — buys never exceed settled cash, regardless of price
+                errors). This is the hard backstop that would have prevented the
+                MU over-buy from levering the account.
         """
         if equity <= 0:
             return []
@@ -144,6 +168,29 @@ class Reconciler:
         # Prioritize the largest moves; sells first (free up buying power, and
         # are always allowed). Cap orders per run.
         candidates.sort(key=lambda o: (o.side != "sell", -abs(o.target_value - o.current_value)))
+
+        # No-leverage guard: cap cumulative BUY notional at available cash.
+        # Conservative — does NOT count same-run sell proceeds, so buys can
+        # never exceed settled cash even if sells fill late. Under-deploys
+        # slightly on day 1; converges as sells settle. This is the hard
+        # backstop against a bad price levering the account.
+        if available_cash is not None:
+            budget = max(0.0, available_cash)
+            kept: list[ReconcileOrder] = []
+            for o in candidates:
+                if o.side == "sell":
+                    kept.append(o)
+                    continue
+                affordable = int(budget / o.est_price) if o.est_price > 0 else 0
+                if affordable < 1:
+                    continue  # out of cash — defer this buy to a later run
+                if affordable < o.qty:
+                    o.qty = affordable
+                    o.reason = f"{o.reason};cash_capped"
+                budget -= o.qty * o.est_price
+                kept.append(o)
+            candidates = kept
+
         if len(candidates) > self.max_orders_per_run:
             dropped = candidates[self.max_orders_per_run:]
             logger.info(f"Capping at {self.max_orders_per_run} orders/run; deferring {len(dropped)}: "
