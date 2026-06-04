@@ -180,7 +180,10 @@ class Reconciler:
                 else:
                     res = await broker.market_sell(o.symbol, Decimal(o.qty), **kwargs)
                 o.status = "submitted"
-                o.metadata["alpaca_order_id"] = getattr(res, "order_id", None)
+                # Alpaca returns a UUID for order_id; coerce to str so it binds
+                # to the String column (sqlite rejects raw UUID objects).
+                oid = getattr(res, "order_id", None)
+                o.metadata["alpaca_order_id"] = str(oid) if oid is not None else None
             except Exception as e:
                 msg = str(e).lower()
                 o.status = "skipped" if "client_order_id" in msg or "duplicate" in msg else "rejected"
