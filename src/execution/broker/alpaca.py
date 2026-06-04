@@ -222,6 +222,12 @@ class AlpacaBroker(Broker):
         # Map order side
         side = AlpacaSide.BUY if order.side == OrderSide.BUY else AlpacaSide.SELL
 
+        # Optional deterministic idempotency key. The Reconciler sets this so a
+        # re-run produces the same id; Alpaca rejects duplicate client_order_ids
+        # broker-side, making reconciliation idempotent by construction.
+        coid = order.metadata.get("client_order_id") if order.metadata else None
+        coid_kw = {"client_order_id": coid} if coid else {}
+
         # Build order request based on type
         try:
             if order.order_type == OrderType.MARKET:
@@ -230,6 +236,7 @@ class AlpacaBroker(Broker):
                     qty=float(order.quantity),
                     side=side,
                     time_in_force=TimeInForce.DAY,
+                    **coid_kw,
                 )
             elif order.order_type == OrderType.LIMIT:
                 request = LimitOrderRequest(
@@ -238,6 +245,7 @@ class AlpacaBroker(Broker):
                     side=side,
                     time_in_force=TimeInForce.DAY,
                     limit_price=float(order.limit_price),
+                    **coid_kw,
                 )
             elif order.order_type == OrderType.STOP:
                 request = StopOrderRequest(

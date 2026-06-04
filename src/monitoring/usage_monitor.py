@@ -561,3 +561,56 @@ def format_tokens(n: int) -> str:
     if n >= 1_000:
         return f"{n / 1_000:.1f}K"
     return str(n)
+
+
+def persist_daily_costs(days: int = 7) -> int:
+    """Write real per-day, per-model token usage to the session_costs table.
+
+    Closes the cost-observability gap: usage_monitor already computes exact
+    token counts from Claude Code transcripts, but nothing persisted them to
+    the DB (the legacy llm_interactions table had 3 rows). Idempotent — upserts
+    on the unique (date, model) index, so re-running re-syncs recent days.
+
+    Returns the number of (date, model) rows written/updated.
+    """
+    from src.db.database import get_db
+    from src.db.models import SessionCostRecord
+
+    daily = _scan_all_sessions(days=max(days, 1))
+    if not daily:
+        logger.info("persist_daily_costs: no transcript usage found")
+        return 0
+
+    written = 0
+    with get_db() as session:
+        for date_str, du in daily.items():
+            for model_id, usage in du.by_model.items():
+                tier = _model_tier(model_id)
+                rates = PRICING[tier]
+                cost = (
+                    usage.get("input", 0) / 1_000_000 * rates["input"]
+                    + usage.get("output", 0) / 1_000_000 * rates["output"]
+                    + usage.get("cache_write", 0) / 1_000_000 * rates["cache_write"]
+                    + usage.get("cache_read", 0) / 1_000_000 * rates["cache_read"]
+                )
+                row = (
+                    session.query(SessionCostRecord)
+                    .filter(
+                        SessionCostRecord.date == date_str,
+                        SessionCostRecord.model == model_id,
+                    )
+                    .one_or_none()
+                )
+                if row is None:
+                    row = SessionCostRecord(date=date_str, model=model_id)
+                    session.add(row)
+                row.session_type = "aggregate"
+                row.input_tokens = usage.get("input", 0)
+                row.output_tokens = usage.get("output", 0)
+                row.cache_read_tokens = usage.get("cache_read", 0)
+                row.cache_write_tokens = usage.get("cache_write", 0)
+                row.equivalent_cost_usd = round(cost, 4)
+                row.recorded_at = datetime.now()
+                written += 1
+    logger.info(f"persist_daily_costs: upserted {written} (date, model) rows")
+    return written

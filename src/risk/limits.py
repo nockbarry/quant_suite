@@ -456,7 +456,9 @@ class RiskLimitsConfig:
     """Configuration for risk limits."""
 
     max_position_pct: float = 0.10
-    max_sector_pct: float = 0.30
+    # 40% matches CLAUDE.md safety rail + auto_corrections; was 0.30 (inconsistent).
+    # Pinned to 0.40 so the TargetPortfolioBuilder and the live limits agree.
+    max_sector_pct: float = 0.40
     max_drawdown_pct: float = 0.20
     max_daily_loss_pct: float = 0.05
     max_trade_pct: float = 0.05
