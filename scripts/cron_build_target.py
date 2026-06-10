@@ -64,14 +64,26 @@ def main() -> int:
 
     tracker = ThesisTracker()
     cash_policy = load_cash_policy()
+    from src.portfolio.event_reserves import merge_event_reserves
+    merge_event_reserves(cash_policy)
     adjustments = compute_rule_adjustments(state.get("positions", []))
     if adjustments:
         logger.info(f"Rule adjustments: {[(a.symbol, a.bounded_by) for a in adjustments]}")
     cal_bound = get_calibration_bound()  # None unless ATHENA_CALIBRATION_BOUND=1
     if cal_bound:
         logger.info("Opinion-derived calibration bound ENABLED")
+
+    from src.portfolio.clusters import compute_clusters
+    from src.portfolio.ranking import load_ranking
+    vehicle_universe = sorted({
+        s for t in tracker.get_active_theses() for s in (t.positions or [])
+    })
+    clusters = compute_clusters(vehicle_universe)  # None on data failure -> cap skipped
+    ranking = load_ranking()
+
     tp = TargetPortfolioBuilder(tracker, cash_policy=cash_policy).build(
         equity=equity, extra_adjustments=adjustments, calibration_bound=cal_bound,
+        correlation_clusters=clusters, ranking=ranking,
     )
     tid = save_target(tp, source="builder")
     if cash_policy.reserves:

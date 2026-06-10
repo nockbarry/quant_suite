@@ -183,13 +183,14 @@ Continuous LLM-generated market appraisal. Replaces the broken binary prediction
 from src.opinions.capture import OpinionCaptureEngine
 
 engine = OpinionCaptureEngine()
-result = engine.capture(session_type="operator")  # Returns {"prompt": str, "batch_id": str, ...}
-# LLM reads result["prompt"], outputs JSON array of opinions
-opinions = engine.parse_response(json_text, result["batch_id"], "operator", result["universe"])
-saved = engine.save_batch(opinions)
+result = engine.capture(session_type="operator")  # dict OR None (global throttle)
+if result is not None:  # None = not due yet (60-min cross-process budget) — skip
+    # LLM reads result["prompt"], outputs JSON array of opinions
+    opinions = engine.parse_response(json_text, result["batch_id"], "operator", result["universe"])
+    saved = engine.save_batch(opinions)
 ```
 
-### Operator hook (rate-limited to every 15 min)
+### Operator hook (rate-limited; global 60-min capture budget, env ATHENA_OPINION_INTERVAL_MIN)
 ```python
 opinion_result = loop.get_opinion_prompt()  # Returns None if not due
 ```

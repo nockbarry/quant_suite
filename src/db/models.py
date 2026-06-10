@@ -1380,3 +1380,31 @@ class SessionCostRecord(Base):
 
     def to_dict(self) -> dict:
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+class RealizedLotRecord(Base):
+    """One FIFO-matched closed lot, derived from broker fill history.
+
+    Ground truth for "did this trade make money" — rebuilt idempotently from
+    the full Alpaca order history each run (derived data, safe to wipe).
+    Closes the gap where only 1 of 492 executed decisions had realized P&L.
+    """
+
+    __tablename__ = "realized_lots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(10), nullable=False, index=True)
+    qty = Column(Float, default=0.0)
+    entry_price = Column(Float, default=0.0)
+    exit_price = Column(Float, default=0.0)
+    entry_time = Column(DateTime, nullable=True)
+    exit_time = Column(DateTime, nullable=True, index=True)
+    hold_days = Column(Float, default=0.0)
+    pnl = Column(Float, default=0.0)
+    pnl_pct = Column(Float, default=0.0)          # vs cost basis
+    buy_order_id = Column(String(100), nullable=True)
+    sell_order_id = Column(String(100), nullable=True, index=True)
+    instance_id = Column(String(20), default="default", index=True)
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}

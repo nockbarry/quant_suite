@@ -87,6 +87,10 @@ class TargetPortfolioBuilder:
                 if w.bounded_by is None:
                     w.bounded_by = "deploy_to_floor"
             self._apply_sector_cap(raw)
+            # floor-growth must not violate the correlation-cluster cap either
+            if getattr(self, "_clusters", None):
+                from src.portfolio.clusters import apply_cluster_cap
+                apply_cluster_cap(raw, self._clusters)
 
     def build(
         self,
@@ -94,6 +98,8 @@ class TargetPortfolioBuilder:
         today: Optional[date] = None,
         extra_adjustments: Optional[list[TargetWeight]] = None,
         calibration_bound: Optional[Callable[[float], float]] = None,
+        correlation_clusters: Optional[list[set]] = None,
+        ranking: Optional[list[str]] = None,
     ) -> TargetPortfolio:
         """Derive the target portfolio.
 
@@ -102,15 +108,30 @@ class TargetPortfolioBuilder:
             today: date for reserve evaluation (defaults to now).
             extra_adjustments: rule-engine overrides (Phase 5). weight=0 means exit.
             calibration_bound: optional fn conviction(0-1)->max weight. Off in Phase 2.
+            correlation_clusters: groups of correlated symbols; each multi-symbol
+                cluster's total weight is capped (~50%) — sector caps miss
+                cross-sector rate/AI clusters (CCJ+GLD+MU all fell together).
+            ranking: ordered thesis ids, best first (from weekly forced ranking).
+                Applies a budget tilt 1.2x (top) -> 0.8x (bottom) so ranking
+                actually differentiates sizing when conviction is clustered.
         """
         today = today or datetime.now().date()
         theses = self.tracker.get_active_theses()
+
+        # Rank tilt: linear 1.2x (rank 1) -> 0.8x (rank N). Breaks the
+        # everything-at-74-80% conviction cluster into differentiated sizing.
+        rank_tilt: dict[str, float] = {}
+        if ranking and len(ranking) > 1:
+            n = len(ranking)
+            for i, tid in enumerate(ranking):
+                rank_tilt[tid] = 1.2 - 0.4 * (i / (n - 1))
 
         # 1-3. ladder -> equal vehicle weights -> merge same symbol across theses
         raw: dict[str, TargetWeight] = {}
         sym_conviction: dict[str, float] = {}
         for th in theses:
             budget = self.sizer.thesis_budget(th.conviction)
+            budget *= rank_tilt.get(th.id, 1.0)
             vw = self.sizer.vehicle_weights(budget, th.positions)
             for sym, w in vw.items():
                 sym_conviction[sym] = max(sym_conviction.get(sym, 0.0), th.conviction)
@@ -145,6 +166,13 @@ class TargetPortfolioBuilder:
 
         # 5b. hard sector cap — scale down any over-weight sector proportionally
         self._apply_sector_cap(raw)
+
+        # 5c. correlation-cluster cap — catches cross-sector correlated bets
+        # (rate-sensitive CCJ/GLD/NEE/MU cluster) that sector caps miss.
+        self._clusters = correlation_clusters or []
+        if self._clusters:
+            from src.portfolio.clusters import apply_cluster_cap
+            apply_cluster_cap(raw, self._clusters)
 
         # 6. fold rule-engine adjustments (Phase 5). weight<=0 removes the symbol.
         for adj in extra_adjustments or []:

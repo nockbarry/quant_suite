@@ -39,13 +39,51 @@ class OpinionCaptureEngine:
         self.universe_mgr = OpinionUniverse(results_dir=self.results_dir)
         self.assembler = OpinionContextAssembler(results_dir=self.results_dir)
 
-    def capture(self, session_type: str = "operator") -> dict:
+    # Global capture throttle (cost diet, 2026-06-09 eval: 82 opinions per
+    # executed trade, opinions feed only a calibration curve). File-based so it
+    # spans processes (operator + signal-scan + briefing share one budget).
+    # Override with ATHENA_OPINION_INTERVAL_MIN; set 0 to disable.
+    DEFAULT_INTERVAL_MIN = 60
+
+    def _throttle_path(self) -> Path:
+        return self.results_dir / "opinions" / ".last_capture"
+
+    def _throttled(self) -> int | None:
+        """Minutes until next capture is due, or None if due now."""
+        interval = int(os.environ.get("ATHENA_OPINION_INTERVAL_MIN",
+                                      str(self.DEFAULT_INTERVAL_MIN)))
+        if interval <= 0:
+            return None
+        p = self._throttle_path()
+        if not p.exists():
+            return None
+        try:
+            elapsed = datetime.utcnow().timestamp() - float(p.read_text().strip())
+        except (ValueError, OSError):
+            return None
+        remaining = interval * 60 - elapsed
+        return max(1, int(remaining / 60)) if remaining > 0 else None
+
+    def _mark_captured(self) -> None:
+        p = self._throttle_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(str(datetime.utcnow().timestamp()))
+
+    def capture(self, session_type: str = "operator") -> dict | None:
         """Full capture cycle: assemble context, return prompt + metadata.
+
+        Returns None if the global capture throttle says we're not due yet
+        (callers should treat None as "skip opinions this check").
 
         Returns:
             {"prompt": str, "batch_id": str, "universe_size": int,
              "context_tokens_est": int, "universe": list[dict]}
         """
+        wait = self._throttled()
+        if wait is not None:
+            logger.info(f"Opinion capture throttled — next due in ~{wait} min")
+            return None
+        self._mark_captured()
         universe = self.universe_mgr.get_universe()
         context_lines, market = self.assembler.assemble_batch(universe)
         batch_id = f"batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"

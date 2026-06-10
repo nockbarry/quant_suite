@@ -76,12 +76,29 @@ async def main_async(live: bool) -> int:
         # Build target from SHARED theses + this instance's cash policy
         tracker = ThesisTracker()
         cash_policy = load_cash_policy()
+
+        # Event-driven reserves: auto-hold cash into binary macro events
+        # (FOMC etc), merged with any manually-set reserves (manual wins on
+        # name collision). Expired reserves auto-deploy.
+        from src.portfolio.event_reserves import merge_event_reserves
+        merge_event_reserves(cash_policy)
+
         adjustments = compute_rule_adjustments(pos_dicts)
         if adjustments:
             logger.info(f"Stop-loss adjustments: {[a.symbol for a in adjustments]}")
+
+        from src.portfolio.clusters import compute_clusters
+        from src.portfolio.ranking import load_ranking
+        vehicle_universe = sorted({
+            s for t in tracker.get_active_theses() for s in (t.positions or [])
+        })
+        clusters = compute_clusters(vehicle_universe)
+        ranking = load_ranking()
+
         target = TargetPortfolioBuilder(tracker, cash_policy=cash_policy).build(
             equity=equity, extra_adjustments=adjustments,
             calibration_bound=get_calibration_bound(),
+            correlation_clusters=clusters, ranking=ranking,
         )
         tid = save_target(target, source=f"live_runner:{instance}")
 
