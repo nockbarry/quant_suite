@@ -146,6 +146,9 @@ class SituationBoard:
         if len(self.data["today_observations"]) > 200:
             self.data["today_observations"] = self.data["today_observations"][-200:]
 
+    # Actions that must reach the DB — only DB PENDING rows auto-execute.
+    _ACTIONABLE = {"BUY", "SELL", "ADD", "TRIM", "CLOSE"}
+
     def add_decision(
         self,
         symbol: str,
@@ -153,8 +156,20 @@ class SituationBoard:
         confidence: float,
         status: str,
         reasoning_summary: str,
+        size_pct: float | None = None,
+        thesis_id: str | None = None,
+        persist_db: bool = True,
     ):
-        """Record a trade decision on the board."""
+        """Record a trade decision on the board — and mirror it into the DB.
+
+        Board JSON and the decisions table were historically independent
+        stores; only DB PENDING rows auto-execute, so a board-only decision
+        silently never traded (the 2026-07-02 MU SELL). Every actionable
+        decision now also upserts a DB row with a deterministic
+        board_{date}_{symbol}_{action} id (idempotent — re-adding the same
+        decision the same day updates rather than duplicates). The DB row
+        flows through the normal ensemble gate and auto-execute clamps.
+        """
         self.data["decisions_today"].append({
             "symbol": symbol,
             "action": action,
@@ -163,6 +178,31 @@ class SituationBoard:
             "reasoning_summary": reasoning_summary,
             "timestamp": datetime.now().isoformat(),
         })
+
+        if (
+            persist_db
+            and os.environ.get("ATHENA_BOARD_TO_DB", "1") != "0"
+            and action.upper() in self._ACTIONABLE
+        ):
+            try:
+                from src.db.write_api import athena_db
+
+                decision_id = f"board_{datetime.now():%Y%m%d}_{symbol}_{action}".lower()
+                athena_db.upsert_decision({
+                    "id": decision_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "symbol": symbol,
+                    "action": action.upper(),
+                    "confidence": confidence,
+                    "size_pct": size_pct if size_pct is not None else 0.0,
+                    "reasoning": reasoning_summary,
+                    "status": (status or "pending").lower(),
+                    "thesis_id": thesis_id,
+                    "context": {"source": "situation_board"},
+                })
+            except Exception as e:
+                # Board write must never fail on DB errors — but say so loudly.
+                logger.error(f"Board decision NOT persisted to DB ({symbol} {action}): {e}")
 
     def update_market_snapshot(self, state: dict):
         """Update market snapshot from state.json data.
