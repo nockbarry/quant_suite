@@ -370,6 +370,53 @@ class BeliefUpdater:
                     if accuracy is None or count < 3:
                         continue
 
+                    # C5: log-odds update path. Symmetric, saturating, and
+                    # blind-evidence-pooled — no ratchet. Flagged off until a
+                    # read-only A/B of suggested trajectories validates it
+                    # (suggestions are logged either way).
+                    import os as _os
+                    if _os.environ.get("ATHENA_LR_UPDATES", "0") == "1":
+                        from src.intelligence.evidence import (
+                            apply_log_odds_update, blind_forecast_lr, evidence_lr,
+                        )
+
+                        # Accuracy evidence only at the same sample floor the
+                        # additive path enforces — n=3 early-resolved preds
+                        # must not move a decade-scale thesis (the Nuclear AI
+                        # / bond-rout incident). Below the floor, only the
+                        # blind forecast contributes.
+                        if count >= self.MIN_SAMPLES_POSITIVE:
+                            lr = evidence_lr(round(accuracy * count), count)
+                        else:
+                            lr = 1.0
+                        # Pool today's blind forecast (elicited blind to prior
+                        # conviction — the anti-anchoring evidence channel)
+                        blind_p = self._blind_thesis_prob(thesis)
+                        if blind_p is not None:
+                            lr *= blind_forecast_lr(blind_p)
+                        current = float(thesis.conviction or 50.0)
+                        suggested = apply_log_odds_update(current, lr)
+                        suggested_change = round(suggested - current)
+                        if suggested_change != 0:
+                            suggestions.append(ThesisSuggestion(
+                                thesis_id=thesis.id,
+                                thesis_name=thesis.name,
+                                current_conviction=thesis.conviction or 0,
+                                suggested_change=suggested_change,
+                                reason=(
+                                    (
+                                        f"LR update: {accuracy:.0%} {source} accuracy over {count}"
+                                        if count >= self.MIN_SAMPLES_POSITIVE
+                                        else f"LR update: accuracy n={count} below floor (ignored)"
+                                    )
+                                    + (f", blind p={blind_p:.2f}" if blind_p is not None else "")
+                                    + f" (LR={lr:.2f})"
+                                ),
+                                prediction_accuracy=round(accuracy, 3),
+                                prediction_count=count,
+                            ))
+                        continue
+
                     # Suggestion logic — positive updates require substantial evidence.
                     # The old "+2 mild confirmation" ratchet drifted every thesis to 95%;
                     # it's been removed. Daily decay now handles the drift in the other
@@ -411,6 +458,29 @@ class BeliefUpdater:
             logger.warning(f"Thesis suggestion query failed: {e}")
 
         return suggestions
+
+    def _blind_thesis_prob(self, thesis) -> float | None:
+        """Mean blind-forecast probability across a thesis's vehicles, if fresh.
+
+        Uses ProbabilityEstimator's blind source only (curve/ensemble would
+        double-count the accuracy evidence already in the LR).
+        """
+        try:
+            import json as _json
+
+            from src.probability.estimator import ProbabilityEstimator
+
+            est = ProbabilityEstimator()
+            symbols = []
+            raw = getattr(thesis, "positions", None)
+            if isinstance(raw, str):
+                symbols = _json.loads(raw or "[]")
+            elif raw:
+                symbols = list(raw)
+            probs = [p for p in (est._blind_prob(s) for s in symbols) if p is not None]
+            return sum(probs) / len(probs) if probs else None
+        except Exception:
+            return None
 
     # Opinion-accuracy guards (added 2026-06-07 system-review).
     # A core thesis (NVDA) was auto-invalidated on 52 opinions that were all
