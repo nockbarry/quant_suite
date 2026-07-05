@@ -81,11 +81,55 @@ def main() -> int:
     clusters = compute_clusters(vehicle_universe)  # None on data failure -> cap skipped
     ranking = load_ranking()
 
-    tp = TargetPortfolioBuilder(tracker, cash_policy=cash_policy).build(
+    # Probability layer: refresh blind forecasts (best-effort), estimate
+    # calibrated per-symbol probabilities, and DUAL-COMPUTE both sizing modes.
+    # ATHENA_PROB_SIZING decides which mode is the saved target; the other is
+    # logged as a per-symbol delta — the validation artifact for the flip.
+    prob_map = None
+    try:
+        from src.probability.blind_forecast import BlindForecaster
+
+        BlindForecaster().refresh_if_due(tracker.get_active_theses())
+    except Exception as e:
+        logger.warning(f"Blind forecast refresh skipped: {e}")
+    try:
+        from src.probability import ProbabilityEstimator
+
+        prob_map = ProbabilityEstimator().estimate_map(tracker.get_active_theses())
+    except Exception as e:
+        logger.warning(f"Probability layer unavailable (conviction sizing only): {e}")
+
+    prob_flag = os.environ.get("ATHENA_PROB_SIZING", "0") == "1"
+    builder = TargetPortfolioBuilder(tracker, cash_policy=cash_policy)
+    tp = builder.build(
         equity=equity, extra_adjustments=adjustments, calibration_bound=cal_bound,
         correlation_clusters=clusters, ranking=ranking,
+        prob_map=prob_map, prob_sizing=prob_flag,
     )
     tid = save_target(tp, source="builder")
+
+    if prob_map:
+        alt = builder.build(
+            equity=equity, extra_adjustments=adjustments, calibration_bound=cal_bound,
+            correlation_clusters=clusters, ranking=ranking,
+            prob_map=prob_map, prob_sizing=not prob_flag,
+        )
+        primary_mode = "probability" if prob_flag else "conviction"
+        alt_mode = "conviction" if prob_flag else "probability"
+        deltas = []
+        for s in set(tp.weights) | set(alt.weights):
+            w0 = tp.weights[s].weight if s in tp.weights else 0.0
+            w1 = alt.weights[s].weight if s in alt.weights else 0.0
+            if abs(w1 - w0) > 0.001:
+                deltas.append((s, w0, w1))
+        deltas.sort(key=lambda x: -abs(x[2] - x[1]))
+        logger.info(f"Sizing-mode diff ({primary_mode} saved vs {alt_mode} shadow): "
+                    f"{len(deltas)} symbols differ")
+        for s, w0, w1 in deltas[:12]:
+            p = prob_map[s].p_direction if s in prob_map else float("nan")
+            flags = ",".join(prob_map[s].red_flags) if s in prob_map and prob_map[s].red_flags else ""
+            logger.info(f"  {s:6} {primary_mode[:4]}={w0:6.1%} {alt_mode[:4]}={w1:6.1%} "
+                        f"p={p:.3f} {flags}")
     if cash_policy.reserves:
         active = [r.name for r in cash_policy.reserves if r.active(tp.generated_at.date())]
         logger.info(f"Active reserves: {active or 'none'} "

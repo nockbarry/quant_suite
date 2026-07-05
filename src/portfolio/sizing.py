@@ -33,11 +33,37 @@ class ConvictionSizer:
         (0.0, 0.0),
     )
 
+    # Probability ladder: thresholds are CALIBRATED P(direction correct),
+    # not conviction. The opinion curve's well-populated bins land at
+    # 0.47-0.73 actual, so discrimination has to happen inside a narrow
+    # band — 62% calibrated edge over ~10d is genuinely strong. Thresholds
+    # get retuned against opinion_calibration.json percentiles during the
+    # ATHENA_PROB_SIZING shadow window.
+    PROB_LADDER: tuple[tuple[float, float], ...] = (
+        (0.62, 0.30),
+        (0.58, 0.20),
+        (0.54, 0.12),
+        (0.50, 0.06),
+        (0.0, 0.0),
+    )
+
     def thesis_budget(self, conviction: float) -> float:
         """Fraction of total equity to allocate to a thesis at this conviction."""
         c = max(0.0, min(100.0, float(conviction)))
         for threshold, budget in self.LADDER:
             if c >= threshold:
+                return budget
+        return 0.0
+
+    def thesis_budget_from_prob(self, p_direction: float) -> float:
+        """Budget from a CALIBRATED probability (ATHENA_PROB_SIZING path).
+
+        Conviction is demoted to governance under this path — it gates
+        eligibility and reviews, never size.
+        """
+        p = max(0.0, min(1.0, float(p_direction)))
+        for threshold, budget in self.PROB_LADDER:
+            if p >= threshold:
                 return budget
         return 0.0
 

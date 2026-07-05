@@ -100,6 +100,8 @@ class TargetPortfolioBuilder:
         calibration_bound: Optional[Callable[[float], float]] = None,
         correlation_clusters: Optional[list[set]] = None,
         ranking: Optional[list[str]] = None,
+        prob_map: Optional[dict] = None,
+        prob_sizing: Optional[bool] = None,
     ) -> TargetPortfolio:
         """Derive the target portfolio.
 
@@ -114,9 +116,22 @@ class TargetPortfolioBuilder:
             ranking: ordered thesis ids, best first (from weekly forced ranking).
                 Applies a budget tilt 1.2x (top) -> 0.8x (bottom) so ranking
                 actually differentiates sizing when conviction is clustered.
+            prob_map: symbol -> SymbolProbability from the ProbabilityEstimator.
+                When probability sizing is active, thesis budgets come from the
+                CALIBRATED probability ladder and conviction is governance-only
+                (eligibility >= 35, reviews, exits) — the decision-confidence
+                curve is measurably inverted, so raw conviction must not size.
+            prob_sizing: force probability sizing on/off; None defers to the
+                ATHENA_PROB_SIZING env flag (default off). cron_build_target
+                dual-computes both modes during the shadow window.
         """
         today = today or datetime.now().date()
         theses = self.tracker.get_active_theses()
+
+        import os
+        if prob_sizing is None:
+            prob_sizing = os.environ.get("ATHENA_PROB_SIZING", "0") == "1"
+        use_prob = bool(prob_sizing and prob_map)
 
         # Rank tilt: linear 1.2x (rank 1) -> 0.8x (rank N). Breaks the
         # everything-at-74-80% conviction cluster into differentiated sizing.
@@ -130,11 +145,31 @@ class TargetPortfolioBuilder:
         raw: dict[str, TargetWeight] = {}
         sym_conviction: dict[str, float] = {}
         for th in theses:
-            budget = self.sizer.thesis_budget(th.conviction)
+            if use_prob:
+                # Governance gate only: conviction < 35 = thesis not sizable.
+                if float(th.conviction or 0) < 35.0:
+                    continue
+                probs = [
+                    prob_map[s].p_direction
+                    for s in (th.positions or [])
+                    if s in prob_map
+                ]
+                if probs:
+                    p_th = sum(probs) / len(probs)
+                    budget = self.sizer.thesis_budget_from_prob(p_th)
+                    mode = "probability"
+                else:
+                    # no estimate for any vehicle — fall back to conviction
+                    budget = self.sizer.thesis_budget(th.conviction)
+                    mode = "conviction"
+            else:
+                budget = self.sizer.thesis_budget(th.conviction)
+                mode = "conviction"
             budget *= rank_tilt.get(th.id, 1.0)
             vw = self.sizer.vehicle_weights(budget, th.positions)
             for sym, w in vw.items():
                 sym_conviction[sym] = max(sym_conviction.get(sym, 0.0), th.conviction)
+                p_cal = prob_map[sym].p_direction if (use_prob and sym in prob_map) else None
                 if sym in raw:
                     raw[sym].weight += w
                     # provenance: note multi-thesis membership
@@ -147,6 +182,8 @@ class TargetPortfolioBuilder:
                         thesis_id=th.id,
                         thesis_name=th.name,
                         source="thesis_ladder",
+                        p_calibrated=p_cal,
+                        sizing_mode=mode,
                     )
 
         # 4. optional calibration sanity bound (OFF in Phase 2)

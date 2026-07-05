@@ -64,6 +64,8 @@ class TargetWeight:
     thesis_name: Optional[str] = None
     source: str = "thesis_ladder"       # thesis_ladder | rule_adjustment | manual
     bounded_by: Optional[str] = None    # which cap clipped it, if any (audit)
+    p_calibrated: Optional[float] = None  # SymbolProbability.p_direction, if prob-sized
+    sizing_mode: str = "conviction"     # conviction | probability
 
     def to_dict(self) -> dict:
         return {
@@ -73,6 +75,8 @@ class TargetWeight:
             "thesis_name": self.thesis_name,
             "source": self.source,
             "bounded_by": self.bounded_by,
+            "p_calibrated": round(self.p_calibrated, 4) if self.p_calibrated is not None else None,
+            "sizing_mode": self.sizing_mode,
         }
 
     @classmethod
@@ -84,6 +88,8 @@ class TargetWeight:
             thesis_name=d.get("thesis_name"),
             source=d.get("source", "thesis_ladder"),
             bounded_by=d.get("bounded_by"),
+            p_calibrated=d.get("p_calibrated"),
+            sizing_mode=d.get("sizing_mode", "conviction"),
         )
 
 
