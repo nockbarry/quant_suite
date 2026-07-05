@@ -44,8 +44,17 @@ class OpinionContextAssembler:
         self._cross_ref_alerts: Optional[dict] = None
         self._commodity_data: Optional[dict] = None
 
-    def assemble_batch(self, universe: list[dict]) -> tuple[str, dict]:
+    def assemble_batch(self, universe: list[dict], blind: bool = False) -> tuple[str, dict]:
         """Build the full context string for all symbols.
+
+        Args:
+            universe: symbol entries (dicts with at least "symbol").
+            blind: strip advocacy signals — thesis names/conviction, held
+                position P&L/weight, conviction velocity. Used by the blind
+                probability elicitation (src/probability/blind_forecast.py):
+                confidence stated inside a context that argues for a position
+                is anti-calibrated, so the sizing forecast must never see the
+                narrative. Market facts (price, RSI, news, catalysts) stay.
 
         Returns:
             (context_lines: str, market_summary: dict)
@@ -55,7 +64,7 @@ class OpinionContextAssembler:
         market = self._market_summary()
         lines = []
         for sym_entry in universe:
-            line = self._symbol_context(sym_entry)
+            line = self._symbol_context(sym_entry, blind=blind)
             if line:
                 lines.append(line)
 
@@ -199,7 +208,7 @@ class OpinionContextAssembler:
 
         return summary
 
-    def _symbol_context(self, sym_entry: dict) -> str:
+    def _symbol_context(self, sym_entry: dict, blind: bool = False) -> str:
         """Build one-line context for a single symbol."""
         symbol = sym_entry["symbol"]
         parts = [f"{symbol}:"]
@@ -223,18 +232,19 @@ class OpinionContextAssembler:
         if support and resistance:
             parts.append(f"s={support:.0f}/r={resistance:.0f}")
 
-        # --- Thesis context ---
-        if sym_entry.get("thesis_name") and sym_entry.get("conviction"):
+        # --- Thesis context (advocacy — stripped in blind mode) ---
+        if not blind and sym_entry.get("thesis_name") and sym_entry.get("conviction"):
             tname = sym_entry["thesis_name"][:15].rstrip()
             parts.append(f"thesis={tname}@{sym_entry['conviction']}%")
 
-        # --- Position data (if held) ---
-        for pos in self._state.get("positions", []):
-            if pos.get("symbol") == symbol:
-                pnl_pct = pos.get("unrealized_pnl_pct", 0)
-                weight = pos.get("weight_pct", 0)
-                parts.append(f"held={pnl_pct:+.1f}%/{weight:.1f}%w")
-                break
+        # --- Position data (if held; advocacy — stripped in blind mode) ---
+        if not blind:
+            for pos in self._state.get("positions", []):
+                if pos.get("symbol") == symbol:
+                    pnl_pct = pos.get("unrealized_pnl_pct", 0)
+                    weight = pos.get("weight_pct", 0)
+                    parts.append(f"held={pnl_pct:+.1f}%/{weight:.1f}%w")
+                    break
 
         # --- NEW: Analyst targets (sell-side consensus) ---
         analyst = self._analyst.get(symbol, {})
@@ -250,8 +260,9 @@ class OpinionContextAssembler:
             entry = crisis.get("entry", 0)
             parts.append(f"crisis_alpha={hr:.0%}@{entry:.0f}")
 
-        # --- NEW: Conviction velocity ---
-        cv = self._conv_velocity.get(symbol)
+        # --- NEW: Conviction velocity (derived from thesis conviction —
+        # advocacy, stripped in blind mode) ---
+        cv = None if blind else self._conv_velocity.get(symbol)
         if cv:
             direction = cv.get("direction", "")
             vel = cv.get("velocity_3d", 0)
@@ -285,7 +296,10 @@ class OpinionContextAssembler:
         alert = self._alerts.get(symbol)
         if alert:
             a_type = alert.get("alert_type", "")[:20]
-            parts.append(f"ALERT={a_type}")
+            # conviction_price_divergence is derived from thesis conviction —
+            # advocacy, not market fact; blind mode must not see it
+            if not (blind and "conviction" in a_type.lower()):
+                parts.append(f"ALERT={a_type}")
 
         # --- NEW: Commodity ratios (for thesis-linked commodity names) ---
         self._add_commodity_context(symbol, parts)
