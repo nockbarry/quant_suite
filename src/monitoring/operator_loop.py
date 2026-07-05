@@ -1004,6 +1004,9 @@ class OperatorLoop:
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
         try:
+            from src.core.logrotate import rotate_if_large
+
+            rotate_if_large(log_file)
             with open(log_file, "a") as f:
                 f.write(json.dumps(obs.to_dict()) + "\n")
         except Exception as e:
