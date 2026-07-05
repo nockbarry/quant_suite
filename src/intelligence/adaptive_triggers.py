@@ -254,6 +254,22 @@ class AdaptiveTriggerEngine:
         if day_pnl_pct is None:
             return None
 
+        # On a split ex-date the day-P&L is untrustworthy (rebased prices) —
+        # the daemon zeroes it at source, but suppress here too in case this
+        # reads a snapshot written before the guard ran. Logged loudly.
+        try:
+            from src.data.corporate_actions import todays_splits
+
+            splits = todays_splits()
+            if splits and day_pnl_pct <= threshold:
+                logger.warning(
+                    f"SUPPRESSED {rule_name}: day_pnl_pct={day_pnl_pct:.2f}% on split "
+                    f"ex-date for {sorted(splits)} — P&L not trustworthy today"
+                )
+                return None
+        except Exception:
+            pass
+
         if day_pnl_pct <= threshold:
             equity = portfolio.get("equity", 0)
             day_pnl = portfolio.get("day_pnl", 0)

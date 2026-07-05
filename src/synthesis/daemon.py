@@ -226,6 +226,42 @@ class LiveDaemon:
                     (total_market_value / portfolio.equity) * 100, 2
                 )
 
+        # Corporate-action guard: on a split ex-date Alpaca's intraday P&L
+        # (and equity vs last_equity) is distorted by the price/qty rebasis —
+        # the CRWD 4:1 split reported -4.67% day P&L on a ~-0.7% day and fired
+        # 8 false triggers. Zero out day-P&L for affected symbols; downstream
+        # drawdown/stop triggers also consult todays_splits() directly.
+        try:
+            from src.data.corporate_actions import (
+                detect_share_discontinuity, guard_enabled, todays_splits,
+            )
+            if positions and guard_enabled():
+                split_syms = set(todays_splits())
+                prev_qty = {}
+                try:
+                    with open(self.output_path) as f:
+                        prev_state = json.load(f)
+                    for p in (prev_state.get("positions") or []):
+                        if p.get("symbol"):
+                            prev_qty[p["symbol"]] = float(p.get("quantity") or 0)
+                except Exception:
+                    pass
+                curr_qty = {p.symbol: float(p.quantity) for p in positions}
+                split_syms |= set(detect_share_discontinuity(prev_qty, curr_qty))
+                if split_syms:
+                    logger.warning(
+                        f"CORPORATE ACTION: zeroing day-P&L for split symbols {sorted(split_syms)} "
+                        f"(portfolio day-P&L also zeroed — untrustworthy on split days)"
+                    )
+                    for p in positions:
+                        if p.symbol in split_syms:
+                            p.day_pnl = 0.0
+                            p.day_pnl_pct = 0.0
+                    portfolio.day_pnl = 0.0
+                    portfolio.day_pnl_pct = 0.0
+        except Exception as e:
+            logger.warning(f"Corporate-action guard failed open (no sanitization): {e}")
+
         try:
             risk = await self._get_risk_snapshot()
             component_timestamps['risk'] = now

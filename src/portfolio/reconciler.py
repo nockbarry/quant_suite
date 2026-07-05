@@ -129,9 +129,25 @@ class Reconciler:
         today = today or datetime.now().strftime("%Y%m%d")
         max_trade_usd = self.config.max_trade_pct * equity
 
+        # Corporate-action freeze: on a split ex-date, positions/prices for the
+        # symbol are rebased and the delta math below is garbage (the CRWD 4:1
+        # split made beta sell 5 positions to "rebalance into" CRWD). Skip the
+        # symbol for the day; tomorrow's snapshot is consistent again.
+        frozen: set[str] = set()
+        try:
+            from src.data.corporate_actions import todays_splits
+
+            frozen = set(todays_splits())
+            if frozen:
+                logger.warning(f"Corporate-action freeze — no orders today for: {sorted(frozen)}")
+        except Exception:
+            pass
+
         symbols = set(target.weights) | set(current_values)
         candidates: list[ReconcileOrder] = []
         for sym in symbols:
+            if sym in frozen:
+                continue
             tw = target.weights.get(sym)
             target_weight = tw.weight if tw else 0.0
             target_value = target_weight * equity
