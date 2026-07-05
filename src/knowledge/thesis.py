@@ -201,6 +201,8 @@ class Thesis:
 
     def add_note(self, note: str) -> None:
         """Add a timestamped note."""
+        if isinstance(self.notes, str):
+            self.notes = [self.notes] if self.notes else []
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         self.notes.append(f"[{timestamp}] {note}")
 

@@ -44,6 +44,10 @@ class SignalSource(Enum):
     CONGRESSIONAL = "congressional"  # Congressional trades
     OPTIONS = "options"       # Options flow
     WSB_TRACKER = "wsb_tracker"  # WSB tracker provenance
+    EARNINGS_CALL = "earnings_call"  # SEC 8-K item 2.02 / earnings press release (v1)
+    INFERRED = "inferred"     # Supply chain propagation from a root signal (v3)
+    MONTHLY_REVENUE = "monthly_revenue"  # Foreign monthly revenue reports (TSMC, Foxconn) — v5
+    PATENT = "patent"         # USPTO patent filings velocity — v5 (architecture only; fetcher pending USPTO ODP key)
 
 
 class SignalOutcome(Enum):
@@ -119,6 +123,16 @@ class SignalProvenance:
     metadata: dict = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
+
+    # Supply chain propagation (v3) — for INFERRED signals
+    # root_signal_id: the original document signal this was propagated from.
+    # propagation_path: ["MSFT", "NVDA", "MU"] — the chain of symbols traversed.
+    # propagation_hops: 0 for direct signals, 1+ for inferred.
+    # ThesisSuggester.find_convergences() dedupes by root_signal_id to prevent
+    # one document from inflating convergence counts across the supply chain.
+    root_signal_id: Optional[str] = None
+    propagation_path: list = field(default_factory=list)
+    propagation_hops: int = 0
 
     @property
     def current_confidence(self) -> float:
@@ -200,6 +214,10 @@ class SignalProvenance:
             "metadata": self.metadata,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
+            # Supply chain propagation (v3)
+            "root_signal_id": self.root_signal_id,
+            "propagation_path": self.propagation_path,
+            "propagation_hops": self.propagation_hops,
             # Computed fields
             "current_confidence": self.current_confidence,
             "signal_age_days": self.signal_age_days,
@@ -234,6 +252,9 @@ class SignalProvenance:
             metadata=data.get("metadata", {}),
             created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else datetime.now(),
             updated_at=datetime.fromisoformat(data["updated_at"]) if data.get("updated_at") else datetime.now(),
+            root_signal_id=data.get("root_signal_id"),
+            propagation_path=data.get("propagation_path", []),
+            propagation_hops=data.get("propagation_hops", 0),
         )
 
 
@@ -274,8 +295,16 @@ class SignalProvenanceTracker:
         description: str,
         detection_method: str = "",
         metadata: dict = None,
+        root_signal_id: Optional[str] = None,
+        propagation_path: Optional[list] = None,
+        propagation_hops: int = 0,
     ) -> SignalProvenance:
-        """Create a new signal provenance record."""
+        """Create a new signal provenance record.
+
+        For supply-chain-inferred signals, pass root_signal_id (the original
+        document signal id), propagation_path (e.g. ["MSFT", "NVDA", "MU"]),
+        and propagation_hops. Direct signals leave these defaults.
+        """
         signal_id = str(uuid.uuid4())[:8]
 
         signal = SignalProvenance(
@@ -288,6 +317,9 @@ class SignalProvenanceTracker:
             initial_direction=direction,
             initial_description=description,
             metadata=metadata or {},
+            root_signal_id=root_signal_id,
+            propagation_path=propagation_path or [],
+            propagation_hops=propagation_hops,
         )
 
         self._cache[signal_id] = signal

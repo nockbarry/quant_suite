@@ -310,8 +310,25 @@ class USPTOSource:
         """
         Fetch patent data from USPTO.
 
-        In production, would use PatentsView API.
-        For now, returns cached data or placeholder.
+        STATUS (v5 milestone): The legacy PatentsView API at
+        api.patentsview.org/patents/query was retired and now redirects to
+        USPTO's transition guide. The replacement is the USPTO Open Data
+        Portal at data.uspto.gov which requires an API key (free signup at
+        https://data.uspto.gov/apis/getting-started).
+
+        Migration path when ready:
+        1. Register for a USPTO ODP API key
+        2. Set USPTO_API_KEY env var
+        3. Replace this stub with calls to data.uspto.gov endpoints (the new
+           OpenAPI spec is at data.uspto.gov/apis/openapi.json)
+        4. Map USPTO assignee_organization to symbol via TICKER_CIK_MAP-style
+           lookup (USPTO uses company names; we have ticker symbols)
+        5. Wire patent_velocity (current_year_count - prior_year_count) /
+           prior_year_count > 20% → bullish PATENT signal via
+           get_provenance_tracker().create_signal(source=PATENT, ...)
+
+        Until then, returns cached data if present (for backward compat with
+        any historical fixture data) or an empty database.
         """
         cache_file = self.cache_dir / "patent_database.json"
         if cache_file.exists():
@@ -322,7 +339,7 @@ class USPTOSource:
             except Exception:
                 pass
 
-        # Return empty database
+        # Return empty database — produces no signals, which is the safe default.
         return PatentDatabase(timestamp=datetime.now())
 
     async def fetch_company_patents(

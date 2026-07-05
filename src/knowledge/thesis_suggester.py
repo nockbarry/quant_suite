@@ -28,6 +28,37 @@ from src.knowledge.thesis import ThesisTracker, Thesis
 logger = logging.getLogger(__name__)
 
 
+class RouteAction:
+    """Routing decision codes for route_signal()."""
+    UPDATE_CONVICTION = "update_conviction"
+    ADD_TO_THESIS = "add_to_thesis"
+    CREATE_NEW = "create_new"
+    SKIP = "skip"
+
+
+@dataclass
+class RoutedSignal:
+    """Outcome of route_signal() — where a fresh document signal should land."""
+    signal_id: str
+    symbol: str
+    action: str  # one of RouteAction constants
+    thesis_id: Optional[str] = None
+    thesis_name: Optional[str] = None
+    score: float = 0.0  # confidence in the routing decision
+    reason: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "signal_id": self.signal_id,
+            "symbol": self.symbol,
+            "action": self.action,
+            "thesis_id": self.thesis_id,
+            "thesis_name": self.thesis_name,
+            "score": self.score,
+            "reason": self.reason,
+        }
+
+
 @dataclass
 class ThesisSuggestion:
     """A suggested thesis based on converging signals."""
@@ -88,12 +119,28 @@ class ThesisSuggester:
     """Generate thesis suggestions from converging signals."""
 
     SUGGESTIONS_PATH = paths.base / "suggestions" / "thesis_suggestions.json"
+    RESEARCH_QUEUE_PATH = paths.base / "scheduler" / "research_queue.json"
     MIN_SIGNALS_FOR_SUGGESTION = 2
     MIN_CONFIDENCE = 0.5
     AUTO_CREATE_THRESHOLD = 0.75  # Min confidence for auto-creation
     MAX_AUTO_PER_WEEK = 2  # Prevent thesis sprawl
 
-    # Source weights for confidence calculation
+    # Exploration-thesis pathway: convert untested research-queue hypotheses
+    # into small-size live positions so the 20+ backlog becomes real-money
+    # discovery instead of dead docs.
+    EXPLORATION_MAX_ACTIVE = 4          # Cap concurrent exploration theses
+    EXPLORATION_MAX_PER_WEEK = 2        # Throttle creation rate
+    EXPLORATION_CONVICTION = 40         # Low initial conviction → small size
+    EXPLORATION_SIZE_PCT = 3.0          # Max position size for exploration
+    EXPLORATION_MIN_PRIORITY = 0.7      # Only promote high-priority hypotheses
+    EXPLORATION_AUTO_INVALIDATE_DAYS = 30
+
+    # Source weights for confidence calculation.
+    # EARNINGS_CALL (1.25): SEC 8-K item 2.02 — high quality, slight lag (3 weeks
+    #   post-quarter), management's own forward guidance and quotable language.
+    # INFERRED (0.6): supply chain propagation. Low weight because it's derivative
+    #   evidence — convergence requires multiple distinct root_signal_ids
+    #   (see find_convergences for the dedup rule).
     SOURCE_WEIGHTS = {
         SignalSource.WSB: 0.8,
         SignalSource.STOCKTWITS: 0.7,
@@ -104,6 +151,10 @@ class ThesisSuggester:
         SignalSource.INSIDER: 1.3,
         SignalSource.CONGRESSIONAL: 1.4,
         SignalSource.OPTIONS: 1.1,
+        SignalSource.EARNINGS_CALL: 1.25,
+        SignalSource.INFERRED: 0.6,
+        SignalSource.MONTHLY_REVENUE: 1.30,  # higher than EARNINGS_CALL — much fresher (10-day reporting lag vs ~30-day for 8-K)
+        SignalSource.PATENT: 1.10,  # leading indicator (~6-12mo lead) but noisy — middle weight
     }
 
     def __init__(
@@ -124,7 +175,15 @@ class ThesisSuggester:
                     data = json.load(f)
                     for item in data.get("suggestions", []):
                         suggestion = ThesisSuggestion.from_dict(item)
-                        self.suggestions[suggestion.symbol] = suggestion
+                        # Composite key (symbol_direction) to preserve
+                        # opposing-direction convergences. Legacy entries
+                        # without direction fall back to symbol-only.
+                        key = (
+                            f"{suggestion.symbol}_{suggestion.direction}"
+                            if suggestion.direction
+                            else suggestion.symbol
+                        )
+                        self.suggestions[key] = suggestion
             except Exception as e:
                 logger.warning(f"Could not load suggestions: {e}")
 
@@ -147,6 +206,175 @@ class ThesisSuggester:
             for position in thesis.positions:
                 symbols.add(position)
         return symbols
+
+    # ------------------------------------------------------------------
+    # v2: route a fresh document signal to existing/related/new thesis
+    # ------------------------------------------------------------------
+
+    # Tokens we ignore in thematic matching — too generic to discriminate.
+    # Expanded after the AMD-routes-to-Uranium false positive: generic
+    # finance/business terms ("signals", "investments", "strategic") show up
+    # in nearly every thesis and earnings text and produce spurious matches.
+    _STOPWORDS = frozenset({
+        "the", "a", "an", "of", "to", "in", "for", "and", "or", "with",
+        "at", "by", "is", "be", "been", "are", "was", "from", "on", "as",
+        "this", "that", "these", "those", "we", "our", "their", "its",
+        "thesis", "play", "trade", "long", "short", "bullish", "bearish",
+        "growth", "increase", "decrease", "guidance", "company", "results",
+        "quarter", "fiscal", "year", "revenue", "earnings",
+        # Generic finance / management speak — added 2026-04-26 after AMD →
+        # Uranium misroute via "signals" coincidence.
+        "signals", "signal", "investments", "investment", "strategic",
+        "support", "term", "scaling", "continued", "cfo", "ceo", "management",
+        "outlook", "forward", "looking",
+    })
+    # Min thematic-overlap score to route as ADD_TO_THESIS (vs CREATE_NEW)
+    THEMATIC_MIN_SCORE = 0.15
+
+    def route_signal(self, signal: SignalProvenance) -> RoutedSignal:
+        """Decide where a fresh signal should land.
+
+        Three outcomes (most common first):
+          UPDATE_CONVICTION — symbol already in an active thesis.
+            Caller should feed the signal into belief_updater to nudge conviction.
+          ADD_TO_THESIS — symbol not in any thesis but thematically aligned with
+            one. Caller should propose adding the symbol to that thesis (operator
+            review). This is the path that absorbs most document signals — it
+            avoids competing for the MAX_AUTO_PER_WEEK=2 new-thesis budget.
+          CREATE_NEW — symbol unrelated to any active thesis. Falls through to
+            normal generate_suggestions() pipeline (which will rate-limit).
+        """
+        active = self.thesis_tracker.get_active_theses()
+
+        # 1) Symbol-direct match
+        for thesis in active:
+            if signal.symbol in thesis.positions:
+                return RoutedSignal(
+                    signal_id=signal.signal_id,
+                    symbol=signal.symbol,
+                    action=RouteAction.UPDATE_CONVICTION,
+                    thesis_id=thesis.id,
+                    thesis_name=thesis.name,
+                    score=1.0,
+                    reason=f"{signal.symbol} is already a position in '{thesis.name}'",
+                )
+
+        # 2) Thematic match against name + summary + bull_case
+        signal_tokens = self._tokenize(signal.initial_description)
+        if not signal_tokens:
+            return RoutedSignal(
+                signal_id=signal.signal_id,
+                symbol=signal.symbol,
+                action=RouteAction.CREATE_NEW,
+                reason="Empty signal description",
+            )
+
+        scored: list[tuple[float, Thesis]] = []
+        for thesis in active:
+            thesis_text = " ".join([
+                thesis.name or "",
+                thesis.summary or "",
+                thesis.bull_case or "",
+            ])
+            thesis_tokens = self._tokenize(thesis_text)
+            if not thesis_tokens:
+                continue
+            score = self._jaccard(signal_tokens, thesis_tokens)
+            if score >= self.THEMATIC_MIN_SCORE:
+                scored.append((score, thesis))
+
+        if scored:
+            scored.sort(key=lambda x: x[0], reverse=True)
+            best_score, best_thesis = scored[0]
+            # All current Athena theses are implicitly long/bullish. A BEARISH
+            # signal that thematically matches a bullish thesis is contradictory
+            # evidence — it should push the thesis conviction DOWN, not be added
+            # as supporting evidence. Route to UPDATE_CONVICTION so the belief
+            # updater handles it as a thesis-weakening signal.
+            if signal.initial_direction == "bearish":
+                return RoutedSignal(
+                    signal_id=signal.signal_id,
+                    symbol=signal.symbol,
+                    action=RouteAction.UPDATE_CONVICTION,
+                    thesis_id=best_thesis.id,
+                    thesis_name=best_thesis.name,
+                    score=best_score,
+                    reason=(
+                        f"Bearish signal thematically opposite to bullish thesis "
+                        f"'{best_thesis.name}' (jaccard={best_score:.2f}) — "
+                        f"feed to belief updater to weaken conviction"
+                    ),
+                )
+            return RoutedSignal(
+                signal_id=signal.signal_id,
+                symbol=signal.symbol,
+                action=RouteAction.ADD_TO_THESIS,
+                thesis_id=best_thesis.id,
+                thesis_name=best_thesis.name,
+                score=best_score,
+                reason=(
+                    f"Thematic overlap (jaccard={best_score:.2f}) between signal "
+                    f"and thesis '{best_thesis.name}'"
+                ),
+            )
+
+        # 3) Fall through — normal new-thesis suggestion pipeline
+        return RoutedSignal(
+            signal_id=signal.signal_id,
+            symbol=signal.symbol,
+            action=RouteAction.CREATE_NEW,
+            reason=f"No active thesis covers or thematically matches {signal.symbol}",
+        )
+
+    # Short technical acronyms / tickers that carry strong semantic weight
+    # despite being below the normal min-length filter. Adding to this set
+    # restores them as match tokens.
+    _IMPORTANT_SHORT_TOKENS = frozenset({
+        "ai", "ml", "5g", "6g", "vr", "ar", "ev", "ip",
+        "hbm", "gpu", "cpu", "cpu", "tpu", "asic", "fpga",
+        "saas", "iaas", "paas", "ott", "lng", "ree", "smr",
+    })
+
+    @classmethod
+    def _tokenize(cls, text: str) -> set[str]:
+        """Lowercase alpha tokens, filtered against stopwords.
+
+        Length filter is relaxed for important short acronyms ("AI", "GPU",
+        "HBM", etc.) — these are high-signal tokens for semis/AI matching
+        that the previous len>=4 rule silently dropped.
+        """
+        if not text:
+            return set()
+        import re
+        tokens = re.findall(r"[a-zA-Z0-9]+", text.lower())
+        out = set()
+        for t in tokens:
+            if t in cls._STOPWORDS:
+                continue
+            if len(t) >= 4 or t in cls._IMPORTANT_SHORT_TOKENS:
+                out.add(t)
+        return out
+
+    @staticmethod
+    def _jaccard(a: set[str], b: set[str]) -> float:
+        """Max of Jaccard and coverage-of-smaller-set.
+
+        Coverage handles cases where a short signal description (e.g. memory
+        thematic) is fully contained in a longer thesis text — Jaccard would
+        dilute the score, but coverage correctly captures the semantic match.
+        Same approach used in memory_drift._match_thesis.
+        """
+        if not a or not b:
+            return 0.0
+        inter = len(a & b)
+        if inter == 0:
+            return 0.0
+        union = len(a | b)
+        jaccard = inter / union
+        coverage = inter / min(len(a), len(b))
+        return max(jaccard, coverage)
+
+    # ------------------------------------------------------------------
 
     def _generate_thesis_name(self, symbol: str, signals: list[SignalProvenance]) -> str:
         """Generate a suggested thesis name from signals."""
@@ -256,8 +484,20 @@ class ThesisSuggester:
 
         return min(confidence, 1.0)
 
-    def find_convergences(self, max_age_days: int = 14) -> dict[str, list[SignalProvenance]]:
-        """Find symbols with multiple converging signals."""
+    def find_convergences(
+        self, max_age_days: int = 14
+    ) -> dict[tuple[str, str], list[SignalProvenance]]:
+        """Find converging signal groups, keyed by (symbol, direction).
+
+        Returns a dict whose keys are tuples (symbol, direction) so that a
+        symbol with BOTH bullish and bearish convergences (e.g. INTC after a
+        capex pivot — earlier filings bullish, recent filing slashed guidance)
+        produces TWO entries, not one overwriting the other.
+
+        v3 INDEPENDENCE RULE: signals are deduplicated by `root_signal_id`
+        before counting toward MIN_SIGNALS_FOR_SUGGESTION. A single root
+        document cannot manufacture convergence via supply chain propagation.
+        """
         # Get recent signals
         all_signals = []
         for signal in self.provenance._cache.values():
@@ -265,24 +505,31 @@ class ThesisSuggester:
                 if signal.outcome.value == "pending":  # Only active signals
                     all_signals.append(signal)
 
-        # Group by symbol and direction
-        convergences = {}
+        # Group by (symbol, direction)
+        convergences: dict[tuple[str, str], list[SignalProvenance]] = {}
         for signal in all_signals:
             key = (signal.symbol, signal.initial_direction)
             if key not in convergences:
                 convergences[key] = []
             convergences[key].append(signal)
 
-        # Filter to those with enough signals
-        result = {}
-        for (symbol, direction), signals in convergences.items():
-            if len(signals) >= self.MIN_SIGNALS_FOR_SUGGESTION:
-                result[symbol] = signals
+        # Filter to those with enough INDEPENDENT root signals
+        result: dict[tuple[str, str], list[SignalProvenance]] = {}
+        for key, signals in convergences.items():
+            unique_roots = {(s.root_signal_id or s.signal_id) for s in signals}
+            if len(unique_roots) >= self.MIN_SIGNALS_FOR_SUGGESTION:
+                result[key] = signals
 
         return result
 
     def generate_suggestions(self) -> list[ThesisSuggestion]:
-        """Generate thesis suggestions from current signals."""
+        """Generate thesis suggestions from current signals.
+
+        Note: a symbol can produce BOTH a bullish and a bearish suggestion
+        if it has convergent signals in both directions (e.g. INTC after
+        a guidance pivot). The suggestion store keys these as
+        f"{symbol}_{direction}" to keep them distinct.
+        """
         # Get symbols already covered
         covered_symbols = self._get_symbols_with_thesis()
 
@@ -291,14 +538,24 @@ class ThesisSuggester:
 
         new_suggestions = []
 
-        for symbol, signals in convergences.items():
-            # Skip if already has thesis
-            if symbol in covered_symbols:
+        for (symbol, direction), signals in convergences.items():
+            # Suggestion store key — preserves direction so opposing-direction
+            # convergences for the same symbol can both produce suggestions.
+            sugg_key = f"{symbol}_{direction}"
+
+            # Skip if symbol already has an active thesis covering it AND
+            # the existing thesis direction matches this convergence (we
+            # don't want to suggest a redundant thesis for already-covered
+            # bullish positions, but a CONFLICTING bearish convergence on
+            # the same symbol IS worth surfacing — the operator should see it).
+            if symbol in covered_symbols and direction == "bullish":
+                # TODO: check thesis direction; for now assume covered =
+                # already-bullish (true for current portfolio)
                 continue
 
             # Skip if already suggested and pending
-            if symbol in self.suggestions:
-                existing = self.suggestions[symbol]
+            if sugg_key in self.suggestions:
+                existing = self.suggestions[sugg_key]
                 if existing.status == "pending":
                     continue
 
@@ -320,7 +577,7 @@ class ThesisSuggester:
                 suggested_signposts=self._suggest_signposts(symbol, signals),
             )
 
-            self.suggestions[symbol] = suggestion
+            self.suggestions[sugg_key] = suggestion
             new_suggestions.append(suggestion)
 
         self._save_suggestions()
@@ -427,6 +684,206 @@ class ThesisSuggester:
                     break
 
         return created
+
+    # ---------------------- Exploration thesis pathway ----------------------
+
+    def _load_research_queue(self) -> list[dict]:
+        """Load research queue JSON (list of hypothesis/check items)."""
+        if not self.RESEARCH_QUEUE_PATH.exists():
+            return []
+        try:
+            with open(self.RESEARCH_QUEUE_PATH) as f:
+                data = json.load(f)
+            return data if isinstance(data, list) else data.get("queue", [])
+        except Exception as e:
+            logger.warning(f"Could not load research queue: {e}")
+            return []
+
+    def _save_research_queue(self, queue: list[dict]):
+        """Persist research queue after marking items promoted."""
+        try:
+            with open(self.RESEARCH_QUEUE_PATH, "w") as f:
+                json.dump(queue, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Could not save research queue: {e}")
+
+    @staticmethod
+    def _is_exploration(t) -> bool:
+        return (t.name or "").startswith("[EXP] ")
+
+    @staticmethod
+    def _exploration_notes_tag(notes) -> str:
+        """Extract an exploration tag line from a thesis' notes list."""
+        if not notes:
+            return ""
+        if isinstance(notes, str):
+            return notes if notes.startswith("[exploration]") else ""
+        for n in notes:
+            if isinstance(n, str) and n.startswith("[exploration]"):
+                return n
+        return ""
+
+    def _count_active_exploration(self) -> int:
+        """Count exploration theses still active."""
+        return sum(1 for t in self.thesis_tracker.get_active_theses() if self._is_exploration(t))
+
+    def _count_recent_exploration(self, days: int = 7) -> int:
+        """Count exploration theses created in recent days."""
+        cutoff = datetime.now() - timedelta(days=days)
+        count = 0
+        for t in self.thesis_tracker.get_active_theses():
+            if self._is_exploration(t) and t.created and t.created > cutoff:
+                count += 1
+        return count
+
+    def promote_hypotheses_to_exploration(self, max_new: Optional[int] = None) -> list:
+        """Convert high-priority untested research-queue hypotheses into small
+        exploration theses sized at EXPLORATION_SIZE_PCT.
+
+        Gates:
+        - Hypothesis must have at least one symbol in `symbols`
+        - Priority ≥ EXPLORATION_MIN_PRIORITY
+        - Hypothesis status in {pending, untested, queued} and not tested
+        - No duplicate by symbol across active theses
+        - Respects EXPLORATION_MAX_ACTIVE and EXPLORATION_MAX_PER_WEEK
+
+        Returns: list of created Thesis objects.
+        """
+        queue = self._load_research_queue()
+        if not queue:
+            return []
+
+        active_count = self._count_active_exploration()
+        recent_count = self._count_recent_exploration(days=7)
+        slots_by_active = max(0, self.EXPLORATION_MAX_ACTIVE - active_count)
+        slots_by_week = max(0, self.EXPLORATION_MAX_PER_WEEK - recent_count)
+        slots = min(slots_by_active, slots_by_week)
+        if max_new is not None:
+            slots = min(slots, max_new)
+        if slots <= 0:
+            logger.info(
+                f"Exploration promotion skipped: active={active_count}, "
+                f"recent={recent_count}, no slots"
+            )
+            return []
+
+        covered_symbols = self._get_symbols_with_thesis()
+
+        # Candidates: pending/untested, priority >= threshold, has symbol
+        candidates = []
+        for item in queue:
+            status = item.get("status", "pending")
+            if item.get("tested") or status == "completed":
+                continue
+            if status not in ("pending", "untested", "queued"):
+                continue
+            pri = item.get("priority", 0)
+            try:
+                pri = float(pri)
+            except (TypeError, ValueError):
+                continue
+            if pri < self.EXPLORATION_MIN_PRIORITY:
+                continue
+            symbols = item.get("symbols") or []
+            if not symbols or not isinstance(symbols, list):
+                continue
+            # First symbol not already in a thesis
+            sym = next((s for s in symbols if s and s not in covered_symbols), None)
+            if not sym:
+                continue
+            candidates.append((pri, sym, item))
+
+        candidates.sort(key=lambda x: -x[0])
+
+        created = []
+        for pri, sym, item in candidates[:slots]:
+            try:
+                desc = item.get("description", "")[:200]
+                expiry = (datetime.now() + timedelta(days=self.EXPLORATION_AUTO_INVALIDATE_DAYS)).strftime("%Y-%m-%d")
+                thesis = self.thesis_tracker.create_thesis(
+                    name=f"[EXP] {sym} — {desc[:60]}",
+                    summary=f"Exploration thesis from research queue hypothesis {item.get('id', '?')}. "
+                            f"Auto-invalidates {expiry} if no signpost triggers.",
+                    bull_case=f"Research hypothesis (priority {pri:.2f}): {desc}",
+                    bear_case="Unvalidated — may be noise. Capped at 3% size to limit downside.",
+                    conviction=self.EXPLORATION_CONVICTION,
+                    signposts=[{
+                        "description": f"Hypothesis validated or invalidated by {expiry}",
+                        "bullish_if": "Backtest or observed returns confirm hypothesis",
+                        "bearish_if": "Backtest rejects or 30 days pass without signal",
+                        "target_date": expiry,
+                    }],
+                    invalidation_triggers=[
+                        f"30 days elapsed without hypothesis validation (auto-invalidate {expiry})",
+                        "Hypothesis test returns null/negative result",
+                    ],
+                    positions=[sym],
+                    review_interval_days=7,
+                )
+                # Tag as exploration via notes list (Thesis.notes is list[str])
+                tag = f"[exploration] queue_id={item.get('id', '')} priority={pri:.2f} expires={expiry}"
+                if isinstance(thesis.notes, list):
+                    thesis.notes.append(tag)
+                else:
+                    thesis.notes = [tag]
+                self.thesis_tracker._save_thesis(thesis)
+
+                # Mark the queue item as promoted so we don't re-create
+                item["status"] = "promoted_to_exploration"
+                item["promoted_thesis_id"] = thesis.id
+                item["promoted_at"] = datetime.now().isoformat()
+
+                # Audit log
+                log_file = paths.base / "logs" / "auto_thesis_creation.jsonl"
+                log_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(log_file, "a") as f:
+                    f.write(json.dumps({
+                        "event": "exploration_thesis_created",
+                        "timestamp": datetime.now().isoformat(),
+                        "thesis_id": thesis.id,
+                        "thesis_name": thesis.name,
+                        "symbol": sym,
+                        "priority": pri,
+                        "hypothesis_id": item.get("id", ""),
+                        "size_cap_pct": self.EXPLORATION_SIZE_PCT,
+                    }) + "\n")
+
+                logger.info(
+                    f"Exploration thesis created: {thesis.name} "
+                    f"(sym={sym}, priority={pri:.2f}, size_cap={self.EXPLORATION_SIZE_PCT}%)"
+                )
+                created.append(thesis)
+            except Exception as e:
+                logger.warning(f"Failed to promote hypothesis {item.get('id')}: {e}")
+
+        if created:
+            self._save_research_queue(queue)
+        return created
+
+    def invalidate_expired_exploration(self) -> list:
+        """Auto-invalidate exploration theses past their 30-day window."""
+        invalidated = []
+        now = datetime.now()
+        for t in self.thesis_tracker.get_active_theses():
+            if not self._is_exploration(t):
+                continue
+            tag = self._exploration_notes_tag(getattr(t, "notes", None))
+            # Parse expires=YYYY-MM-DD from the tag line
+            expires = None
+            for token in tag.split():
+                if token.startswith("expires="):
+                    try:
+                        expires = datetime.strptime(token.split("=", 1)[1], "%Y-%m-%d")
+                    except ValueError:
+                        pass
+            if expires is None or expires > now:
+                continue
+            t.status = "invalidated"
+            t.conviction = 0
+            self.thesis_tracker._save_thesis(t)
+            invalidated.append(t)
+            logger.info(f"Exploration thesis auto-invalidated (expired): {t.name}")
+        return invalidated
 
     def _similar_thesis_exists(self, name: str) -> bool:
         """Check if a thesis with similar name already exists using token overlap."""
