@@ -78,6 +78,36 @@ async def auto_execute(dry_run: bool = False):
         pending = approved
         logger.info(f"{len(pending)} decision(s) passed ensemble check")
 
+        # Deduplicate BUY/ADD decisions per symbol per calendar day.
+        # Multiple sessions (operator + trade-decision) can independently create BUY decisions
+        # for the same symbol, leading to over-buying. Keep only the most recently created one.
+        # SELL/TRIM/CLOSE are NOT deduplicated — intentional step-down selling uses multiple decisions.
+        buy_actions = {"BUY", "ADD"}
+        today = datetime.now().date()
+        seen_buy: dict[str, DecisionRecord] = {}  # symbol -> most recent BUY/ADD decision today
+        for d in sorted(pending, key=lambda x: x.timestamp):
+            if d.action in buy_actions and d.timestamp.date() == today:
+                seen_buy[d.symbol] = d
+
+        dup_count = 0
+        deduped_pending = []
+        for d in pending:
+            if d.action in buy_actions and d.timestamp.date() == today:
+                if seen_buy.get(d.symbol) is not d:
+                    logger.warning(
+                        f"Dedup: skipping older {d.symbol} {d.action} id={d.id[:8]} "
+                        f"(superseded by {seen_buy[d.symbol].id[:8]})"
+                    )
+                    d.status = "skipped"
+                    dup_count += 1
+                    continue
+            deduped_pending.append(d)
+
+        if dup_count:
+            session.commit()
+            logger.info(f"Removed {dup_count} duplicate BUY decision(s); {len(deduped_pending)} remaining")
+            pending = deduped_pending
+
         # Get broker and account info
         from scripts.quick_trade import get_broker
 
@@ -151,10 +181,25 @@ async def _execute_one(
             db_session.commit()
             return False
 
-    # Get current price
+    # Get current price — use ask for buys, bid for sells to avoid stale-bid paper trading errors
     try:
         quote = await broker.get_quote(symbol)
-        price = float(quote.last)
+        ask = float(getattr(quote, "ask", 0) or 0)
+        bid = float(getattr(quote, "bid", 0) or 0)
+        last = float(quote.last)
+        if action in ("BUY", "ADD") and ask > 0:
+            # Use ask for buys — in paper trading, bid can be stale/wrong
+            price = ask
+            # Sanity: if bid is >50% below ask, bid is likely stale — don't use it as ref
+            spread_pct = (ask - bid) / ask if ask > 0 else 1.0
+            if spread_pct < 0.5 and bid > 0:
+                # Tight spread — bid is fresh; if ask is >3x bid something is really wrong
+                if ask > bid * 3:
+                    logger.warning(f"Suspicious ask for {symbol}: ask={ask:.2f} bid={bid:.2f} — skipping")
+                    return False
+            # If spread is wide, trust ask (paper trading stale bid is common)
+        else:
+            price = last
     except Exception as e:
         logger.warning(f"Cannot get quote for {symbol}: {e}")
         return False

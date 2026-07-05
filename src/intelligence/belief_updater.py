@@ -111,58 +111,136 @@ class BeliefUpdater:
 
         return report
 
-    def _auto_apply_suggestions(self, suggestions: list[ThesisSuggestion]):
-        """Auto-apply ALL thesis conviction changes. Fully autonomous — no human review needed.
+    # Archetype-weighted ceiling: a thesis' conviction can rise no higher
+    # than its own historical hit rate justifies. Computed as:
+    #   ceiling = max(ABS_FLOOR, min(ABS_CEILING, 40 + 60 * hit_rate))
+    # Thesis with <10 resolved predictions falls back to DEFAULT_CEILING.
+    ABS_CEILING = 95       # Hard cap — anchors below 100%
+    ABS_FLOOR_CEILING = 55 # Never cap below 55% (leaves room for legit setups)
+    DEFAULT_CEILING = 80   # Insufficient-history default
+    MIN_HISTORY_FOR_CEILING = 10
 
-        Safeguards:
-        - Hard ceiling at 95% (prevents anchoring at 100%)
-        - Per-day velocity cap: max ±5% change per run (prevents whiplash)
+    # Positive-update gating: kill the +2pp "mild confirmation" ratchet.
+    # Require substantial evidence before raising conviction.
+    MIN_SAMPLES_POSITIVE = 10   # Need at least 10 scored predictions
+    STRONG_ACCURACY = 0.75      # +5 only if ≥75% AND ≥15 samples
+    STRONG_MIN_SAMPLES = 15
+
+    # Daily decay: without fresh positive evidence, conviction bleeds toward
+    # the archetype-justified level. Prevents auto-ratcheting to 95%.
+    DAILY_DECAY_PP = 0.5   # Bleed rate when no qualifying evidence
+
+    # Phase 6 (re-architecture): the decay loop is a HORIZON ARTIFACT — it scores
+    # multi-year structural theses on 5-30d price predictions and bleeds their
+    # conviction toward a regressive ceiling. When disabled, conviction moves
+    # ONLY on signpost resolution; suggestions are still produced read-only.
+    # KEPT ON by default — flipping to "0" is gated on the live Reconciler
+    # (Phase 4b), which takes over the loser-trimming that decay currently
+    # triggers (conviction drop -> auto-exit). See plan hazard #1.
+    DECAY_ENABLED = os.environ.get("ATHENA_DECAY_ENABLED", "1") != "0"
+
+    def _compute_archetype_ceiling(self, thesis_id: str, session) -> tuple[float, int, float]:
+        """Return (ceiling_pct, sample_count, hit_rate) for a thesis.
+
+        If fewer than MIN_HISTORY_FOR_CEILING resolved predictions exist,
+        returns DEFAULT_CEILING with hit_rate=None.
         """
-        if not suggestions:
+        from src.db.models import PredictionRecord
+
+        preds = session.query(PredictionRecord).filter(
+            PredictionRecord.thesis_id == thesis_id,
+            PredictionRecord.status.in_(["hit", "miss"]),
+        ).all()
+        n = len(preds)
+        if n < self.MIN_HISTORY_FOR_CEILING:
+            return float(self.DEFAULT_CEILING), n, None
+        hit_rate = sum(1 for p in preds if p.status == "hit") / n
+        raw = 40 + 60 * hit_rate
+        ceiling = max(self.ABS_FLOOR_CEILING, min(self.ABS_CEILING, raw))
+        return float(ceiling), n, hit_rate
+
+    def _auto_apply_suggestions(self, suggestions: list[ThesisSuggestion]):
+        """Auto-apply thesis conviction changes with archetype-weighted ceiling and daily decay.
+
+        Rules:
+        - Ceiling derived from thesis' own historical hit rate
+          (Iran War at 28% hit rate gets capped at ~57%, not 95%)
+        - Positive updates only on strong evidence (≥10 samples, see _suggest_thesis_updates)
+        - No matching positive evidence → daily decay of DAILY_DECAY_PP toward ceiling
+        - Per-run velocity cap: max ±5% (prevents whiplash)
+        """
+        if not self.DECAY_ENABLED:
+            n = len(suggestions or [])
+            logger.info(
+                f"Conviction auto-apply DISABLED (ATHENA_DECAY_ENABLED=0); "
+                f"{n} suggestion(s) recorded read-only. Conviction now moves on "
+                f"signposts only."
+            )
             return
 
         try:
             from src.knowledge.thesis import ThesisTracker
             from src.core.paths import paths
+            from src.db.database import get_db
 
             tracker = ThesisTracker(paths.theses)
+            MAX_DAILY_CHANGE = 5
 
-            MAX_CONVICTION = 95  # Prevent anchoring at ceiling
-            MAX_DAILY_CHANGE = 5  # Cap per-run velocity
+            # Build suggestion lookup for quick check
+            sugg_by_id = {s.thesis_id: s for s in (suggestions or [])}
 
-            for s in suggestions:
-                thesis = tracker.get_thesis(s.thesis_id)
-                if not thesis or thesis.status != "active":
-                    continue
+            # Iterate ALL active theses so decay applies even without suggestions
+            active = [t for t in tracker.get_active_theses() if t.status == "active"]
 
-                # Clamp change to velocity limit
-                clamped_change = max(-MAX_DAILY_CHANGE, min(MAX_DAILY_CHANGE, s.suggested_change))
-                new_conviction = max(15, min(MAX_CONVICTION, thesis.conviction + clamped_change))
-                if new_conviction == thesis.conviction:
-                    continue
-
-                actual_change = new_conviction - thesis.conviction
-                thesis.update_conviction(
-                    new_value=new_conviction,
-                    reason=f"[auto] Belief updater: {s.reason}",
-                )
-                tracker._save_thesis(thesis)
-                logger.info(
-                    f"Belief updater auto-applied: {s.thesis_name} "
-                    f"{thesis.conviction - actual_change:.0f}% → {new_conviction:.0f}% "
-                    f"({actual_change:+.0f}%, requested {s.suggested_change:+}%)"
-                )
-
-                # Audit trail
-                try:
-                    from src.autonomy.provenance import log_event
-                    log_event(
-                        "conviction_auto_adjusted",
-                        source="belief_updater",
-                        title=f"{s.thesis_name}: {s.suggested_change:+}% ({s.reason})",
+            with get_db() as session:
+                for thesis in active:
+                    ceiling, sample_n, hit_rate = self._compute_archetype_ceiling(
+                        thesis.id, session
                     )
-                except Exception:
-                    pass
+                    s = sugg_by_id.get(thesis.id)
+
+                    if s is not None:
+                        requested = s.suggested_change
+                        clamped = max(-MAX_DAILY_CHANGE, min(MAX_DAILY_CHANGE, requested))
+                        new_conviction = thesis.conviction + clamped
+                        reason = f"[auto] Belief updater: {s.reason}"
+                    elif thesis.conviction > ceiling:
+                        # Above archetype-justified ceiling → decay toward it
+                        clamped = -min(self.DAILY_DECAY_PP, thesis.conviction - ceiling)
+                        new_conviction = thesis.conviction + clamped
+                        hr_str = f"{hit_rate:.0%}" if hit_rate is not None else "insufficient-history"
+                        reason = (
+                            f"[auto] Daily decay: conviction {thesis.conviction:.0f}% above "
+                            f"archetype ceiling {ceiling:.0f}% "
+                            f"(n={sample_n}, hit_rate={hr_str})"
+                        )
+                    else:
+                        continue  # No evidence, within ceiling → leave alone
+
+                    # Apply ceiling + absolute floor 15
+                    new_conviction = max(15.0, min(ceiling, new_conviction))
+                    if abs(new_conviction - thesis.conviction) < 0.01:
+                        continue
+
+                    actual_change = new_conviction - thesis.conviction
+                    old_conv = thesis.conviction
+                    thesis.update_conviction(new_value=new_conviction, reason=reason)
+                    tracker._save_thesis(thesis)
+                    logger.info(
+                        f"Belief updater: {thesis.name} "
+                        f"{old_conv:.0f}% → {new_conviction:.1f}% "
+                        f"({actual_change:+.1f}%, ceiling={ceiling:.0f}%)"
+                    )
+
+                    try:
+                        from src.autonomy.provenance import log_event
+                        log_event(
+                            "conviction_auto_adjusted",
+                            source="belief_updater",
+                            title=f"{thesis.name}: {actual_change:+.1f}% (ceiling {ceiling:.0f}%)",
+                        )
+                    except Exception:
+                        pass
         except Exception as e:
             logger.warning(f"Auto-apply suggestions failed: {e}")
 
@@ -292,19 +370,30 @@ class BeliefUpdater:
                     if accuracy is None or count < 3:
                         continue
 
-                    # Suggestion logic
+                    # Suggestion logic — positive updates require substantial evidence.
+                    # The old "+2 mild confirmation" ratchet drifted every thesis to 95%;
+                    # it's been removed. Daily decay now handles the drift in the other
+                    # direction (handled in _auto_apply_suggestions).
                     suggested_change = 0
                     reason = ""
-                    if accuracy >= 0.75 and count >= 5:
+                    if accuracy >= self.STRONG_ACCURACY and count >= self.STRONG_MIN_SAMPLES:
                         suggested_change = 5
-                        reason = f"{accuracy:.0%} {source} accuracy over {count} — strong confirmation"
-                    elif accuracy >= 0.6:
+                        reason = (
+                            f"{accuracy:.0%} {source} accuracy over {count} — "
+                            f"strong confirmation (n≥{self.STRONG_MIN_SAMPLES})"
+                        )
+                    elif accuracy >= 0.65 and count >= self.MIN_SAMPLES_POSITIVE:
                         suggested_change = 2
-                        reason = f"{accuracy:.0%} {source} accuracy — mild confirmation"
-                    elif accuracy <= 0.35:
+                        reason = (
+                            f"{accuracy:.0%} {source} accuracy over {count} — "
+                            f"moderate confirmation (n≥{self.MIN_SAMPLES_POSITIVE})"
+                        )
+                    elif accuracy <= 0.35 and count >= self.MIN_SAMPLES_POSITIVE:
+                        # Require same sample floor for penalization as confirmation.
+                        # n=3 early-resolved during a bond rout shouldn't zero a 10yr thesis.
                         suggested_change = -10
                         reason = f"Only {accuracy:.0%} {source} accuracy — consistently wrong"
-                    elif accuracy <= 0.45:
+                    elif accuracy <= 0.45 and count >= self.MIN_SAMPLES_POSITIVE:
                         suggested_change = -5
                         reason = f"{accuracy:.0%} {source} accuracy — below coin flip"
 
@@ -323,20 +412,53 @@ class BeliefUpdater:
 
         return suggestions
 
+    # Opinion-accuracy guards (added 2026-06-07 system-review).
+    # A core thesis (NVDA) was auto-invalidated on 52 opinions that were all
+    # captured in a single 5-day window (Apr 20-24) and were 44+ days stale.
+    # Clustered, stale opinions are NOT independent predictions, so:
+    #   (1) only count opinions captured within the lookback window, and
+    #   (2) require a minimum number of DISTINCT capture days, computing the
+    #       accuracy as a day-weighted mean so one bad window can't dominate.
+    OPINION_LOOKBACK_DAYS = 45
+    OPINION_MIN_DISTINCT_DAYS = 5
+
     def _get_opinion_accuracy_for_thesis(self, session, thesis_id: str) -> dict | None:
-        """Get direction accuracy from Market Opinion System for a thesis."""
+        """Get direction accuracy from Market Opinion System for a thesis.
+
+        Stale or single-window-clustered opinions are excluded — see the
+        class-level OPINION_* guards above — so they cannot drive a thesis
+        invalidation on their own.
+        """
         try:
+            from datetime import timedelta
+
             from src.db.models import MarketOpinionRecord
+
+            cutoff = (datetime.utcnow() - timedelta(days=self.OPINION_LOOKBACK_DAYS)).isoformat()
 
             opinions = session.query(MarketOpinionRecord).filter(
                 MarketOpinionRecord.thesis_id == thesis_id,
                 MarketOpinionRecord.score_10d_direction.isnot(None),
             ).all()
 
+            # Recency filter — drop opinions older than the lookback window.
+            opinions = [o for o in opinions if str(getattr(o, "created", "")) >= cutoff]
             if not opinions:
                 return None
 
-            dir_acc = sum(o.score_10d_direction for o in opinions) / len(opinions)
+            # De-cluster: average within each calendar day, then across days,
+            # so a single market window of N captures counts as one data point.
+            by_day: dict[str, list[float]] = {}
+            for o in opinions:
+                day = str(getattr(o, "created", ""))[:10]
+                by_day.setdefault(day, []).append(o.score_10d_direction)
+
+            if len(by_day) < self.OPINION_MIN_DISTINCT_DAYS:
+                # Too few distinct windows to trust — defer to legacy predictions.
+                return None
+
+            day_means = [sum(v) / len(v) for v in by_day.values()]
+            dir_acc = sum(day_means) / len(day_means)
             return {
                 "direction_accuracy": dir_acc,
                 "count": len(opinions),

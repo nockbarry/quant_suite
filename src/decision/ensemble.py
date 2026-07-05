@@ -73,9 +73,70 @@ class DecisionEnsemble:
     LONG_ACTIONS = ("BUY", "ADD")
     SHORT_ACTIONS = ("SELL", "CLOSE", "TRIM")
 
+    # Gate: only run the 3x ensemble when the decision is high-confidence AND
+    # the system's calibration is meaningfully off. For routine mid-confidence
+    # trades, the calibrated position-sizing cap already de-risks the trade;
+    # spending another 2x challenger evaluations buys little.
+    CONFIDENCE_GATE = 0.80
+    CALIBRATION_GAP_GATE = 0.10  # 10pp stated-vs-actual
+
     def __init__(self):
         self.log_dir = paths.base / "decisions" / "ensemble"
         self.log_dir.mkdir(parents=True, exist_ok=True)
+
+    def _calibration_gap(self, stated_confidence: float) -> Optional[float]:
+        """Return |stated - actual| for the calibration bucket nearest ``stated_confidence``.
+
+        Returns None if calibration data is unavailable or the bucket has
+        insufficient samples (n<10) — caller should treat that as "gap unknown,
+        don't gate on it".
+        """
+        cal_path = paths.intelligence / "calibration.json"
+        if not cal_path.exists():
+            return None
+        try:
+            data = json.load(cal_path.open())
+        except (OSError, json.JSONDecodeError):
+            return None
+
+        best_gap = None
+        best_dist = float("inf")
+        for b in data.get("bins", []):
+            n = b.get("n", 0)
+            if n < 10:
+                continue
+            predicted = float(b.get("predicted", 0))
+            actual = float(b.get("actual", 0))
+            dist = abs(predicted - stated_confidence)
+            if dist < best_dist:
+                best_dist = dist
+                best_gap = abs(predicted - actual)
+        return best_gap
+
+    def should_run_challengers(self, decision: dict) -> tuple[bool, str]:
+        """Decide whether to escalate to full 3x ensemble or skip to primary-only.
+
+        Returns (should_run, reason).
+        """
+        confidence = float(decision.get("confidence", 0.5))
+        if confidence < self.CONFIDENCE_GATE:
+            return False, (
+                f"skipped: confidence {confidence:.0%} < "
+                f"{self.CONFIDENCE_GATE:.0%} gate"
+            )
+        gap = self._calibration_gap(confidence)
+        if gap is None:
+            # No calibration data -> default to running (legacy behavior)
+            return True, "gap_unknown: calibration data insufficient"
+        if gap < self.CALIBRATION_GAP_GATE:
+            return False, (
+                f"skipped: confidence {confidence:.0%} well-calibrated "
+                f"(gap {gap:.0%} < {self.CALIBRATION_GAP_GATE:.0%})"
+            )
+        return True, (
+            f"run: confidence {confidence:.0%} >= gate AND gap "
+            f"{gap:.0%} >= {self.CALIBRATION_GAP_GATE:.0%}"
+        )
 
     def _get_direction(self, action: str) -> str:
         """Normalize action to direction."""
@@ -116,6 +177,27 @@ class DecisionEnsemble:
             reasoning_summary=decision.get("reasoning", "")[:200],
             agrees_with_primary=True,
         )
+
+        # Gate: skip the 2x challenger pass when the decision is either
+        # low-enough confidence (already de-risked by sizing cap) or
+        # well-calibrated (gap < 10pp). Saves ~2 LLM evaluations per decision.
+        should_run, gate_reason = self.should_run_challengers(decision)
+        if not should_run:
+            logger.info(f"Ensemble gate {symbol}: {gate_reason}")
+            result = EnsembleResult(
+                decision_id=decision_id,
+                symbol=symbol,
+                primary_action=primary_action,
+                primary_confidence=primary_confidence,
+                members=[asdict(primary)],
+                consensus_count=1,
+                consensus=True,  # primary-only pass is trivially consensus
+                final_action=primary_action,
+                final_confidence=primary_confidence,
+                ensemble_confidence=primary_confidence,
+            )
+            self._save_result(result)
+            return result
 
         # Run challengers (they don't see the primary's conclusion)
         challenger_1 = self._run_challenger(
@@ -255,21 +337,28 @@ Important: Only output the JSON object, nothing else."""
     def _run_api_challenger(
         self, member_id: str, symbol: str, decision: dict, context: dict, role: str
     ) -> EnsembleMember:
-        """Run challenger via Anthropic API (Haiku for cost efficiency)."""
-        import anthropic
+        """Run challenger via Claude Code subprocess (Haiku for cost efficiency).
 
-        client = anthropic.Anthropic()
+        Routes through the Claude Code subscription rather than a separate
+        Anthropic API channel — same billing channel as all other LLM calls.
+        """
+        from src.core.claude_code_client import get_client, ClaudeCodeError
+
         prompt = self._build_challenger_prompt(symbol, decision, context, role)
 
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        try:
+            resp = get_client().complete(
+                user=prompt,
+                system="You are a critical trade evaluator. Output strict JSON only.",
+                model="haiku",
+                max_turns=1,
+            )
+        except ClaudeCodeError as e:
+            raise ValueError(f"Challenger subprocess failed: {e}") from e
 
-        text = response.content[0].text
+        text = resp.text
 
-        # Parse JSON from response
+        # Parse JSON from response (challenger output is one small object)
         json_match = re.search(r"\{[^}]+\}", text)
         if json_match:
             data = json.loads(json_match.group())

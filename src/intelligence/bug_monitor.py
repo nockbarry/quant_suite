@@ -204,7 +204,8 @@ class BugMonitor:
     def _scan_log_files(self, hours: int = 24) -> list[BugReport]:
         """Scan *.log files for Python tracebacks."""
         bugs = []
-        cutoff = datetime.now().timestamp() - (hours * 3600)
+        since = datetime.now() - timedelta(hours=hours)
+        cutoff = since.timestamp()
         for log_dir in self.LOG_DIRS:
             if not log_dir.exists():
                 continue
@@ -222,7 +223,8 @@ class BugMonitor:
                     continue
                 try:
                     content = log_file.read_text(errors='ignore')
-                    bugs.extend(self._extract_tracebacks(content, str(log_file)))
+                    file_mtime = datetime.fromtimestamp(stat.st_mtime)
+                    bugs.extend(self._extract_tracebacks(content, str(log_file), since, file_mtime))
                 except Exception as e:
                     logger.debug(f"Error reading {log_file}: {e}")
                     continue
@@ -244,8 +246,98 @@ class BugMonitor:
         'urllib.error.URLError', 'decimal.InvalidOperation',
     }
 
-    def _extract_tracebacks(self, content: str, source_file: str) -> list[BugReport]:
-        """Extract Python tracebacks from log content."""
+    # Leading datetime on a log line: "2026-04-17 09:00:07" or "2026-04-17T09:00:07"
+    _TS_PREFIX = re.compile(r'^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})')
+    # Any ISO date appearing anywhere in a line (used as a date anchor scan).
+    _DATE_ANCHOR = re.compile(r'(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?')
+    # Time-only prefix (cross_reference style: "09:20:01 INFO ...")
+    _TIME_ONLY_PREFIX = re.compile(r'^(\d{2}:\d{2}:\d{2})\b')
+
+    def _traceback_is_recent(
+        self,
+        content: str,
+        match_start: int,
+        since: datetime | None,
+        file_mtime: datetime | None,
+    ) -> bool:
+        """Infer whether a traceback at match_start is newer than `since`.
+
+        Strategy (in priority order):
+          1. If the traceback's line itself has an ISO-date prefix, parse it.
+          2. Otherwise scan backward through the file for the most recent
+             line containing an ISO date (YYYY-MM-DD). That anchor date is
+             combined with the nearest time-only prefix on/near the traceback,
+             which is common in logs that emit "HH:MM:SS LEVEL ..." with
+             date-bearing banner lines between runs.
+          3. If nothing parses, fall back to True (keep) — we'd rather
+             re-report a stale bug than silently drop a fresh one.
+        """
+        if since is None:
+            return True
+        # Start-of-line index for the traceback match
+        line_start = content.rfind('\n', 0, match_start) + 1
+        # Find the most recent preceding ISO date anchor (YYYY-MM-DD) in the file.
+        head = content[:line_start]
+        anchor_date = None
+        anchor_time = None
+        for m in self._DATE_ANCHOR.finditer(head):
+            try:
+                anchor_date = m.group(1)
+                anchor_time = m.group(2)  # may be None
+            except (IndexError, ValueError):
+                continue
+        # Within ~12 lines preceding the traceback, look for the time-of-event.
+        event_time = None
+        for line in reversed(head.rsplit('\n', 12)[-13:]):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            m = self._TS_PREFIX.match(stripped)
+            if m:
+                try:
+                    ts = datetime.fromisoformat(f"{m.group(1)}T{m.group(2)}")
+                    return ts >= since
+                except (ValueError, TypeError):
+                    continue
+            m2 = self._TIME_ONLY_PREFIX.match(stripped)
+            if m2 and event_time is None:
+                event_time = m2.group(1)
+                break
+        if anchor_date:
+            # Combine the nearest anchor date with the nearest event time.
+            use_time = event_time or anchor_time or "00:00:00"
+            try:
+                ts = datetime.fromisoformat(f"{anchor_date}T{use_time}")
+                return ts >= since
+            except (ValueError, TypeError):
+                pass
+        if event_time and file_mtime is not None:
+            # No date anchor — fall back to combining file mtime's date with
+            # the event time (same-day assumption).
+            try:
+                h, mnt, s = map(int, event_time.split(':'))
+                ts = file_mtime.replace(hour=h, minute=mnt, second=s, microsecond=0)
+                if ts > file_mtime + timedelta(minutes=5):
+                    ts -= timedelta(days=1)
+                return ts >= since
+            except (ValueError, TypeError):
+                pass
+        return True
+
+    def _extract_tracebacks(
+        self,
+        content: str,
+        source_file: str,
+        since: datetime | None = None,
+        file_mtime: datetime | None = None,
+    ) -> list[BugReport]:
+        """Extract Python tracebacks from log content.
+
+        When `since` is provided, tracebacks whose preceding log-line timestamp
+        parses older than `since` are skipped. This prevents post-fix stale
+        tracebacks from getting re-reported when the log file is appended to
+        by an unrelated, later run.
+        """
         bugs = []
 
         # Find traceback blocks: starts with "Traceback (most recent call last):"
@@ -258,6 +350,8 @@ class BugMonitor:
             matches = matches[-self.MAX_TRACEBACKS_PER_FILE:]
 
         for match in matches:
+            if not self._traceback_is_recent(content, match.start(), since, file_mtime):
+                continue
             tb_text = match.group(0)
 
             # Also try to grab the error line that follows the traceback

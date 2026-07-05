@@ -36,6 +36,8 @@ class DecisionStatus(str, Enum):
     REJECTED = "rejected"  # Order rejected
     CANCELLED = "cancelled"  # Decision cancelled
     CLOSED = "closed"  # Position closed, can evaluate outcome
+    EXPIRED = "expired"  # Aged out unexecuted (formalized lifecycle, not silent drop)
+    SUPERSEDED = "superseded"  # Replaced by a newer decision / target snapshot
 
 
 @dataclass
@@ -175,6 +177,12 @@ class DecisionLogger:
     ):
         self.decisions_dir = Path(decisions_dir) if decisions_dir else paths.decisions
         self.decisions_dir.mkdir(parents=True, exist_ok=True)
+        # Independent reliability fix B: serializing lock for log_decision().
+        # Concurrent operator/trade-decision sessions can read the same daily
+        # JSON, both append, and overwrite each other's writes — losing one
+        # decision and creating an effective TOCTOU on size/limit checks.
+        # All writers grab this exclusive flock for the read-modify-write block.
+        self._lock_file = self.decisions_dir / ".write_lock"
         self.daily_file: Optional[Path] = None
         self._ensure_daily_file()
 
@@ -190,19 +198,47 @@ class DecisionLogger:
         return self.daily_file
 
     def log_decision(self, decision: TradingDecision) -> str:
-        """Log a new trading decision and sync to DB."""
+        """Log a new trading decision and sync to DB.
+
+        Uses fcntl.flock to serialize concurrent writes from operator,
+        trade-decision, and ensemble sessions. Without this lock, two
+        sessions reading the same daily file simultaneously will lose one
+        of the appended decisions when they both write back.
+        """
         self._ensure_daily_file()
 
-        with open(self.daily_file, "r") as f:
-            data = json.load(f)
+        # Acquire exclusive lock for the read-modify-write block.
+        # On non-POSIX systems fcntl is unavailable; degrade to no lock
+        # (single-platform deployment, but explicit for portability).
+        try:
+            import fcntl
+        except ImportError:
+            fcntl = None
 
-        # Handle both list and dict formats
-        if isinstance(data, list):
-            data = {"date": datetime.now().strftime("%Y-%m-%d"), "decisions": data}
-        data["decisions"].append(decision.to_dict())
+        lock_fd = None
+        if fcntl is not None:
+            self._lock_file.touch(exist_ok=True)
+            lock_fd = open(self._lock_file, "r+")
+            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
 
-        with open(self.daily_file, "w") as f:
-            json.dump(data, f, indent=2)
+        try:
+            with open(self.daily_file, "r") as f:
+                data = json.load(f)
+
+            # Handle both list and dict formats
+            if isinstance(data, list):
+                data = {"date": datetime.now().strftime("%Y-%m-%d"), "decisions": data}
+            data["decisions"].append(decision.to_dict())
+
+            with open(self.daily_file, "w") as f:
+                json.dump(data, f, indent=2)
+        finally:
+            if lock_fd is not None:
+                try:
+                    fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+                    lock_fd.close()
+                except Exception:
+                    pass
 
         # Sync to DB
         try:
@@ -574,6 +610,28 @@ def create_decision(
             setup_type="thesis_driven",
         )
     """
+    # Voluntary-exit gating (run FIRST, before any auto-generation fills in pre_mortem):
+    # CLOSE/SELL/TRIM without a mechanical trigger must ship with an explicit,
+    # caller-provided pre-mortem. Decision quality for voluntary exits has been
+    # 7% (CLOSE) / 19% (SELL) / 40% (ADD) — systematically wrong. Forcing the caller
+    # to write a falsifiable prediction makes the mistake visible and scorable.
+    _MECHANICAL_EXITS = {
+        "stop_loss", "stop_loss_close", "thesis_exit", "thesis_invalidation",
+        "thesis_invalidation_close", "signpost_triggered", "concentration_trim",
+        "concentration_rebalance", "regulatory_risk_trim",
+    }
+    _is_exit = action in (Action.CLOSE, Action.SELL, Action.TRIM)
+    _is_voluntary_exit = _is_exit and (setup_type or "").lower() not in _MECHANICAL_EXITS
+    if _is_voluntary_exit and (pre_mortem is None or not str(pre_mortem).strip()):
+        raise ValueError(
+            f"Voluntary {action.value} on {symbol} requires an explicit pre_mortem. "
+            f"Decision quality for voluntary exits is 7-19%; every exit not triggered "
+            f"by stop/signpost/thesis-invalidation/concentration must ship a "
+            f"falsifiable prediction (e.g., '{symbol} will close below ${{X}} in 10 "
+            f"trading days'). Pass setup_type='stop_loss'|'thesis_invalidation'|"
+            f"'signpost_triggered'|'concentration_trim' to mark as mechanical."
+        )
+
     # Enrich context with session context (web searches, news, market snapshot, etc.)
     enriched_context = {**context}
     try:
@@ -625,18 +683,37 @@ def create_decision(
     # HOLD decisions require no broker action — mark executed immediately
     initial_status = DecisionStatus.EXECUTED if action == Action.HOLD else DecisionStatus.PENDING
 
+    # Calibration-based sizing cap — reshape size_pct off empirical hit rate
+    # rather than stated confidence. Fixes the overconfidence bug where a 95%
+    # stated prediction (~35% actual) got sized for 10% positions.
+    calibrated_size = size_pct
+    calibration_note = None
+    try:
+        from src.risk.calibrated_confidence import calibrated_max_position_pct, calibrate
+        if action in (Action.BUY, Action.ADD):
+            max_frac = calibrated_max_position_pct(confidence)
+            max_pct = max_frac * 100.0
+            if size_pct > max_pct:
+                calibrated_size = max_pct
+                calibration_note = (
+                    f"Size capped {size_pct:.1f}% -> {max_pct:.1f}% "
+                    f"(stated conf {confidence:.0%}, calibrated {calibrate(confidence):.0%})"
+                )
+    except Exception:
+        pass
+
     decision = TradingDecision(
         id=str(uuid.uuid4())[:8],
         timestamp=datetime.now(),
         symbol=symbol,
         action=action,
         confidence=confidence,
-        size_pct=size_pct,
+        size_pct=calibrated_size,
         limit_price=limit_price,
         stop_loss_pct=stop_loss_pct,
         take_profit_pct=take_profit_pct,
         expected_hold_days=expected_hold_days,
-        reasoning=reasoning,
+        reasoning=reasoning + (f"\n\n[calibration] {calibration_note}" if calibration_note else ""),
         key_factors=key_factors,
         risks=risks,
         context=enriched_context,
