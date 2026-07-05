@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -158,6 +159,21 @@ async def _execute_one(
     symbol = decision.symbol
     action = decision.action
     size_pct = decision.size_pct or 5.0
+
+    # Ensemble agreement scales size (C4): full consensus trades full size,
+    # 2/3 trades at 70%. Applied at execution time so it's robust to cron
+    # ordering between run_ensemble and the auto-execute slots. Rejections
+    # (consensus False) were already filtered out upstream.
+    if os.environ.get("ATHENA_ENSEMBLE_SIZING", "1") != "0":
+        try:
+            edata = json.loads(decision.ensemble_data) if decision.ensemble_data else None
+            count = edata.get("consensus_count") if edata else None
+            challengers_ran = bool(edata and edata.get("challengers_ran", len(edata.get("members", [])) > 1))
+            if challengers_ran and count == 2:
+                size_pct *= 0.70
+                logger.info(f"{symbol}: 2/3 ensemble consensus — size scaled to {size_pct:.1f}%")
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            pass
 
     # For CLOSE/SELL/TRIM: get actual position first to avoid creating short positions
     if action in ("CLOSE", "SELL", "TRIM"):

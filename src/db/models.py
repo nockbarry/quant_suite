@@ -389,7 +389,8 @@ class PredictionRecord(Base):
     direction = Column(String(10), default="bullish")  # bullish, bearish, neutral
     target_value = Column(Float, nullable=True)  # price target or % move
     target_description = Column(Text, default="")  # free-text for complex predictions
-    confidence = Column(Float, default=0.5)  # 0-1 predicted probability
+    confidence = Column(Float, default=0.5)  # 0-1 CALIBRATED probability (scored curve)
+    stated_confidence = Column(Float, nullable=True)  # raw verbalized value, pre-calibration
     timeframe_days = Column(Integer, default=10)
     resolve_by = Column(DateTime, nullable=True, index=True)
 
@@ -431,6 +432,7 @@ class PredictionRecord(Base):
             "target_value": self.target_value,
             "target_description": self.target_description,
             "confidence": self.confidence,
+            "stated_confidence": self.stated_confidence,
             "timeframe_days": self.timeframe_days,
             "resolve_by": self.resolve_by.isoformat() if self.resolve_by else None,
             "reasoning_category": self.reasoning_category,

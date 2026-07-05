@@ -1,14 +1,16 @@
-"""Confidence calibration — map stated confidence to empirical hit rate.
+"""Decision-curve calibration lookup — DIAGNOSTIC ONLY, never sizes.
 
-Fixes the overconfidence bug: 90%+ stated predictions hit ~35%, 80-90% hit ~37%,
-but <50% and 50-60% stated are well-calibrated. Sizing keys off stated confidence,
-so 95%-conviction positions get sized for 95% odds on a 40% coin-flip.
+calibrate(stated) maps stated confidence through the DECISION-prediction
+calibration curve (~/quant_results/intelligence/calibration.json, written by
+BeliefUpdater). That curve is measurably inverted (90%+ stated → ~33%
+actual, n=992), which makes it useful for gap logging and red-flag surfacing
+but disqualifies it as a sizing input: a remap would perversely reward low
+stated confidence. Sizing consumes the calibrated OPINION curve instead —
+see src/portfolio/calibration_bound.py and src/probability/.
 
-This module applies isotonic regression to the calibration bins and exposes:
-    calibrate(stated) -> empirical_probability
-    calibrated_max_position_pct(stated) -> float  (0-1, used by sizer)
-
-Reads ~/quant_results/intelligence/calibration.json written by BeliefUpdater.
+The former sizing helpers (calibrated_max_position_pct, calibrated_
+conviction_pct, calibration_gap) were removed in C4 when sizing moved to
+the opinion curve.
 """
 from __future__ import annotations
 
@@ -100,46 +102,3 @@ def calibrate(stated: float) -> float:
             t = (stated - x0) / (x1 - x0)
             return max(IDENTITY_FLOOR, min(IDENTITY_CEILING, y0 + t * (y1 - y0)))
     return stated
-
-
-def calibrated_max_position_pct(stated_confidence: float) -> float:
-    """Position sizing cap as a fraction of portfolio (0-1), keyed off calibrated confidence.
-
-    Piecewise schedule matching CLAUDE.md position sizing but using calibrated
-    probability rather than stated confidence:
-
-        calibrated >= 0.80 → 10%
-        calibrated >= 0.65 → 7%
-        calibrated >= 0.50 → 5%
-        else              → 3%
-    """
-    p = calibrate(stated_confidence)
-    if p >= 0.80:
-        return 0.10
-    if p >= 0.65:
-        return 0.07
-    if p >= 0.50:
-        return 0.05
-    return 0.03
-
-
-def calibrated_conviction_pct(stated_conviction: float) -> float:
-    """Apply calibration to a 0-100 thesis conviction.
-
-    A thesis stated at 95% conviction with 35% empirical accuracy in the top bin
-    will be returned as ~35, pulling sizing down to the 3% tier.
-    """
-    stated_frac = max(0.0, min(100.0, float(stated_conviction))) / 100.0
-    return calibrate(stated_frac) * 100.0
-
-
-def calibration_gap() -> Optional[float]:
-    """Overall calibration error (stated - empirical) across resolved predictions, 0-1.
-
-    Positive means overconfident. Returns None if data absent.
-    """
-    data = _load()
-    if not data:
-        return None
-    err = data.get("calibration_error")
-    return float(err) if err is not None else None

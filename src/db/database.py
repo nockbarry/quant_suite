@@ -98,6 +98,10 @@ def ensure_columns():
         ("decisions", "expires_at", "DATETIME", "NULL"),
         ("decisions", "lifecycle_status", "VARCHAR(20)", "'pending'"),
         ("decisions", "target_portfolio_id", "VARCHAR(100)", "NULL"),
+        # C4: predictions store calibrated confidence in `confidence`;
+        # the raw verbalized value moves to stated_confidence so both
+        # calibration curves stay measurable.
+        ("predictions", "stated_confidence", "FLOAT", "NULL"),
     ]
     with engine.connect() as conn:
         for table, col, col_type, default in _new_columns:

@@ -683,24 +683,54 @@ def create_decision(
     # HOLD decisions require no broker action — mark executed immediately
     initial_status = DecisionStatus.EXECUTED if action == Action.HOLD else DecisionStatus.PENDING
 
-    # Calibration-based sizing cap — reshape size_pct off empirical hit rate
-    # rather than stated confidence. Fixes the overconfidence bug where a 95%
-    # stated prediction (~35% actual) got sized for 10% positions.
+    # Calibration-based sizing cap — reshape size_pct off the OPINION
+    # calibration curve (the calibrated one, error 0.106), not the inverted
+    # decision curve. calibrated_confidence.calibrate() is kept for gap
+    # LOGGING only: it reads the decision curve, whose inversion means a
+    # remap would perversely reward low stated confidence.
     calibrated_size = size_pct
     calibration_note = None
     try:
-        from src.risk.calibrated_confidence import calibrated_max_position_pct, calibrate
+        from src.portfolio.calibration_bound import opinion_calibrated_prob
+        from src.risk.calibrated_confidence import calibrate
+
         if action in (Action.BUY, Action.ADD):
-            max_frac = calibrated_max_position_pct(confidence)
-            max_pct = max_frac * 100.0
+            p = opinion_calibrated_prob(confidence)
+            if p >= 0.80:
+                max_pct = 10.0
+            elif p >= 0.65:
+                max_pct = 7.0
+            elif p >= 0.50:
+                max_pct = 5.0
+            else:
+                max_pct = 3.0
             if size_pct > max_pct:
                 calibrated_size = max_pct
                 calibration_note = (
                     f"Size capped {size_pct:.1f}% -> {max_pct:.1f}% "
-                    f"(stated conf {confidence:.0%}, calibrated {calibrate(confidence):.0%})"
+                    f"(stated conf {confidence:.0%}, opinion-calibrated {p:.0%}, "
+                    f"decision-curve {calibrate(confidence):.0%})"
                 )
     except Exception:
         pass
+
+    # 90%+ stated confidence is a RED FLAG, never a boost: that bin resolved
+    # at ~33% (n=72). Tag the risk, cap size at the 3% floor tier, and emit
+    # a loud event for review surfacing.
+    if confidence >= 0.90 and action in (Action.BUY, Action.ADD):
+        risks = list(risks or []) + ["red_flag_overconfidence: stated >=90% historically resolves ~33%"]
+        calibrated_size = min(calibrated_size, 3.0)
+        calibration_note = (calibration_note or "") + " [red_flag_overconfidence: size clamped to 3%]"
+        try:
+            from src.autonomy.provenance import log_event
+            log_event(
+                "red_flag_overconfidence", source="decision_logger", symbol=symbol,
+                severity="warning",
+                title=f"{symbol} {action.value} stated at {confidence:.0%} — overconfidence red flag",
+                detail={"confidence": confidence, "size_clamped_to_pct": calibrated_size},
+            )
+        except Exception:
+            pass
 
     decision = TradingDecision(
         id=str(uuid.uuid4())[:8],
@@ -747,6 +777,15 @@ def create_decision(
         if pred_direction:
             norm_setup = normalize_setup_type(setup_type or "thesis_driven")
             hold_days = expected_hold_days or 10
+            # `confidence` stores the CALIBRATED value (opinion-curve remap;
+            # run_ensemble blends in agreement later). The raw verbalized
+            # number goes to stated_confidence — scoring both proves/disproves
+            # the calibration fix instead of hiding the inversion.
+            try:
+                from src.probability.estimator import effective_confidence
+                calibrated_conf = effective_confidence(confidence)
+            except Exception:
+                calibrated_conf = confidence
             athena_db.save_prediction({
                 "decision_id": decision.id,
                 "thesis_id": thesis_id,
@@ -755,7 +794,8 @@ def create_decision(
                 "direction": pred_direction,
                 "target_value": limit_price,
                 "target_description": f"{'Bullish' if pred_direction == 'bullish' else 'Bearish'} on {symbol} ({action.value})",
-                "confidence": confidence,
+                "confidence": calibrated_conf,
+                "stated_confidence": confidence,
                 "timeframe_days": hold_days,
                 "reasoning_category": norm_setup,
                 "setup_type": norm_setup,
