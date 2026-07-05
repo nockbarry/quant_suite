@@ -331,19 +331,23 @@ class COTSource:
 
         self._save_history()
 
-    async def get_report(self, symbols: Optional[list[str]] = None) -> COTReport:
+    async def get_report(
+        self,
+        symbols: Optional[list[str]] = None,
+        force_refresh: bool = False,
+    ) -> COTReport:
         """
         Get current COT report.
 
         Args:
             symbols: Optional list of symbols to include.
                     If None, returns all tracked contracts.
+            force_refresh: If True, bypass the in-memory cache.
 
         Returns:
             COTReport with positions and signals.
         """
-        # Check cache
-        cached = self._check_cache()
+        cached = None if force_refresh else self._check_cache()
         if cached:
             if symbols:
                 # Filter to requested symbols

@@ -163,16 +163,16 @@ class VIXStructureSource:
         if len(self._history) > 100:
             self._history = self._history[-100:]
 
-    async def get_structure(self) -> VIXTermStructure:
+    async def get_structure(self, force_refresh: bool = False) -> VIXTermStructure:
         """
         Get current VIX term structure.
 
         Returns VIXTermStructure with spot, futures estimates, and signals.
         """
-        # Check cache first
-        cached = self._check_cache()
-        if cached:
-            return cached
+        if not force_refresh:
+            cached = self._check_cache()
+            if cached:
+                return cached
 
         if yf is None:
             raise ImportError("yfinance required: pip install yfinance")

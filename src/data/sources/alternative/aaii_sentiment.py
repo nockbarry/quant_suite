@@ -202,16 +202,16 @@ class AAIISentimentSource:
             self._history.append((data.survey_date, data.bullish_pct, data.bearish_pct))
             self._save_history()
 
-    async def get_sentiment(self) -> AAIISentiment:
+    async def get_sentiment(self, force_refresh: bool = False) -> AAIISentiment:
         """
         Get current AAII sentiment data.
 
         Returns AAIISentiment with survey results and signals.
         """
-        # Check cache first
-        cached = self._check_cache()
-        if cached:
-            return cached
+        if not force_refresh:
+            cached = self._check_cache()
+            if cached:
+                return cached
 
         try:
             # Try to fetch from AAII website

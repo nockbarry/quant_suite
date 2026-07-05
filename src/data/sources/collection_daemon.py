@@ -330,16 +330,16 @@ class DataCollectionDaemon:
         from src.data.sources.alternative.put_call import PutCallSource
         source = PutCallSource()
         try:
-            await source.get_data(force_refresh=True)
+            await source.get_put_call(force_refresh=True)
         finally:
             await source.close()
 
     async def _collect_market_breadth(self) -> None:
         """Collect market breadth data."""
-        # Uses existing market_breadth.py infrastructure
-        from src.data.pipeline.market_breadth import MarketBreadthCalculator
-        calc = MarketBreadthCalculator()
-        await calc.calculate()
+        from src.data.pipeline.market_breadth import MarketBreadthAnalyzer
+        analyzer = MarketBreadthAnalyzer()
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, analyzer.get_breadth)
 
     async def _collect_finviz_screens(self) -> None:
         """Collect Finviz screen results."""

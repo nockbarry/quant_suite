@@ -43,6 +43,10 @@ install_cron() {
         echo "# Stop daemons after market close at 5:00 PM ET (Mon-Fri)"
         echo "0 17 * * 1-5 $SCRIPT_DIR/trading_day.sh stop >> $LOG_DIR/cron.log 2>&1"
         echo ""
+        echo "$CRON_MARKER - Pre-dawn RSS Pull"
+        echo "# Close the 4h RSS gap before /morning-briefing (5:55 AM, Mon-Fri)"
+        echo "55 5 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 $SCRIPT_DIR/collect_all_data.py --quick >> $LOG_DIR/collection.log 2>&1"
+        echo ""
         echo "$CRON_MARKER - Master Data Collection (Quick)"
         echo "# Essential sources (news, state, signposts) every 30 min"
         echo "*/30 6-17 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 $SCRIPT_DIR/collect_all_data.py --quick >> $LOG_DIR/collection.log 2>&1"
@@ -103,7 +107,7 @@ install_auto() {
     echo ""
 
     # Get existing crontab (without our auto entries and orphaned standalone entries)
-    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "cron_prediction_scorer" | grep -v "cron_opinion_scorer" | grep -v "cron_decision_quality" | grep -v "cron_belief_update" | grep -v "readiness_check.py" | grep -v "auto_corrections.py" | grep -v "run_prediction_markets.py" | grep -v "@reboot.*athena_scheduler")
+    EXISTING=$(crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "cron_prediction_scorer" | grep -v "cron_opinion_scorer" | grep -v "cron_decision_quality" | grep -v "cron_belief_update" | grep -v "cron_usage_to_db" | grep -v "cron_build_target" | grep -v "cron_reconcile" | grep -v "cron_realized_pnl" | grep -v "cron_benchmark" | grep -v "readiness_check.py" | grep -v "auto_corrections.py" | grep -v "run_prediction_markets.py" | grep -v "@reboot.*athena_scheduler")
 
     # Create new crontab
     {
@@ -128,6 +132,10 @@ install_auto() {
         echo "$CRON_AUTO_MARKER - Afternoon Trade Decision"
         echo "# Run trade decision at 1:00 PM ET (auto-executes paper orders after)"
         echo "0 13 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot trade-decision >> $LOG_DIR/scheduler.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Reconcile (shadow)"
+        echo "# Shadow-reconcile portfolio toward target at 10:15 AM ET. Plan-only until live cutover (Phase 4b)."
+        echo "15 10 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_reconcile.py --shadow >> $LOG_DIR/reconcile.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Operator Session Stop"
         echo "# Stop operator at 4:05 PM ET (Mon-Fri)"
@@ -157,17 +165,24 @@ install_auto() {
         echo "# Auto-suggest theses, surface overdue reviews, fix conviction anchoring (daily 6:10 AM)"
         echo "10 6 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_thesis_maintenance.py >> $LOG_DIR/thesis_maintenance.log 2>&1"
         echo ""
+        echo "$CRON_AUTO_MARKER - Target Portfolio (shadow)"
+        echo "# Build shadow TargetPortfolio from beliefs, log gap vs current (daily 6:15 AM). Read-only until Phase 4."
+        echo "15 6 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_build_target.py >> $LOG_DIR/build_target.log 2>&1"
+        echo ""
         echo "$CRON_AUTO_MARKER - Signal Scan (Python + Prediction Markets)"
-        echo "# Scan WSB, Stocktwits, prediction markets, thesis suggestions every 2 hours"
-        echo "0 6,8,10,12,14,16 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_signal_scan.py >> $LOG_DIR/signal_scan.log 2>&1"
+        echo "# Scan WSB, Stocktwits, prediction markets, thesis suggestions 2x/day"
+        echo "# Consolidated from 6x/day (6,8,10,12,14,16) after Apr-2026 token audit."
+        echo "# cron_signal_digest.py (every 30 min) is the intraday convergence radar;"
+        echo "# this heavier opinion-capture scan is aligned with 10:00 and 13:00 trade-decision."
+        echo "25 10,13 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_signal_scan.py >> $LOG_DIR/signal_scan.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Prediction Market Signals"
-        echo "# Thesis-matched prediction market signals every 2 hours"
-        echo "5 6,8,10,12,14,16 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/run_prediction_markets.py >> $LOG_DIR/prediction_markets.log 2>&1"
+        echo "# Thesis-matched prediction market signals 2x/day (aligned with signal scan)"
+        echo "30 10,13 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/run_prediction_markets.py >> $LOG_DIR/prediction_markets.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Signal Scan Claude (Morning + Afternoon)"
         echo "# LLM analysis of social signals at 10:30 AM and 2:30 PM ET (Mon-Fri)"
-        echo "30 10,14 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot signal-scan >> $LOG_DIR/scheduler.log 2>&1"
+        echo "30 10 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot signal-scan >> $LOG_DIR/scheduler.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Prediction Scorer"
         echo "# Score resolved predictions at 5:15 PM ET (Mon-Fri)"
@@ -181,13 +196,25 @@ install_auto() {
         echo "# Track decision quality at 5:22 PM ET (Mon-Fri)"
         echo "22 17 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_decision_quality.py >> $LOG_DIR/decision_quality.log 2>&1"
         echo ""
+        echo "$CRON_AUTO_MARKER - Realized P&L (nightly)"
+        echo "# Rebuild realized lots from broker fills, stamp decisions (5:40 PM Mon-Fri)"
+        echo "40 17 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_realized_pnl.py >> $LOG_DIR/realized_pnl.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Weekly Benchmark"
+        echo "# Account vs SPY/QQQ/frozen-own-basket (Sunday 4:00 PM, before system-review)"
+        echo "0 16 * * 0 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_benchmark.py >> $LOG_DIR/benchmark.log 2>&1"
+        echo ""
+        echo "$CRON_AUTO_MARKER - Usage Cost Tracker"
+        echo "# Persist Claude Code token usage to session_costs at 5:25 PM ET (Mon-Fri)"
+        echo "25 17 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_usage_to_db.py >> $LOG_DIR/usage_to_db.log 2>&1"
+        echo ""
         echo "$CRON_AUTO_MARKER - Belief Updater"
         echo "# Update signal weights and calibration at 5:30 PM ET (Mon-Fri)"
         echo "30 17 * * 1-5 cd $PROJECT_DIR && PYTHONPATH=. python3 scripts/cron_belief_update.py >> $LOG_DIR/belief_update.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Internal Review"
         echo "# Automated self-assessment at 12:00 PM and 3:00 PM ET (Mon-Fri)"
-        echo "0 12,15 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot internal-review >> $LOG_DIR/scheduler.log 2>&1"
+        echo "0 12 * * 1-5 $SCRIPT_DIR/athena_scheduler.sh oneshot internal-review >> $LOG_DIR/scheduler.log 2>&1"
         echo ""
         echo "$CRON_AUTO_MARKER - Evening Research"
         echo "# Post-market web research + news synthesis at 5:45 PM ET (Mon-Fri)"
@@ -237,7 +264,7 @@ install_auto() {
 remove_auto() {
     echo "Removing autonomous Claude session cron jobs..."
 
-    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "readiness_check.py" | grep -v "cron_prediction_scorer" | grep -v "cron_opinion_scorer" | grep -v "cron_decision_quality" | grep -v "cron_belief_update" | grep -v "auto_corrections.py" | grep -v "run_prediction_markets.py" | grep -v "@reboot.*athena_scheduler" | crontab -
+    crontab -l 2>/dev/null | grep -v "$CRON_AUTO_MARKER" | grep -v "athena_scheduler.sh" | grep -v "session_wrapper.sh" | grep -v "health_monitor.py" | grep -v "sentinel.py" | grep -v "cron_signal_scan.py" | grep -v "readiness_check.py" | grep -v "cron_prediction_scorer" | grep -v "cron_opinion_scorer" | grep -v "cron_decision_quality" | grep -v "cron_belief_update" | grep -v "cron_usage_to_db" | grep -v "cron_build_target" | grep -v "cron_reconcile" | grep -v "cron_realized_pnl" | grep -v "cron_benchmark" | grep -v "auto_corrections.py" | grep -v "run_prediction_markets.py" | grep -v "@reboot.*athena_scheduler" | crontab -
 
     echo "Autonomous cron jobs removed."
 }

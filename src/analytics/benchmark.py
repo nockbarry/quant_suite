@@ -56,10 +56,14 @@ def ensure_frozen_basket(symbols: list[str]) -> dict:
     if path.exists():
         return json.loads(path.read_text())
     closes = _closes(sorted(set(symbols)), period="5d")
+    # Guard against NaN closes — a NaN start_price silently kills the frozen basket
+    # benchmark forever (p0 > 0 is False for NaN), so only freeze valid prices.
+    valid = {s: float(c.dropna().iloc[-1]) for s, c in closes.items()
+             if len(c.dropna()) > 0 and float(c.dropna().iloc[-1]) > 0}
     basket = {
         "frozen_at": datetime.now().strftime("%Y-%m-%d"),
-        "symbols": sorted(closes.keys()),
-        "start_prices": {s: round(float(c.iloc[-1]), 4) for s, c in closes.items()},
+        "symbols": sorted(valid.keys()),
+        "start_prices": {s: round(p, 4) for s, p in valid.items()},
         "note": "Equal-weight buy-and-hold of own thesis vehicles at freeze date. "
                 "The does-activity-add-value benchmark — do not edit.",
     }
