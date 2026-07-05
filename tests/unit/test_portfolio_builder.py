@@ -137,3 +137,39 @@ class TestExtraAdjustments:
         )
         assert "NVDA" not in tp.weights
         assert "MU" in tp.weights
+
+
+class TestClusterCap:
+    def test_cluster_capped_at_30pct(self):
+        # Four names in one correlation cluster, each wanting 10% (40% total,
+        # in distinct sectors so the sector cap can't catch it) -> scaled to
+        # the 30% cluster budget: one cluster is one bet.
+        theses = [
+            _FakeThesis("t1", "Uranium", 85, ["CCJ"]),
+            _FakeThesis("t2", "Gold", 85, ["GLD"]),
+            _FakeThesis("t3", "RareEarth", 85, ["MP"]),
+            _FakeThesis("t4", "RareEarthETF", 85, ["REMX"]),
+        ]
+        cluster = [{"CCJ", "GLD", "MP", "REMX"}]
+        tp = TargetPortfolioBuilder(_FakeTracker(theses)).build(
+            equity=100_000, correlation_clusters=cluster,
+        )
+        total = sum(tp.weights[s].weight for s in ["CCJ", "GLD", "MP", "REMX"])
+        assert total <= 0.30 + 1e-9
+        # each name scaled below its 10% position cap — proves the cluster
+        # cap (not the position cap) did the final clipping
+        assert all(tp.weights[s].weight < 0.10 - 1e-9
+                   for s in ["CCJ", "GLD", "MP", "REMX"])
+
+    def test_cluster_cap_config_override(self):
+        from src.risk.limits import RiskLimitsConfig
+
+        theses = [
+            _FakeThesis("t1", "A", 85, ["CCJ"]),
+            _FakeThesis("t2", "B", 85, ["GLD"]),
+        ]
+        cfg = RiskLimitsConfig(max_cluster_pct=0.12)
+        tp = TargetPortfolioBuilder(_FakeTracker(theses), config=cfg).build(
+            equity=100_000, correlation_clusters=[{"CCJ", "GLD"}],
+        )
+        assert sum(tp.weights[s].weight for s in ["CCJ", "GLD"]) <= 0.12 + 1e-9

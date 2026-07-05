@@ -90,7 +90,7 @@ class TargetPortfolioBuilder:
             # floor-growth must not violate the correlation-cluster cap either
             if getattr(self, "_clusters", None):
                 from src.portfolio.clusters import apply_cluster_cap
-                apply_cluster_cap(raw, self._clusters)
+                apply_cluster_cap(raw, self._clusters, self.config.max_cluster_pct)
 
     def build(
         self,
@@ -172,7 +172,7 @@ class TargetPortfolioBuilder:
         self._clusters = correlation_clusters or []
         if self._clusters:
             from src.portfolio.clusters import apply_cluster_cap
-            apply_cluster_cap(raw, self._clusters)
+            apply_cluster_cap(raw, self._clusters, self.config.max_cluster_pct)
 
         # 6. fold rule-engine adjustments (Phase 5). weight<=0 removes the symbol.
         for adj in extra_adjustments or []:

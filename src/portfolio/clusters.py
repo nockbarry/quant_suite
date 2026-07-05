@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CORR_THRESHOLD = 0.60
 DEFAULT_LOOKBACK_DAYS = 90
-DEFAULT_MAX_CLUSTER_PCT = 0.50
+# Source of truth is RiskLimitsConfig.max_cluster_pct — the builder passes it
+# explicitly. This fallback mirrors it for callers that don't.
+DEFAULT_MAX_CLUSTER_PCT = 0.30
 
 
 def clusters_from_correlation(
