@@ -240,11 +240,18 @@ class MetaObserver:
     def snapshot_all(self) -> list:
         """Read state from all discovered instances.
 
+        Instances with a DISABLED marker file in their results dir are skipped
+        (they're off for token/cost reasons and would pollute divergence metrics
+        with stale state).
+
         Returns:
             List of InstanceSnapshot objects.
         """
         snapshots = []
         for d in self.instance_dirs:
+            if (Path(d) / "DISABLED").exists():
+                logger.info(f"Skipping disabled instance: {d}")
+                continue
             try:
                 snapshots.append(self.snapshot_instance(d))
             except Exception as e:

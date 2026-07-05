@@ -475,6 +475,10 @@ cmd_boot() {
         if [ ! -d "$instance_dir" ]; then
             continue
         fi
+        if [ -f "$instance_dir/.disabled" ]; then
+            log "BOOT: Skipping disabled instance ($instance_dir)"
+            continue
+        fi
         local inst_name
         inst_name=$(basename "$instance_dir" | sed 's/quant_results_//')
         log "BOOT: Setting up instance '$inst_name' ($instance_dir)"

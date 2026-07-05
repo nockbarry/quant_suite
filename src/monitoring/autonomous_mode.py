@@ -226,7 +226,7 @@ def get_new_research_since(since: datetime) -> list[dict[str, Any]]:
                 if created:
                     try:
                         trigger_time = datetime.fromisoformat(created)
-                        if trigger_time > since:
+                        if trigger_time > since and not trigger.get("consumed", False):
                             results.append({
                                 "type": "trade_trigger",
                                 "symbol": trigger.get("symbol", ""),
