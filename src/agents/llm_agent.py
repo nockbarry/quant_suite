@@ -34,13 +34,13 @@ from .base import (
 logger = logging.getLogger(__name__)
 
 
-# Check for anthropic library
-try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
-    logger.warning("anthropic library not installed. Install with: pip install anthropic")
+# Backend: Claude Code subprocess (consolidates spend through Claude Code
+# subscription). The legacy ANTHROPIC_AVAILABLE flag is kept for backwards
+# compat with any caller checking it, but is now a tautology — the
+# subprocess client requires only the `claude` binary on PATH.
+import shutil
+from src.core.claude_code_client import ClaudeCodeClient, ClaudeCodeError
+ANTHROPIC_AVAILABLE = bool(shutil.which("claude"))
 
 
 class LLMModel(str, Enum):
@@ -114,31 +114,28 @@ class ClaudeClient:
         Initialize Claude client.
 
         Args:
-            api_key: Anthropic API key (uses env var if not provided)
+            api_key: Ignored (kept for backwards compatibility). Spend now
+                routes through the Claude Code subscription.
             model: Model to use
-            max_tokens: Maximum response tokens
-            temperature: Sampling temperature
+            max_tokens: Maximum response tokens (advisory; subprocess uses
+                Claude Code defaults internally)
+            temperature: Sampling temperature (advisory; not pluggable
+                through subprocess interface — kept for caller signatures)
         """
         if not ANTHROPIC_AVAILABLE:
             raise ImportError(
-                "anthropic library not installed. "
-                "Install with: pip install anthropic"
+                "claude CLI not on PATH. Install Claude Code "
+                "(see https://docs.claude.com/claude-code) to use ClaudeClient."
             )
 
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-        if not self.api_key:
-            raise ValueError(
-                "API key required. Set ANTHROPIC_API_KEY environment variable "
-                "or pass api_key parameter."
-            )
-
-        self.model = model.value
+        # Legacy api_key param kept for callers that pass it; ignored.
+        self.api_key = api_key  # not used; subscription auth via subprocess
+        self.model = model.value if hasattr(model, "value") else str(model)
         self.max_tokens = max_tokens
         self.temperature = temperature
-
-        self._client = anthropic.Anthropic(api_key=self.api_key)
-        self._async_client = anthropic.AsyncAnthropic(api_key=self.api_key)
-        self.last_usage: dict | None = None  # Populated after each generate() call
+        # Single backend for all calls — wraps `claude -p` subprocess.
+        self._backend = ClaudeCodeClient()
+        self.last_usage: dict | None = None  # populated after each generate() call
 
     async def generate(
         self,
@@ -153,29 +150,32 @@ class ClaudeClient:
         Args:
             prompt: User prompt
             system: System prompt
-            max_tokens: Override default max tokens
-            temperature: Override default temperature
+            max_tokens: Override default max tokens (advisory only — subprocess
+                uses Claude Code defaults; pre-truncate prompts if needed)
+            temperature: Override default temperature (advisory only — not
+                exposed through Claude Code subprocess interface)
 
         Returns:
             Generated response text
         """
-        messages = [{"role": "user", "content": prompt}]
-
-        response = await self._async_client.messages.create(
+        # Run sync subprocess in a worker thread to avoid blocking the loop.
+        import asyncio
+        resp = await asyncio.to_thread(
+            self._backend.complete,
+            user=prompt,
+            system=system,
             model=self.model,
-            max_tokens=max_tokens or self.max_tokens,
-            temperature=temperature or self.temperature,
-            system=system or "",
-            messages=messages,
         )
-
+        # Preserve last_usage shape for callers that read it.
         self.last_usage = {
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-            "model": self.model,
+            "input_tokens": resp.usage.get("input_tokens", 0),
+            "output_tokens": resp.usage.get("output_tokens", 0),
+            "cache_read_input_tokens": resp.usage.get("cache_read_input_tokens", 0),
+            "cache_creation_input_tokens": resp.usage.get("cache_creation_input_tokens", 0),
+            "total_cost_usd": resp.total_cost_usd,
+            "model": resp.model,
         }
-
-        return response.content[0].text
+        return resp.text
 
     async def generate_json(
         self,

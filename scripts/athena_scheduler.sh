@@ -475,6 +475,10 @@ cmd_boot() {
         if [ ! -d "$instance_dir" ]; then
             continue
         fi
+        if [ -f "$instance_dir/.disabled" ]; then
+            log "BOOT: Skipping disabled instance ($instance_dir)"
+            continue
+        fi
         local inst_name
         inst_name=$(basename "$instance_dir" | sed 's/quant_results_//')
         log "BOOT: Setting up instance '$inst_name' ($instance_dir)"
@@ -490,7 +494,88 @@ cmd_boot() {
         fi
     done
 
+    # 4. Recover any jobs whose slots were missed while the host was off
+    log "BOOT: Running missed-job catch-up"
+    cmd_catchup
+
     log "BOOT: All instances initialized"
+}
+
+# --- Catch-up (missed-job recovery) ---
+#
+# The host is a WSL2 box that is off/asleep on a meaningful fraction of
+# trading days, so one-shot cron slots get silently skipped. cmd_catchup is
+# called from boot and every health-check tick: for each critical job whose
+# slot has passed today, whose artifact is stale, and which hasn't already
+# been caught up today, run it once. Idempotence via per-job-per-day stamps.
+# Kill switch: ATHENA_CATCHUP=0.
+
+_catchup_run() {
+    # _catchup_run <job> <slot_HHMM> <artifact_rel_path> <max_age_min> <command...>
+    local job="$1" slot="$2" artifact="$3" max_age_min="$4"
+    shift 4
+    local now_hm
+    now_hm=$(TZ="America/New_York" date +%H%M)
+    [ "$now_hm" -lt "$slot" ] && return 0
+
+    local stamp="$SCHEDULER_DIR/catchup/${job}.$(date +%Y%m%d)"
+    [ -f "$stamp" ] && return 0
+
+    # Artifact fresh enough → the scheduled run happened; stamp so we stop checking.
+    local artifact_path="$QUANT_RESULTS_DIR/$artifact"
+    if [ -e "$artifact_path" ] && [ -n "$(find "$artifact_path" -mmin "-$max_age_min" 2>/dev/null)" ]; then
+        touch "$stamp"
+        return 0
+    fi
+
+    mkdir -p "$SCHEDULER_DIR/catchup"
+    touch "$stamp"   # stamp BEFORE running — a crashing job must not retry every 5 min
+    log "CATCHUP: $job missed its $slot slot (artifact stale), running now"
+    ( cd "$PROJECT_DIR" && PYTHONPATH=. "$@" >> "$LOG_DIR/catchup.log" 2>&1 ) || \
+        log "CATCHUP: $job failed (see catchup.log)"
+}
+
+cmd_catchup() {
+    [ "${ATHENA_CATCHUP:-1}" = "0" ] && return 0
+    is_market_day || return 0
+    mkdir -p "$SCHEDULER_DIR/catchup"
+
+    local hour
+    hour=$(TZ="America/New_York" date +%H)
+
+    # Morning chain (data → theses → targets)
+    _catchup_run collect_data 0600 "logs/collection.log" 120 \
+        python3 scripts/collect_all_data.py --quick
+    _catchup_run corporate_actions 0545 "live/corporate_actions.json" 1200 \
+        python3 scripts/cron_corporate_actions.py
+    _catchup_run thesis_maintenance 0610 "logs/thesis_maintenance.log" 1200 \
+        python3 scripts/cron_thesis_maintenance.py
+    _catchup_run build_target 0615 "logs/build_target.log" 1200 \
+        python3 scripts/cron_build_target.py
+
+    # Market-hours chain. auto_execute has its own 24h decision window,
+    # market-hours cutoff, and per-symbol dedup — safe to re-fire once.
+    if [ "$hour" -ge 10 ] && [ "$hour" -lt 16 ]; then
+        _catchup_run reconcile 1015 "logs/reconcile.log" 1200 \
+            python3 scripts/cron_reconcile.py --shadow
+        _catchup_run auto_execute 1015 "logs/auto_execute.log" 1200 \
+            python3 scripts/cron_auto_execute.py
+    fi
+
+    # Evening learning chain (order matters: predictions → opinions → beliefs → P&L)
+    if [ "$hour" -ge 18 ]; then
+        _catchup_run prediction_scorer 1715 "logs/prediction_scorer.log" 1200 \
+            python3 scripts/cron_prediction_scorer.py
+        _catchup_run opinion_scorer 1720 "intelligence/opinion_calibration.json" 1200 \
+            python3 scripts/cron_opinion_scorer.py
+        _catchup_run belief_update 1730 "intelligence/calibration.json" 1200 \
+            python3 scripts/cron_belief_update.py
+        _catchup_run realized_pnl 1740 "logs/realized_pnl.log" 1200 \
+            python3 scripts/cron_realized_pnl.py
+    fi
+
+    # Prune stamps older than 7 days
+    find "$SCHEDULER_DIR/catchup" -type f -mtime +7 -delete 2>/dev/null || true
 }
 
 # --- Health Check (WSL persistence) ---
@@ -535,6 +620,10 @@ cmd_health_check() {
         fi
     fi
 
+    # 4. Missed-job recovery — @reboot is unreliable under WSL2, so the
+    # periodic health tick is the dependable host for catch-up.
+    cmd_catchup
+
     log "HEALTH: check complete"
 }
 
@@ -576,6 +665,9 @@ case "${1:-}" in
         ;;
     health-check)
         cmd_health_check
+        ;;
+    catchup)
+        cmd_catchup
         ;;
     boot)
         cmd_boot

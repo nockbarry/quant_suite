@@ -75,6 +75,69 @@ for t in sorted(theses, key=lambda x: -x.conviction):
 "
 ```
 
+### Step 2.5: De-dupe before any WebSearch
+
+**Goal: skip queries whose answer is already in our cache or RSS buffer.**
+Cuts ~60% of WebSearch calls on a typical evening. Run this *before* any
+WebSearch / WebFetch in Steps 3a–3e.
+
+```bash
+PYTHONPATH=. python3 <<'PY'
+import json, sys
+from pathlib import Path
+from datetime import datetime, timedelta
+from src.research.websearch_cache import WebSearchCache
+
+# 1. Top portfolio symbols already covered by RSS in the last 24h
+news_cache = Path.home() / "quant_results/live/news_cache.json"
+covered = {}
+if news_cache.exists():
+    try:
+        news = json.load(news_cache.open())
+    except Exception:
+        news = {}
+    cutoff = datetime.now() - timedelta(hours=24)
+    for item in (news.get("items") if isinstance(news, dict) else news) or []:
+        ts = item.get("published") or item.get("timestamp") or ""
+        try:
+            t = datetime.fromisoformat(str(ts).replace("Z", "+00:00")).replace(tzinfo=None)
+        except Exception:
+            continue
+        if t < cutoff:
+            continue
+        for sym in item.get("symbols", []) or []:
+            covered.setdefault(sym, []).append(item.get("headline", "")[:100])
+
+print("RSS-covered symbols (last 24h):")
+for sym, headlines in sorted(covered.items()):
+    print(f"  {sym}: {len(headlines)} headlines")
+    for h in headlines[:2]:
+        print(f"    - {h}")
+
+# 2. WebSearch cache state
+cache = WebSearchCache()
+stats = cache.stats()
+print(f"\\nWebSearch cache: {stats['live_entries']} live / "
+      f"{stats['total_entries']} total entries, TTL={stats['ttl_hours']:.0f}h")
+PY
+```
+
+**Rules applied during Step 3:**
+1. Before issuing a WebSearch for `"<symbol> <topic>"`, check the output above.
+   If the symbol appears with ≥2 recent RSS headlines on the topic, SKIP the
+   WebSearch. Cite the RSS headlines instead.
+2. For remaining queries, check `WebSearchCache().get(query)` first:
+   ```python
+   from src.research.websearch_cache import WebSearchCache
+   cache = WebSearchCache()
+   hit = cache.get(query)
+   if hit:
+       use(hit["results"])  # 24h cache hit; no network call
+   else:
+       results = ...  # actual WebSearch tool call
+       cache.set(query, results)
+   ```
+
 ### Step 3: Structured Investigation Checklist
 
 Run these 5 focused investigations in order. Spend 2-3 minutes maximum per sub-step.

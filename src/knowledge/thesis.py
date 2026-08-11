@@ -186,6 +186,16 @@ class Thesis:
         self.conviction = new_value
         logger.info(f"Thesis '{self.name}' conviction: {old_value:.0f}% -> {new_value:.0f}%: {reason}")
 
+        # 90%+ conviction is a red flag, not a badge: that confidence class
+        # historically resolved ~33%. Force an immediate review instead of
+        # letting the ratchet ride the full interval.
+        if new_value >= 90 and old_value < 90:
+            self.next_review = datetime.now() + timedelta(days=1)
+            logger.warning(
+                f"Thesis '{self.name}' hit {new_value:.0f}% conviction — "
+                f"red_flag_overconfidence, review forced for tomorrow"
+            )
+
         try:
             from src.core.events import emit
             emit(
@@ -201,6 +211,8 @@ class Thesis:
 
     def add_note(self, note: str) -> None:
         """Add a timestamped note."""
+        if isinstance(self.notes, str):
+            self.notes = [self.notes] if self.notes else []
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         self.notes.append(f"[{timestamp}] {note}")
 

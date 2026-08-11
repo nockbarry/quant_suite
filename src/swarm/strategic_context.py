@@ -287,8 +287,14 @@ class StrategicContext:
             if h.get("hypothesis", "")[:50] == hypothesis[:50]:
                 return
 
+        # Monotonic counter, not list length — the list is capped at MAX_HYPOTHESES
+        # and evicts old entries, so len(hypotheses) is not a valid ID source
+        # (it produced duplicate "h_021" IDs on every add once the cap was hit).
+        seq = self.data.get("_hypothesis_seq", len(hypotheses)) + 1
+        self.data["_hypothesis_seq"] = seq
+
         hypotheses.append({
-            "id": f"h_{len(hypotheses) + 1:03d}",
+            "id": f"h_{seq:03d}",
             "hypothesis": hypothesis,
             "status": "untested",
             "suggested_by": suggested_by,

@@ -242,14 +242,14 @@ class FedFuturesSource:
         except Exception as e:
             logger.warning(f"Failed to save Fed cache: {e}")
 
-    async def get_expectations(self) -> FedExpectations:
+    async def get_expectations(self, force_refresh: bool = False) -> FedExpectations:
         """
         Get current Fed rate expectations.
 
         Returns:
             FedExpectations with probabilities and rate path.
         """
-        cached = self._check_cache()
+        cached = None if force_refresh else self._check_cache()
         if cached:
             return cached
 

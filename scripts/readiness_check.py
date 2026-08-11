@@ -98,6 +98,22 @@ def check_cron_installed() -> list[Check]:
         c.fail(f"Can't read crontab: {e}")
     checks.append(c)
 
+    c = Check("Cron drift vs setup_cron.sh", "cron")
+    try:
+        r = subprocess.run(
+            [str(PROJECT_DIR / "scripts" / "setup_cron.sh"), "diff"],
+            capture_output=True, text=True, cwd=str(PROJECT_DIR), timeout=30,
+        )
+        if r.returncode == 0:
+            c.passed("live crontab matches setup_cron.sh")
+        else:
+            # Drift = the exact failure mode that silently killed 6 engines in Jun.
+            drift_lines = [l for l in r.stdout.split("\n") if l.strip().startswith(("-", "+"))]
+            c.fail(f"crontab drift ({len(drift_lines)} lines) — run setup_cron.sh install_all or mirror the edit")
+    except Exception as e:
+        c.warn(f"Drift check failed to run: {e}")
+    checks.append(c)
+
     c = Check("Auto cron (QUANT_SUITE_AUTO)", "cron")
     try:
         result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
@@ -129,7 +145,15 @@ def fix_cron(auto_fix: bool) -> list[Check]:
         return []
     checks = []
     result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
-    if "QUANT_SUITE_AUTO" not in result.stdout or "evening-research" not in result.stdout:
+    drift = subprocess.run(
+        [str(PROJECT_DIR / "scripts" / "setup_cron.sh"), "diff"],
+        capture_output=True, text=True, cwd=str(PROJECT_DIR), timeout=30,
+    )
+    if (
+        "QUANT_SUITE_AUTO" not in result.stdout
+        or "evening-research" not in result.stdout
+        or drift.returncode != 0
+    ):
         c = Check("Reinstall auto cron", "cron")
         r = subprocess.run(
             [str(PROJECT_DIR / "scripts" / "setup_cron.sh"), "install_all"],
@@ -334,6 +358,91 @@ def check_data_pipeline() -> list[Check]:
                 c.passed(f"{age_hours:.1f}h old, {size_kb:.0f}KB")
         else:
             c.warn(f"File missing: {path}")
+        checks.append(c)
+
+    return checks
+
+
+# ===== JOB SLO CHECKS =====
+#
+# One row per scheduled job: (job name, artifact path or glob, window, max_age_hours, critical).
+# Prefer real output artifacts over `>>`-redirect logs where they exist —
+# a log proves the cron fired, an artifact proves it succeeded.
+#
+# window semantics:
+#   intraday — evaluated only 10:00-17:00 on weekdays (jobs that run all day)
+#   daily    — evaluated any time on weekdays; Monday gets +48h weekend grace
+#   weekly   — evaluated any time; max_age should already span the week
+#
+# A MISSING artifact is a warn (job may never have run on this install);
+# a STALE artifact on a critical row is a fail — that's the "silently dead
+# for a month" class this table exists to catch.
+
+JOB_SLOS = [
+    # (job, path-or-glob, window, max_age_hours, critical)
+    ("collect_all_data",  "logs/collection.log",                      "intraday", 2.0,  True),
+    ("signal_digest",     "scheduler/signal_digest.json",             "intraday", 2.0,  True),
+    ("build_target",      "logs/build_target.log",                    "daily",    26,   True),
+    ("reconcile",         "logs/reconcile.log",                       "daily",    26,   True),
+    ("auto_execute",      "logs/auto_execute.log",                    "daily",    26,   True),
+    ("prediction_scorer", "logs/prediction_scorer.log",               "daily",    26,   True),
+    ("opinion_scorer",    "intelligence/opinion_calibration.json",    "daily",    30,   True),
+    ("belief_update",     "intelligence/calibration.json",            "daily",    30,   True),
+    ("thesis_maintenance","logs/thesis_maintenance.jsonl",            "daily",    26,   True),
+    ("realized_pnl",      "logs/realized_pnl.log",                    "daily",    26,   True),
+    ("cross_reference",   "live/cross_reference_alerts.json",         "daily",    26,   True),
+    ("bug_monitor",       "logs/bug_monitor.log",                     "daily",    30,   True),
+    ("corporate_actions", "live/corporate_actions.json",              "daily",    26,   True),
+    ("morning_briefing",  "briefings/briefing_*.json",                "daily",    30,   False),
+    ("eod_review",        "eod_reviews/review_*.json",                "daily",    30,   False),
+    ("stress_test",       "risk_reports/stress_test_latest.json",     "weekly",   216,  True),
+    ("meta_observer",     "parallel/meta_report_latest.json",         "weekly",   216,  True),
+    ("benchmark",         "benchmarks/benchmark_latest.json",         "weekly",   216,  True),
+    ("log_cleanup",       "logs/log_cleanup.log",                     "weekly",   216,  False),
+]
+
+
+def _newest_mtime(path_or_glob: str) -> float | None:
+    """Newest mtime for a path (or glob) relative to RESULTS_DIR; None if nothing exists."""
+    base = RESULTS_DIR
+    if "*" in path_or_glob:
+        matches = list(base.glob(path_or_glob))
+        if not matches:
+            return None
+        return max(p.stat().st_mtime for p in matches)
+    p = base / path_or_glob
+    return p.stat().st_mtime if p.exists() else None
+
+
+def check_job_slos() -> list[Check]:
+    """Assert every scheduled job's artifact is fresh — catches silently-dead crons."""
+    checks = []
+    now = datetime.now()
+    is_weekday = now.weekday() < 5
+    monday_grace = 48 if now.weekday() == 0 else 0
+
+    for job, artifact, window, max_age, critical in JOB_SLOS:
+        c = Check(f"SLO: {job}", "slo")
+
+        if window == "intraday" and not (is_weekday and 10 <= now.hour < 17):
+            continue  # outside evaluation window — no signal either way
+        if window == "daily" and not is_weekday:
+            continue
+
+        mtime = _newest_mtime(artifact)
+        if mtime is None:
+            c.warn(f"{artifact} missing — job may never have run")
+            checks.append(c)
+            continue
+
+        age_h = (time.time() - mtime) / 3600
+        limit = max_age + (monday_grace if window == "daily" else 0)
+        if age_h <= limit:
+            c.passed(f"{age_h:.1f}h old (limit {limit:.0f}h)")
+        elif critical:
+            c.fail(f"{artifact} is {age_h:.1f}h old (limit {limit:.0f}h) — job dead?")
+        else:
+            c.warn(f"{artifact} is {age_h:.1f}h old (limit {limit:.0f}h)")
         checks.append(c)
 
     return checks
@@ -850,6 +959,7 @@ def run_checks(category: str | None = None, quick: bool = False) -> list[Check]:
         ("operator", check_operator),
         ("state", check_state),
         ("data", check_data_pipeline),
+        ("slo", check_job_slos),
         ("flow", check_cross_session_flow),
         ("predictions", check_predictions),
         ("strategy", check_strategic_context),
@@ -923,6 +1033,8 @@ def main():
     parser.add_argument("--category", type=str, help="Check specific category only")
     parser.add_argument("--quick", action="store_true", help="Skip network checks")
     parser.add_argument("--json", action="store_true", help="Output JSON instead of text")
+    parser.add_argument("--alert", action="store_true",
+                        help="Send a critical notification (Telegram or ALERTS.md) if failures remain")
     args = parser.parse_args()
 
     results = run_checks(category=args.category, quick=args.quick)
@@ -938,6 +1050,21 @@ def main():
                 fixer_result = spawn_claude_fixer(remaining_failures)
                 if fixer_result:
                     results.append(fixer_result)
+
+    if args.alert:
+        failures = [c for c in results if c.status == "fail"]
+        if failures:
+            try:
+                from src.alerts.notify import notify_critical
+
+                body = "\n".join(f"- [{c.category}] {c.name}: {c.message}" for c in failures[:15])
+                notify_critical(
+                    f"Readiness: {len(failures)} critical failure(s)",
+                    body,
+                    key="readiness_failures",
+                )
+            except Exception as e:
+                print(f"[alert] notify failed: {e}", file=sys.stderr)
 
     if args.json:
         output = {

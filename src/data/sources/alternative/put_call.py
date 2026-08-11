@@ -169,16 +169,16 @@ class PutCallSource:
         if len(self._history) > 30:
             self._history = self._history[-30:]
 
-    async def get_put_call(self) -> PutCallData:
+    async def get_put_call(self, force_refresh: bool = False) -> PutCallData:
         """
         Get current put/call ratio data.
 
         Returns PutCallData with ratios and signals.
         """
-        # Check cache first
-        cached = self._check_cache()
-        if cached:
-            return cached
+        if not force_refresh:
+            cached = self._check_cache()
+            if cached:
+                return cached
 
         if yf is None:
             raise ImportError("yfinance required: pip install yfinance")

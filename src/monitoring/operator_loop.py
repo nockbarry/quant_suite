@@ -184,6 +184,128 @@ class OperatorLoop:
         self.check_count = 0
         self.session_start = datetime.now()
         self._last_opinion_capture: datetime | None = None
+        self._last_full_check: datetime | None = None
+        # Headlines that have already triggered a full check — skip on repeat polls
+        self._seen_urgency_headlines: set[str] = set()
+        # Cadence/dedup state is persisted to a file so the lightweight poll
+        # gate stays correct when consulted from short-lived processes (the
+        # shell-owned operator loop spawns a fresh interpreter per poll).
+        self._poll_state_file = self.results_dir / "scheduler" / "operator_poll_state.json"
+
+    FULL_CHECK_INTERVAL_MIN = 30
+
+    def _hydrate_poll_state(self) -> None:
+        """Load persisted cadence/dedup state into instance fields.
+
+        Best-effort: a missing or unreadable file just leaves the in-memory
+        defaults (no last full check, empty seen-headline set), which means the
+        next poll escalates — the safe direction.
+        """
+        try:
+            if not self._poll_state_file.exists():
+                return
+            with open(self._poll_state_file) as f:
+                data = json.load(f)
+            lfc = data.get("last_full_check")
+            if lfc and self._last_full_check is None:
+                self._last_full_check = datetime.fromisoformat(lfc)
+            for h in data.get("seen_urgency_headlines", []):
+                self._seen_urgency_headlines.add(h)
+        except Exception as e:
+            logger.debug(f"could not hydrate poll state: {e}")
+
+    def _persist_poll_state(self) -> None:
+        """Write cadence/dedup state so other processes see it. Best-effort."""
+        try:
+            self._poll_state_file.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "last_full_check": (
+                    self._last_full_check.isoformat() if self._last_full_check else None
+                ),
+                # Cap the dedup set so the file can't grow without bound.
+                "seen_urgency_headlines": list(self._seen_urgency_headlines)[-200:],
+                "updated_at": datetime.now().isoformat(),
+            }
+            with open(self._poll_state_file, "w") as f:
+                json.dump(payload, f, indent=2)
+        except Exception as e:
+            logger.debug(f"could not persist poll state: {e}")
+
+    def lightweight_poll(self) -> dict:
+        """Python-only urgency check used to gate full Claude operator checks.
+
+        Returns a dict with:
+        - ``full_check_due``: True if > FULL_CHECK_INTERVAL_MIN since last full
+          check (or no full check has run yet this session).
+        - ``events``: list of urgent events (stop-loss hits, signpost crosses,
+          high-urgency news) that warrant a full check regardless of cadence.
+        - ``should_escalate``: convenience bool = ``full_check_due or events``.
+
+        No LLM calls. Safe to call every 5 minutes.
+        """
+        events: list[dict] = []
+        # Pull persisted cadence + dedup state so this poll is correct even
+        # when run in a fresh, short-lived interpreter (shell-owned loop).
+        self._hydrate_poll_state()
+        state = self._load_state()
+
+        # Stop-loss: any position at <= -15% unrealized
+        for pos in state.get("portfolio", {}).get("positions", []) or []:
+            unreal = pos.get("unrealized_pnl_pct") or pos.get("unrealized_pl_pct")
+            try:
+                if unreal is not None and float(unreal) <= -15:
+                    events.append({
+                        "type": "stop_loss",
+                        "symbol": pos.get("symbol", ""),
+                        "unrealized_pct": float(unreal),
+                    })
+            except (TypeError, ValueError):
+                continue
+
+        # Signpost price cross: use existing signpost checker (cached/cheap)
+        try:
+            triggers = self._check_signposts()
+            if triggers:
+                events.append({
+                    "type": "signpost_trigger",
+                    "count": len(triggers),
+                    "names": [t.thesis_name for t in triggers[:3]],
+                })
+        except Exception:
+            pass
+
+        # High-urgency news alerts — skip headlines already escalated this session
+        for alert in state.get("news_urgency_alerts", []) or []:
+            if alert.get("urgency") in ("high", "critical"):
+                headline = alert.get("headline", "")[:120]
+                if headline not in self._seen_urgency_headlines:
+                    events.append({
+                        "type": "news_urgency",
+                        "headline": headline,
+                    })
+                    self._seen_urgency_headlines.add(headline)
+                break  # one signal is enough to escalate
+
+        # Cadence: force full check if enough time has elapsed
+        now = datetime.now()
+        if self._last_full_check is None:
+            full_check_due = True
+        else:
+            full_check_due = (
+                (now - self._last_full_check).total_seconds() / 60
+                >= self.FULL_CHECK_INTERVAL_MIN
+            )
+
+        # Persist any newly-seen urgency headlines so repeat polls (in other
+        # processes) don't re-escalate on the same stale headline for hours.
+        self._persist_poll_state()
+
+        return {
+            "full_check_due": full_check_due,
+            "events": events,
+            "should_escalate": full_check_due or bool(events),
+            "timestamp": now.isoformat(),
+        }
 
     def operator_check(self) -> OperatorObservation:
         """
@@ -196,6 +318,12 @@ class OperatorLoop:
 
         # Load current state
         state = self._load_state()
+
+        # Independent reliability fix A: catch memory-state drift early.
+        # Memory often quotes stale convictions (e.g. before today's belief
+        # update). Surface the drift so the operator reasons against
+        # state.json values, not stale memory claims.
+        self._surface_memory_drift()
 
         # Check each area
         alerts = self._check_alerts(state)
@@ -232,6 +360,10 @@ class OperatorLoop:
 
         check_duration = (datetime.now() - start_time).total_seconds()
         self.last_check_time = datetime.now()
+        self._last_full_check = self.last_check_time
+        # Persist the cadence marker so the shell-owned poll gate resets its
+        # 30-min timer across processes (a full check just happened).
+        self._persist_poll_state()
 
         observation = OperatorObservation(
             check_num=self.check_count,
@@ -307,7 +439,12 @@ class OperatorLoop:
         or None if not yet due.
         """
         now = datetime.now()
-        if self._last_opinion_capture and (now - self._last_opinion_capture).total_seconds() < 900:
+        # Interval follows the global opinion-capture budget (cost diet
+        # 2026-06-09: was hardcoded 900s/15min; engine also enforces a
+        # file-based cross-process throttle and may return None).
+        import os as _os
+        interval_s = int(_os.environ.get("ATHENA_OPINION_INTERVAL_MIN", "60")) * 60
+        if self._last_opinion_capture and (now - self._last_opinion_capture).total_seconds() < interval_s:
             return None
 
         try:
@@ -331,6 +468,49 @@ class OperatorLoop:
             except Exception as e:
                 logger.error(f"Error loading state: {e}")
         return {}
+
+    def _surface_memory_drift(self) -> None:
+        """Detect memory-vs-tracker conviction drift; push observations to board.
+
+        Independent reliability fix A. Best-effort only — failures must not
+        break the operator loop.
+        """
+        try:
+            from src.monitoring.memory_drift import detect_drift
+        except Exception as e:
+            logger.debug(f"memory_drift module unavailable: {e}")
+            return
+        try:
+            drifts = detect_drift()
+        except Exception as e:
+            logger.warning(f"memory drift detection failed: {e}")
+            return
+        if not drifts:
+            return
+        try:
+            from src.swarm.situation_board import SituationBoard
+            board = SituationBoard.load_or_create()
+            for d in drifts:
+                direction = "above" if d.delta_pp > 0 else "below"
+                board.add_observation(
+                    source="operator",
+                    obs_type="memory_drift",
+                    text=(
+                        f"Memory says '{d.memory_name}' at {d.memory_conviction:.0f}% "
+                        f"but tracker shows {d.actual_conviction:.0f}% "
+                        f"({abs(d.delta_pp):.0f}pp {direction}, severity={d.severity}). "
+                        f"Use tracker value."
+                    ),
+                )
+        except Exception as e:
+            logger.debug(f"could not push memory drift to board: {e}")
+        # Always log for diagnostics regardless of board success
+        for d in drifts:
+            logger.info(
+                f"memory_drift: {d.memory_name} memory={d.memory_conviction:.0f}% "
+                f"actual={d.actual_conviction:.0f}% Δ={d.delta_pp:+.1f}pp "
+                f"({d.severity})"
+            )
 
     def _check_alerts(self, state: dict) -> list[Alert]:
         """Check for alerts from state and positions."""
@@ -824,6 +1004,9 @@ class OperatorLoop:
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
         try:
+            from src.core.logrotate import rotate_if_large
+
+            rotate_if_large(log_file)
             with open(log_file, "a") as f:
                 f.write(json.dumps(obs.to_dict()) + "\n")
         except Exception as e:

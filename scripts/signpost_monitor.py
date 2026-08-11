@@ -51,7 +51,7 @@ DEFAULT_SIGNPOSTS = [
     PriceLevel("GLD", 425.0, "below", "GLD breakdown < $425", "Review gold thesis", "medium", "Gold De-Dollarization"),
 
     # Positions needing attention
-    PriceLevel("CEG", 295.0, "below", "CEG < $295: Breakdown", "EXIT CEG position", "critical", "AI Power Infrastructure"),
+    PriceLevel("CEG", 251.0, "below", "CEG < $251: -15% stop hit", "EXIT CEG position — stop loss triggered", "critical", "AI Power Infrastructure"),
     PriceLevel("CCL", 27.0, "below", "CCL < $27: Cruise collapse", "Trim cruise positions", "high", ""),
     PriceLevel("LEN", 112.0, "below", "LEN < $112: Homebuilder weak", "Review homebuilder thesis", "medium", "Homebuilder Mortgage"),
 

@@ -97,8 +97,11 @@ def log_event(
 
     # Also append to JSONL for backward compat
     try:
+        from src.core.logrotate import rotate_if_large
+
         log_path = _results_dir() / "logs" / "process_events.jsonl"
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        rotate_if_large(log_path)
         append_jsonl(log_path, event_dict)
     except Exception as e:
         print(f"WARN: Failed to log event to JSONL: {e}")

@@ -73,9 +73,36 @@ class DecisionEnsemble:
     LONG_ACTIONS = ("BUY", "ADD")
     SHORT_ACTIONS = ("SELL", "CLOSE", "TRIM")
 
+    # Gate: run the 3x ensemble for every high-confidence decision. Below the
+    # gate, the calibrated sizing cap already de-risks the trade.
+    CONFIDENCE_GATE = 0.80
+
     def __init__(self):
         self.log_dir = paths.base / "decisions" / "ensemble"
         self.log_dir.mkdir(parents=True, exist_ok=True)
+
+
+    def should_run_challengers(self, decision: dict) -> tuple[bool, str]:
+        """Decide whether to escalate to full 3x ensemble or skip to primary-only.
+
+        High stated confidence ALWAYS runs challengers. The old gap-based skip
+        consulted calibration.json — the measurably inverted decision curve —
+        and skipped challengers exactly when a bin "looked calibrated", i.e.
+        it trusted the broken instrument to decide when to double-check
+        itself. Deleted: 90%+ stated resolved at ~33%, so extreme confidence
+        is when adversarial checking matters MOST, unconditionally.
+
+        Returns (should_run, reason).
+        """
+        confidence = float(decision.get("confidence", 0.5))
+        if confidence >= 0.90:
+            return True, f"mandatory: confidence {confidence:.0%} >= 90% (red-flag class)"
+        if confidence >= self.CONFIDENCE_GATE:
+            return True, f"run: confidence {confidence:.0%} >= {self.CONFIDENCE_GATE:.0%} gate"
+        return False, (
+            f"skipped: confidence {confidence:.0%} < "
+            f"{self.CONFIDENCE_GATE:.0%} gate"
+        )
 
     def _get_direction(self, action: str) -> str:
         """Normalize action to direction."""
@@ -116,6 +143,26 @@ class DecisionEnsemble:
             reasoning_summary=decision.get("reasoning", "")[:200],
             agrees_with_primary=True,
         )
+
+        # Gate: skip the 2x challenger pass only for sub-0.80 confidence
+        # (already de-risked by the sizing cap). High confidence always runs.
+        should_run, gate_reason = self.should_run_challengers(decision)
+        if not should_run:
+            logger.info(f"Ensemble gate {symbol}: {gate_reason}")
+            result = EnsembleResult(
+                decision_id=decision_id,
+                symbol=symbol,
+                primary_action=primary_action,
+                primary_confidence=primary_confidence,
+                members=[asdict(primary)],
+                consensus_count=1,
+                consensus=True,  # primary-only pass is trivially consensus
+                final_action=primary_action,
+                final_confidence=primary_confidence,
+                ensemble_confidence=primary_confidence,
+            )
+            self._save_result(result)
+            return result
 
         # Run challengers (they don't see the primary's conclusion)
         challenger_1 = self._run_challenger(
@@ -255,21 +302,28 @@ Important: Only output the JSON object, nothing else."""
     def _run_api_challenger(
         self, member_id: str, symbol: str, decision: dict, context: dict, role: str
     ) -> EnsembleMember:
-        """Run challenger via Anthropic API (Haiku for cost efficiency)."""
-        import anthropic
+        """Run challenger via Claude Code subprocess (Haiku for cost efficiency).
 
-        client = anthropic.Anthropic()
+        Routes through the Claude Code subscription rather than a separate
+        Anthropic API channel — same billing channel as all other LLM calls.
+        """
+        from src.core.claude_code_client import get_client, ClaudeCodeError
+
         prompt = self._build_challenger_prompt(symbol, decision, context, role)
 
-        response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        try:
+            resp = get_client().complete(
+                user=prompt,
+                system="You are a critical trade evaluator. Output strict JSON only.",
+                model="haiku",
+                max_turns=1,
+            )
+        except ClaudeCodeError as e:
+            raise ValueError(f"Challenger subprocess failed: {e}") from e
 
-        text = response.content[0].text
+        text = resp.text
 
-        # Parse JSON from response
+        # Parse JSON from response (challenger output is one small object)
         json_match = re.search(r"\{[^}]+\}", text)
         if json_match:
             data = json.loads(json_match.group())

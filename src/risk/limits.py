@@ -456,7 +456,13 @@ class RiskLimitsConfig:
     """Configuration for risk limits."""
 
     max_position_pct: float = 0.10
-    max_sector_pct: float = 0.30
+    # 40% matches CLAUDE.md safety rail + auto_corrections; was 0.30 (inconsistent).
+    # Pinned to 0.40 so the TargetPortfolioBuilder and the live limits agree.
+    max_sector_pct: float = 0.40
+    # One correlation cluster (e.g. the CCJ/GLD/MP/REMX rate cluster) is one
+    # bet. 0.50 allowed half the book in it — measured ~4x downside beta.
+    # 0.30 halves that while keeping ~7.5%/name in a 4-name cluster.
+    max_cluster_pct: float = 0.30
     max_drawdown_pct: float = 0.20
     max_daily_loss_pct: float = 0.05
     max_trade_pct: float = 0.05

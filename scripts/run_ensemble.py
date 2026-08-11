@@ -109,6 +109,26 @@ def run_ensemble(dry_run: bool = False):
                 }
                 decision.ensemble_data = json.dumps(ensemble_data)
 
+                # Blend agreement into the linked prediction's calibrated
+                # confidence (C4): challengers ran, so the agreement fraction
+                # is now known — creation-time confidence had agreement=None.
+                try:
+                    from src.db.models import PredictionRecord
+                    from src.probability.estimator import effective_confidence
+
+                    if len(result.members) > 1:
+                        agreement = result.consensus_count / 3.0
+                        pred = (
+                            session.query(PredictionRecord)
+                            .filter(PredictionRecord.decision_id == decision.id)
+                            .first()
+                        )
+                        if pred is not None:
+                            stated = pred.stated_confidence or decision.confidence
+                            pred.confidence = effective_confidence(stated, agreement)
+                except Exception as e:
+                    logger.warning(f"Prediction confidence blend failed: {e}")
+
                 # If no consensus, mark status so auto-execute skips it
                 if not result.consensus:
                     decision.status = "ensemble_rejected"

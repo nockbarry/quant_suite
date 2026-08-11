@@ -234,6 +234,35 @@ Key patterns to apply:
 4. Update conviction based on new information
 5. Schedule next review
 
+### MANDATORY: Forced Ranking (every weekly review)
+
+Conviction values cluster (74-80% across all theses), which collapses
+conviction-driven sizing into closet equal-weight. To break this, every weekly
+review MUST end with a **strict ordinal ranking** of all active theses — no
+ties allowed. Ask: "if I could only hold ONE thesis, which? If I had to drop
+one, which?" Rank by expected risk-adjusted return from here, not by how much
+we've already made.
+
+The ranking directly tilts position sizing (1.2x budget for rank 1 down to
+0.8x for last — `src/portfolio/ranking.py`), so an honest ranking IS a sizing
+decision. Persist it:
+
+```python
+from src.portfolio.ranking import save_ranking
+from src.knowledge.thesis import ThesisTracker
+
+# After deciding the order (best first), map names -> ids and save:
+tracker = ThesisTracker()
+by_name = {t.name: t.id for t in tracker.get_active_theses()}
+save_ranking([
+    by_name["<top thesis name>"],
+    # ... every active thesis, strictly ordered, no omissions ...
+], note="weekly review YYYY-MM-DD: one-line reason for the top & bottom pick")
+```
+
+Rankings expire after 14 days (stale guard) — skipping the weekly ranking
+silently reverts sizing to untilted, so don't skip it.
+
 ### Integration with Trading
 
 When making a trade decision:

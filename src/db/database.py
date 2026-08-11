@@ -93,6 +93,15 @@ def ensure_columns():
         ("agent_runs", "pid", "INTEGER", "NULL"),
         ("theses", "price_targets", "TEXT", "'{}'"),
         ("decisions", "ensemble_data", "TEXT", "NULL"),
+        # Decision lifecycle (declarative re-architecture) — formalizes expiry
+        # instead of silently filtering on a 24h window in cron_auto_execute.py
+        ("decisions", "expires_at", "DATETIME", "NULL"),
+        ("decisions", "lifecycle_status", "VARCHAR(20)", "'pending'"),
+        ("decisions", "target_portfolio_id", "VARCHAR(100)", "NULL"),
+        # C4: predictions store calibrated confidence in `confidence`;
+        # the raw verbalized value moves to stated_confidence so both
+        # calibration curves stay measurable.
+        ("predictions", "stated_confidence", "FLOAT", "NULL"),
     ]
     with engine.connect() as conn:
         for table, col, col_type, default in _new_columns:

@@ -41,7 +41,7 @@ class CorrectionAction:
     """A correction applied by the engine."""
 
     timestamp: str
-    action_type: str  # conviction_change, position_freeze, thesis_invalidate, trim_queue
+    action_type: str  # conviction_change, position_freeze, thesis_invalidate, trim_queue, conviction_exit
     symbol: str
     thesis_id: str
     thesis_name: str
@@ -87,13 +87,21 @@ class AutoCorrectionEngine:
             logger.warning(f"Failed to load recent corrections: {e}")
         return recent
 
-    def _in_cooldown(self, action_type: str, thesis_id: str) -> bool:
-        """Check if this correction was already applied recently."""
+    def _in_cooldown(self, action_type: str, thesis_id: str, symbol: str = "") -> bool:
+        """Check if this correction was already applied recently.
+
+        For portfolio-level trims, include ``symbol`` in the key so a breach on
+        one sector doesn't silence a breach on a different sector. For thesis-
+        level corrections, keep the legacy (action_type, thesis_id) key.
+        """
+        key_with_symbol = action_type == "trim_queue" and thesis_id == "portfolio_level"
         for entry in self.recent_corrections:
             if (
                 entry.get("action_type") == action_type
                 and entry.get("thesis_id") == thesis_id
             ):
+                if key_with_symbol and entry.get("symbol") != symbol:
+                    continue
                 return True
         return False
 
@@ -103,12 +111,13 @@ class AutoCorrectionEngine:
         corrections.extend(self._process_cross_reference_alerts())
         corrections.extend(self._process_stress_test())
         corrections.extend(self._process_prediction_accuracy())
+        corrections.extend(self._process_conviction_exits())
 
         # Apply corrections
         applied_count = 0
         skipped_count = 0
         for c in corrections:
-            if not self._in_cooldown(c.action_type, c.thesis_id):
+            if not self._in_cooldown(c.action_type, c.thesis_id, c.symbol):
                 self._apply_correction(c)
                 c.applied = True
                 applied_count += 1
@@ -351,10 +360,39 @@ class AutoCorrectionEngine:
             thesis_id = suggestion.get("thesis_id", "")
             thesis_name = suggestion.get("thesis_name", "")
 
-            if count >= 10 and accuracy < 0.25:
+            if count >= 20 and accuracy < 0.25:
                 # Verify thesis is still active and above invalidation threshold
                 thesis = self._get_thesis_by_id(thesis_id)
                 if thesis and thesis.status == "active" and thesis.conviction > 15:
+                    # Earnings-beat veto: skip if a manual override was applied within 14 days.
+                    # Prediction accuracy for secondary proxies (e.g., food/insurance predictions)
+                    # should not invalidate a thesis where the primary vehicle just beat earnings.
+                    veto_keywords = ("veto", "beat", "override", "manual", "earnings")
+                    veto_cutoff = datetime.now() - timedelta(days=14)
+
+                    def _h_reason(h) -> str:
+                        return (h.get("reason", "") if isinstance(h, dict) else getattr(h, "reason", "")).lower()
+
+                    def _h_ts(h):
+                        raw = h.get("timestamp") if isinstance(h, dict) else getattr(h, "timestamp", None)
+                        if isinstance(raw, str):
+                            try:
+                                return datetime.fromisoformat(raw)
+                            except ValueError:
+                                return datetime.min
+                        return raw if isinstance(raw, datetime) else datetime.min
+
+                    recent_manual = any(
+                        any(kw in _h_reason(h) for kw in veto_keywords)
+                        and _h_ts(h) > veto_cutoff
+                        for h in getattr(thesis, "conviction_history", [])
+                    )
+                    if recent_manual:
+                        logger.info(
+                            f"Auto-invalidation vetoed for '{thesis_name}': "
+                            f"manual earnings-beat override within 14 days"
+                        )
+                        continue
                     corrections.append(CorrectionAction(
                         timestamp=now,
                         action_type="thesis_invalidate",
@@ -370,6 +408,56 @@ class AutoCorrectionEngine:
                         source_alert=f"belief_update:{latest_report_path.name}",
                         applied=False,
                     ))
+
+        return corrections
+
+    def _process_conviction_exits(self) -> list[CorrectionAction]:
+        """Queue close-trim for every position linked to a thesis with conviction <40%.
+
+        The belief updater drops conviction and adaptive triggers spawn a
+        /trade-decision session, but nothing was mechanically closing the
+        positions. This fills the gap: we queue a target_pct=0 trim per linked
+        position so the trade-decision session (and operator) have an
+        actionable surface.
+        """
+        corrections: list[CorrectionAction] = []
+        now = datetime.now().isoformat()
+
+        try:
+            from src.knowledge.thesis import ThesisTracker
+            tracker = ThesisTracker(paths.theses)
+            theses = tracker.get_all_theses()
+        except Exception as e:
+            logger.warning(f"conviction_exit: failed to load theses: {e}")
+            return []
+
+        for thesis in theses:
+            if getattr(thesis, "status", "") != "active":
+                continue
+            conviction = getattr(thesis, "conviction", 100)
+            if conviction >= 40:
+                continue
+
+            positions = getattr(thesis, "positions", []) or []
+            if not positions:
+                continue
+
+            for sym in positions:
+                corrections.append(CorrectionAction(
+                    timestamp=now,
+                    action_type="conviction_exit",
+                    symbol=sym,
+                    thesis_id=thesis.id,
+                    thesis_name=thesis.name,
+                    old_value=conviction,
+                    new_value=0.0,
+                    reason=(
+                        f"Conviction {conviction:.0f}% < 40% threshold. "
+                        f"Auto-queued close of {sym}."
+                    ),
+                    source_alert="belief_updater",
+                    applied=False,
+                ))
 
         return corrections
 
@@ -473,6 +561,15 @@ class AutoCorrectionEngine:
                 f"({correction.old_value:.1f}% -> target {correction.new_value:.1f}%)"
             )
 
+        elif correction.action_type == "conviction_exit":
+            # Queue close-trim for this specific position linked to a
+            # sub-threshold-conviction thesis.
+            self._queue_trim(correction)
+            logger.info(
+                f"Queued conviction-exit close: {correction.symbol} "
+                f"(thesis '{correction.thesis_name}' conviction {correction.old_value:.0f}%)"
+            )
+
         # Audit trail via ProcessEvent
         try:
             from src.autonomy.provenance import log_event
@@ -515,6 +612,23 @@ class AutoCorrectionEngine:
                 json.dump(queue, f, indent=2)
         except OSError as e:
             logger.error(f"Failed to write trim queue: {e}")
+
+        try:
+            from src.swarm.situation_board import SituationBoard
+            board = SituationBoard.load_or_create()
+            board.add_observation(
+                source="auto_corrections",
+                obs_type="alert",
+                text=(
+                    f"TRIM QUEUED: {correction.thesis_name} "
+                    f"{correction.old_value:.1f}% -> target {correction.new_value:.1f}% "
+                    f"({correction.reason[:80]})"
+                ),
+                symbols=[correction.symbol] if correction.symbol else [],
+            )
+            board.save()
+        except Exception as e:
+            logger.warning(f"Failed to surface trim to situation board: {e}")
 
     def _log_corrections(self, corrections: list[CorrectionAction]):
         """Append corrections to JSONL log."""

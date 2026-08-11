@@ -496,7 +496,8 @@ class ResearchSessionTracker:
         for exp in self.experiments.values():
             if exp.strategy not in strategy_stats:
                 strategy_stats[exp.strategy] = {"success": 0, "failure": 0, "inconclusive": 0}
-            strategy_stats[exp.strategy][exp.result] += 1
+            result_key = exp.result if exp.result in ("success", "failure", "inconclusive") else "failure"
+            strategy_stats[exp.strategy][result_key] += 1
 
         return {
             "generated_at": datetime.now().isoformat(),

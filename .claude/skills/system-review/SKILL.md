@@ -83,6 +83,19 @@ if learnings_file.exists():
 
 ## Step 2: Performance Comparison
 
+**FIRST: read the benchmark report** (generated Sunday 4:00 PM by `cron_benchmark.py`):
+```bash
+cat ~/quant_results/benchmarks/benchmark_latest.json
+```
+This compares the account against SPY, QQQ, and the **frozen own-basket** — an
+equal-weight buy-and-hold of our own thesis vehicles frozen at inception. The
+frozen basket is the does-activity-add-value metric: **if the account lags its
+own frozen basket, the week's trading subtracted value vs doing nothing.**
+Report this gap explicitly every week. Also read realized-P&L truth
+(`realized_lots` table, rebuilt nightly): short-hold vs long-hold P&L split —
+historically short holds (<=10d) are net NEGATIVE; flag any week that adds
+short-hold churn.
+
 Compare all instances' weekly returns vs SPY:
 ```python
 PYTHONPATH=. python3 -c "

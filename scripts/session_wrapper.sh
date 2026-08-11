@@ -279,14 +279,15 @@ BASEPROMPT
         operator)
             SESSION_PROMPT=$(cat <<OPPROMPT
 
-OPERATOR LOOP: You MUST implement a persistent monitoring loop.
-1. Run operator_check() immediately
+OPERATOR CHECK (single cycle): The persistent loop is owned by the shell
+wrapper, which has already decided a full check is due (cadence elapsed or an
+urgent event fired). Perform exactly ONE operator cycle and then exit — do NOT
+sleep or loop, the wrapper calls you again at the next interval.
+1. Run operator_check() once
 2. Review state.news_events and state.news_urgency_alerts for thesis-matched news
 3. Check for auto-generated thesis suggestions via ThesisSuggester
-4. Sleep for the configured interval (1-5 minutes)
-5. REPEAT from step 1 until timeout or market close (4:05 PM ET)
-Do NOT exit after a single check. Keep looping. Use bash sleep between checks.
-Write trade triggers to scheduler/trade_triggers.json when 4+ signals converge.
+4. Write trade triggers to scheduler/trade_triggers.json when 4+ signals converge
+5. Write the completion record and exit
 OPPROMPT
 )
             ;;
@@ -487,14 +488,46 @@ run_claude_with_fallback() {
 }
 
 if [ "$SESSION_TYPE" = "operator" ]; then
-    # Operator is long-running — runs with -p but the autonomous prompt
-    # instructs Claude to implement a persistent monitoring loop with sleep
-    # between checks. The 8-hour timeout acts as the outer boundary.
-    # Use unique timestamp suffix to prevent Claude from detecting "stale task"
-    # when a previous operator session completed earlier the same day.
-    log "Launching operator session (persistent loop via autonomous prompt)"
+    # Operator persistence is owned by THIS shell loop, not by the LLM.
+    #
+    # Previously the operator was a single `claude -p` told to hold an 8-hour
+    # bash-sleep loop. In headless mode Claude did ONE check and exited; the
+    # health monitor then restarted it every ~5 min, and each restart re-primed
+    # the full --append-system-prompt — the dominant token cost (e.g. ~25
+    # full-context re-primes on 2026-06-18 = the week's high bill).
+    #
+    # Now: a cheap Python-only lightweight_poll() runs every POLL_INTERVAL_MIN.
+    # We only spend an LLM full check when the poll says to escalate — either
+    # the 30-min cadence elapsed (FULL_CHECK_INTERVAL_MIN, tracked in a state
+    # file so it survives across these short-lived poll processes) or an urgent
+    # event fired (stop-loss hit, signpost cross, high/critical news). Quiet
+    # polls cost nothing. The 8-hour TIMEOUT and 16:05 ET are the outer bounds.
+    POLL_INTERVAL_MIN="${ATHENA_OPERATOR_POLL_MIN:-5}"
+    END_EPOCH=$(( START_TIME + TIMEOUT * 60 ))
+    log "Operator persistent loop (poll=${POLL_INTERVAL_MIN}m, full-check on cadence/event, until 16:05 ET or ${TIMEOUT}m)"
 
-    run_claude_with_fallback "/operator-session --active --session=$(date +%s)"
+    while [ "$(date +%s)" -lt "$END_EPOCH" ]; do
+        # Hard stop at market close (16:05 ET).
+        if [ "$(date +%H%M)" -gt 1605 ]; then
+            log "Past 16:05 ET — operator loop exiting"
+            break
+        fi
+
+        ESCALATE=$(cd "$PROJECT_DIR" && PYTHONPATH="$PROJECT_DIR" python3 -c "
+from src.monitoring.operator_loop import get_operator_loop
+p = get_operator_loop().lightweight_poll()
+print('yes' if p.get('should_escalate') else 'no', len(p.get('events', [])))
+" 2>>"$LOG_FILE" || echo "no 0")
+
+        if [ "${ESCALATE%% *}" = "yes" ]; then
+            log "Full operator check due (${ESCALATE}) — invoking Claude"
+            run_claude_with_fallback "/operator-session --active --session=$(date +%s)"
+        else
+            log "poll: quiet (no events, no full-check due) — sleeping ${POLL_INTERVAL_MIN}m"
+        fi
+
+        sleep "$(( POLL_INTERVAL_MIN * 60 ))"
+    done
 
     log "Operator session ended"
 else

@@ -204,16 +204,16 @@ class NewsletterSentimentSource:
             self._history.append((data.survey_date, data.bulls_pct, data.bears_pct))
             self._save_history()
 
-    async def get_sentiment(self) -> NewsletterSentiment:
+    async def get_sentiment(self, force_refresh: bool = False) -> NewsletterSentiment:
         """
         Get current newsletter sentiment data.
 
         Returns NewsletterSentiment with survey results and signals.
         """
-        # Check cache first
-        cached = self._check_cache()
-        if cached:
-            return cached
+        if not force_refresh:
+            cached = self._check_cache()
+            if cached:
+                return cached
 
         try:
             # Try to load from cache file

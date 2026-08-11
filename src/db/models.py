@@ -389,7 +389,8 @@ class PredictionRecord(Base):
     direction = Column(String(10), default="bullish")  # bullish, bearish, neutral
     target_value = Column(Float, nullable=True)  # price target or % move
     target_description = Column(Text, default="")  # free-text for complex predictions
-    confidence = Column(Float, default=0.5)  # 0-1 predicted probability
+    confidence = Column(Float, default=0.5)  # 0-1 CALIBRATED probability (scored curve)
+    stated_confidence = Column(Float, nullable=True)  # raw verbalized value, pre-calibration
     timeframe_days = Column(Integer, default=10)
     resolve_by = Column(DateTime, nullable=True, index=True)
 
@@ -431,6 +432,7 @@ class PredictionRecord(Base):
             "target_value": self.target_value,
             "target_description": self.target_description,
             "confidence": self.confidence,
+            "stated_confidence": self.stated_confidence,
             "timeframe_days": self.timeframe_days,
             "resolve_by": self.resolve_by.isoformat() if self.resolve_by else None,
             "reasoning_category": self.reasoning_category,
@@ -1292,3 +1294,119 @@ class DecisionQualityRecord(Base):
                     d[field] = None
         valid_cols = {c.key for c in cls.__table__.columns}
         return cls(**{k: v for k, v in d.items() if k in valid_cols})
+
+
+# ---------------------------------------------------------------------------
+# Declarative portfolio core (re-architecture spine)
+# See: .claude/plans/plan-the-redesign-of-wondrous-pony.md
+# ---------------------------------------------------------------------------
+
+
+class TargetPortfolioRecord(Base):
+    """Snapshot of the desired portfolio produced by TargetPortfolioBuilder.
+
+    The spine of the declarative re-architecture: the Reconciler trades the
+    live portfolio toward the most recent reconciled=False snapshot.
+    """
+
+    __tablename__ = "target_portfolios"
+
+    id = Column(String(100), primary_key=True)
+    generated_at = Column(DateTime, default=datetime.utcnow, index=True)
+    equity_at_build = Column(Float, default=0.0)
+    weights_json = Column(Text, default="[]")        # list[TargetWeight] as dicts
+    cash_policy_json = Column(Text, default="{}")    # CashPolicy incl. reserves
+    invested_pct = Column(Float, default=0.0)
+    reserve_pct = Column(Float, default=0.0)
+    source = Column(String(30), default="builder")   # builder | manual_override
+    reconciled = Column(Boolean, default=False)
+
+    __table_args__ = (
+        Index("ix_target_generated", "generated_at"),
+        Index("ix_target_reconciled", "reconciled"),
+    )
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+class ReconcileOrderRecord(Base):
+    """Idempotency ledger + attribution for orders emitted by the Reconciler.
+
+    client_order_id is deterministic per (date, symbol, target_qty) and unique;
+    re-running a reconcile at-target produces the same id and is a no-op.
+    """
+
+    __tablename__ = "reconcile_orders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    target_id = Column(String(100), ForeignKey("target_portfolios.id"), index=True)
+    client_order_id = Column(String(100), unique=True, index=True)
+    symbol = Column(String(10), index=True)
+    side = Column(String(4))                          # buy | sell
+    qty = Column(Float, default=0.0)
+    target_weight = Column(Float, default=0.0)
+    status = Column(String(20), default="planned")    # planned|submitted|filled|rejected|skipped
+    alpaca_order_id = Column(String(100), nullable=True)
+    submitted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    reason = Column(Text, default="")
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+class SessionCostRecord(Base):
+    """Daily, per-model token usage / equivalent-cost rollup.
+
+    Populated from Claude Code transcripts via usage_monitor — closes the
+    cost-observability gap (the llm_interactions table was never written).
+    """
+
+    __tablename__ = "session_costs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(String(10), index=True)             # YYYY-MM-DD
+    session_type = Column(String(40), default="aggregate", index=True)
+    model = Column(String(60), default="")
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    cache_read_tokens = Column(Integer, default=0)
+    cache_write_tokens = Column(Integer, default=0)
+    equivalent_cost_usd = Column(Float, default=0.0)
+    recorded_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_session_cost_date_model", "date", "model", unique=True),
+    )
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+class RealizedLotRecord(Base):
+    """One FIFO-matched closed lot, derived from broker fill history.
+
+    Ground truth for "did this trade make money" — rebuilt idempotently from
+    the full Alpaca order history each run (derived data, safe to wipe).
+    Closes the gap where only 1 of 492 executed decisions had realized P&L.
+    """
+
+    __tablename__ = "realized_lots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String(10), nullable=False, index=True)
+    qty = Column(Float, default=0.0)
+    entry_price = Column(Float, default=0.0)
+    exit_price = Column(Float, default=0.0)
+    entry_time = Column(DateTime, nullable=True)
+    exit_time = Column(DateTime, nullable=True, index=True)
+    hold_days = Column(Float, default=0.0)
+    pnl = Column(Float, default=0.0)
+    pnl_pct = Column(Float, default=0.0)          # vs cost basis
+    buy_order_id = Column(String(100), nullable=True)
+    sell_order_id = Column(String(100), nullable=True, index=True)
+    instance_id = Column(String(20), default="default", index=True)
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}

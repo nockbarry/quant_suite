@@ -187,6 +187,28 @@ if alerts_file.exists():
 else:
     print('No cross-reference alerts file found')
 
+# 1b. Overconfidence red flags (90%+ stated confidence — historically ~33% accurate)
+try:
+    import sqlite3
+    conn = sqlite3.connect(str(paths.base / 'athena.db'))
+    cutoff_iso = (datetime.now() - timedelta(hours=24)).isoformat()
+    rows = conn.execute(
+        \"SELECT symbol, title FROM process_events WHERE event_type='red_flag_overconfidence' AND timestamp >= ?\",
+        (cutoff_iso,),
+    ).fetchall()
+    if rows:
+        print(f'\\nOVERCONFIDENCE RED FLAGS (24h): {len(rows)}')
+        for sym, title in rows:
+            print(f'  {sym}: {title}')
+            board.add_observation(
+                source='internal-review', obs_type='alert',
+                text=f'Overconfidence red flag: {title}',
+                symbols=[sym] if sym else [],
+            )
+            alerts_pushed += 1
+except Exception as e:
+    print(f'Red-flag query skipped: {e}')
+
 # 2. Read auto-corrections applied since last review
 corrections_log = paths.logs / 'auto_corrections.jsonl'
 if corrections_log.exists():

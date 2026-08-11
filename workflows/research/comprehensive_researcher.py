@@ -721,8 +721,8 @@ class ComprehensiveResearcher:
 
             # Regime analysis using evaluation module
             try:
-                regimes = detect_regimes(val_data)
-                regime_perf = evaluate_by_regime(val_metrics["returns"], regimes)
+                detect_regimes(val_data)
+                regime_perf = evaluate_by_regime(val_metrics["returns"], val_data)
                 result.regime_performance = {str(k): v for k, v in regime_perf.items()} if regime_perf else {}
                 current = get_current_regime(val_data)
                 # get_current_regime returns {'success': bool, 'data': {'regime': str, 'probability': float}}

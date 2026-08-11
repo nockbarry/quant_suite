@@ -107,24 +107,31 @@ ctx.add_agent_output("macro-research", "agent_123", "Insurance sector analysis",
 
 ## Operator Check Code
 
+**Cadence gate (token saver)**: every 5 min, run the Python-only
+`lightweight_poll()`. Only escalate to a full LLM-driven operator cycle when
+the poll says to — either because 30+ min have elapsed since the last full
+check, or because a stop-loss / signpost cross / high-urgency news event was
+detected. On non-escalating polls, record one short "monitoring, no escalation
+(events=0)" line and sleep to the next poll without reading the full state
+block below.
+
 ```python
 from src.monitoring.operator_loop import get_operator_loop
 
-# Get the operator loop instance
 loop = get_operator_loop()
 
-# Perform a check
-observation = loop.operator_check()
-
-# Display formatted output
-print(loop.format_observation(observation))
-
-# Check if urgent attention needed
-if observation.has_urgent_items():
-    print("URGENT ITEMS REQUIRE ATTENTION")
-
-# Get session summary
-print(loop.get_session_summary())
+poll = loop.lightweight_poll()
+if not poll["should_escalate"]:
+    # Cheap: no state read, no reasoning, no tool fan-out. Just wait.
+    print(f"poll: quiet (no events, next full check in "
+          f"<= {loop.FULL_CHECK_INTERVAL_MIN} min)")
+else:
+    # Full check only when cadence is due OR urgent event detected.
+    observation = loop.operator_check()
+    print(loop.format_observation(observation))
+    if observation.has_urgent_items():
+        print("URGENT ITEMS REQUIRE ATTENTION")
+    print(loop.get_session_summary())
 ```
 
 ## Market Opinion Capture
@@ -220,12 +227,16 @@ for conv in obs.convergences:
 
 ## Configuration Options
 
-| Mode | Interval | Use Case |
-|------|----------|----------|
-| Default | 3 min | Normal trading day |
-| Passive | 5 min | Low volatility, no active positions |
-| Active | 1 min | Day trading, volatile markets, large positions |
-| Custom | N min | User-specified |
+| Mode | Poll Interval | Full-Check Cadence | Use Case |
+|------|---------------|--------------------|----------|
+| Default | 5 min | 30 min or on event | Normal trading day |
+| Passive | 10 min | 30 min or on event | Low volatility, no active positions |
+| Active | 2 min | 15 min or on event | Day trading, volatile markets, large positions |
+| Custom | N min | N×6 min or on event | User-specified |
+
+Event triggers (escalate immediately regardless of cadence): stop-loss hit,
+signpost price cross, high/critical news urgency alert. Non-event polls just
+log "quiet" and wait — no Claude reasoning cost.
 
 ## Session Workflow
 
